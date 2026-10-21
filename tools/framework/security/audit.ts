@@ -18,7 +18,9 @@ import { openclawCliJson } from "../service/openclaw-cli.ts";
 import { summarizeExposure } from "../commands/operate/expose/status.ts";
 import { safeConnectionFacts } from "../runtime/runtime.ts";
 import { unprotectedPrivateFile } from "./privacy/private-file.ts";
-import { auditFindingBlocks, parseAuditFindings, parseAuditPolicy } from "./audit-policy.ts";
+import { auditFindingBlocks, parseAuditFindings, parseAuditPolicy, suppressionFor, type SecuritySuppression } from "./audit-policy.ts";
+
+export type { SecuritySuppression };
 
 export type SecurityFindingSource = "security-audit" | "secrets-audit";
 
@@ -112,11 +114,6 @@ async function tryCollect(
 
 // --- suppressions: config/security-suppressions.json --------------------------------------
 
-export interface SecuritySuppression {
-  readonly checkId: string;
-  readonly reason: string;
-}
-
 interface SecuritySuppressions {
   readonly suppressions: SecuritySuppression[];
   readonly acknowledgePublicBind?: { readonly reason: string };
@@ -157,10 +154,16 @@ async function readSuppressions(): Promise<SecuritySuppressions> {
     for (const entry of body.suppressions) {
       const checkId = (entry as Record<string, unknown> | null)?.checkId;
       const reason = (entry as Record<string, unknown> | null)?.reason;
+      const match = (entry as Record<string, unknown> | null)?.match;
       if (typeof checkId !== "string" || checkId.trim() === "" || typeof reason !== "string" || reason.trim() === "") {
         throw new Error(`${file}: each suppression needs a non-empty "checkId" and "reason"`);
       }
-      suppressions.push({ checkId, reason });
+      // Same refusal style: a present-but-empty or non-string match would silently match
+      // nothing (or everything), so it must stop the gate rather than read as scoped.
+      if (match !== undefined && (typeof match !== "string" || match.trim() === "")) {
+        throw new Error(`${file}: each suppression's "match", when given, must be a non-empty string`);
+      }
+      suppressions.push({ checkId, reason, ...(match !== undefined ? { match } : {}) });
     }
   }
 
@@ -177,10 +180,9 @@ async function readSuppressions(): Promise<SecuritySuppressions> {
 }
 
 function applySuppressions(findings: readonly SecurityFinding[], suppressions: readonly SecuritySuppression[]): SecurityFinding[] {
-  const byCheckId = new Map(suppressions.map((entry) => [entry.checkId, entry.reason]));
   return findings.map((finding) => {
-    const reason = byCheckId.get(finding.checkId);
-    return reason === undefined ? finding : { ...finding, suppressed: true, suppressedReason: reason };
+    const entry = suppressionFor(finding, suppressions);
+    return entry === undefined ? finding : { ...finding, suppressed: true, suppressedReason: entry.reason };
   });
 }
 

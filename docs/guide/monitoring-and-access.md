@@ -312,7 +312,8 @@ A finding can be suppressed by upstream check id, in `config/security-suppressio
 ```json
 {
   "suppressions": [
-    { "checkId": "SOME_UPSTREAM_CHECK_ID", "reason": "why this is accepted here" }
+    { "checkId": "SOME_UPSTREAM_CHECK_ID", "reason": "why this is accepted here" },
+    { "checkId": "channels.telegram.dm.open", "match": "channels.telegram.accounts.public", "reason": "public help bot: open DMs are its purpose" }
   ],
   "acknowledgePublicBind": { "reason": "why this deployment is intentionally public" }
 }
@@ -322,11 +323,17 @@ A finding can be suppressed by upstream check id, in `config/security-suppressio
 `secrets audit`); `acknowledgePublicBind` is the explicit, on-the-record way to accept a
 gateway bound to every interface instead of loopback — without it, that reads as the blocking
 `GATEWAY_PUBLICLY_BOUND` finding. Every suppression needs a non-empty reason; there is no
-suppression without one. A suppressed finding is never simply gone: it still appears in
-`--json`/verbose output, marked `suppressed` with its reason, but is excluded from the count
-`doctor`/`accept` gate on. The file fails closed — missing is read as "nothing suppressed",
-but one that exists and cannot be parsed or validated stops the gate outright rather than
-being read as empty.
+suppression without one. An entry may add `match`: a non-empty string the finding's title and message
+(`accept` prints both, `doctor` the message) must contain as a plain substring before the entry applies.
+`match` is a substring test on that text — prefer matching the account/agent path you are
+accepting (for example `channels.telegram.accounts.public`). An entry without `match`
+silences the check instance-wide; a finding listing several contexts is only suppressed if
+the matched text appears in it. Multiple entries may share a `checkId` with different `match`
+values; the first matching entry, in file order, supplies the reason. A suppressed finding is
+never simply gone: it still appears in `--json`/verbose output, marked `suppressed` with its
+reason, but is excluded from the count `doctor`/`accept` gate on. The file fails closed —
+missing is read as "nothing suppressed", but one that exists and cannot be parsed or validated
+stops the gate outright rather than being read as empty.
 
 `OC_AUDIT_BLOCK` controls which OpenClaw security-audit findings block `doctor` and `accept`:
 `critical` (the default) blocks critical findings; `warn` also blocks warnings. Existing

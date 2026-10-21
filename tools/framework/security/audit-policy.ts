@@ -1,5 +1,6 @@
 // Pure half of the security gate: parsing OpenClaw's `security audit --json` findings and the
-// OC_AUDIT_BLOCK threshold. Knows no check names — which findings exist is OpenClaw's business.
+// OC_AUDIT_BLOCK threshold, plus suppression matching. Knows no check names — which findings
+// exist is OpenClaw's business.
 
 export type AuditSeverity = "critical" | "warn" | "info";
 export type AuditBlockPolicy = "critical" | "warn";
@@ -49,6 +50,28 @@ export function parseAuditFindings(value: unknown): readonly ParsedAuditFinding[
 
 export interface AuditPolicy {
   readonly block: AuditBlockPolicy;
+}
+
+/** One entry of config/security-suppressions.json. An entry with a `match` applies only to
+ *  findings whose text contains it — scoping an acceptance to one account/agent instead of
+ *  silencing the check instance-wide. */
+export interface SecuritySuppression {
+  readonly checkId: string;
+  readonly match?: string;
+  readonly reason: string;
+}
+
+/** First matching entry wins, in file order — deterministic and documented. */
+export function suppressionFor(
+  finding: { readonly checkId: string; readonly title?: string; readonly message: string },
+  suppressions: readonly SecuritySuppression[],
+): SecuritySuppression | undefined {
+  // `accept` prints title and message, `doctor` the message; a `match` is tested against both
+  // together, never a single field, so either part can carry the account/agent path.
+  const text = [finding.title, finding.message].filter((part) => part !== undefined).join("\n");
+  return suppressions.find((entry) =>
+    entry.checkId === finding.checkId && (entry.match === undefined || text.includes(entry.match))
+  );
 }
 
 export function parseAuditPolicy(block: string | undefined): AuditPolicy {
