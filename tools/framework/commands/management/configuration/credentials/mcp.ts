@@ -99,7 +99,7 @@ async function runMcpServe(ctx: Context, wait: number): Promise<void> {
   // over stdio so the first JSON-RPC request can't race the service startup. Progress goes
   // to stderr only — stdout is the protocol stream. Note once per wait, never per poll.
   if (wait > 0) {
-    info("waiting for the gateway…");
+    process.stderr.write("waiting for the gateway…\n");
     // A wedged Docker must read as not ready, not kill the wait; a mid-wait NotBootstrapped
     // is pathological (requireBootstrapped already ran) and propagates.
     const readiness = async (): Promise<boolean> => {
@@ -113,7 +113,7 @@ async function runMcpServe(ctx: Context, wait: number): Promise<void> {
     if ((await waitForGateway(readiness, { waitSeconds: wait })) === "timeout") {
       die(`the gateway did not answer its healthz probe within ${wait}s. Check it with ${commandLine(["status"])} and ${commandLine(["logs"])}`, command(["up"]));
     }
-    info("gateway is ready");
+    process.stderr.write("gateway is ready\n");
   }
 
   // Exact duplex stdio via transport pipes; never captured command output or a PTY.

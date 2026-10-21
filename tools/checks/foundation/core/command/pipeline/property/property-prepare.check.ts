@@ -59,12 +59,12 @@ let cases = 0;
           }
         }
         const entries = [...given.values()];
-        const argv = [
-          ...lead,
-          ...entries.filter((entry) => entry.argument.kind === "positional" || entry.argument.kind === "variadic").flatMap((entry) => Array.isArray(entry.value) ? entry.value : [entry.value as string]),
-          ...flags.map((trigger) => `--${trigger.name}`),
-          ...entries.filter((entry) => entry.argument.kind === "option").flatMap((entry) => [`--${entry.argument.name}`, entry.value as string]),
-        ];
+        const operands = entries.filter((entry) => entry.argument.kind === "positional" || entry.argument.kind === "variadic").flatMap((entry) => Array.isArray(entry.value) ? entry.value : [entry.value as string]);
+        const optionPairs = entries.filter((entry) => entry.argument.kind === "option").flatMap((entry) => [`--${entry.argument.name}`, entry.value as string]);
+        const flagTokens = flags.map((trigger) => `--${trigger.name}`);
+        // Everything after the first token of a verbatim tail is literal, so our own flags and options go first there.
+        const verbatimTail = unit.args.some((entry) => entry.kind === "variadic" && (entry as { verbatim?: boolean }).verbatim === true);
+        const argv = verbatimTail ? [...lead, ...flagTokens, ...optionPairs, ...operands] : [...lead, ...operands, ...flagTokens, ...optionPairs];
         const label = `${unit.label}: ${argument.kind === "option" ? `--${argument.name}` : argument.kind === "variadic" ? `<${argument.name}…>` : `<${argument.name}>`} ${JSON.stringify(invalid)} refused at prepare`;
         const terminal = await runCase(unit.command, argv, "terminal");
         cases += 1;

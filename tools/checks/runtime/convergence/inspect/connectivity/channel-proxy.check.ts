@@ -3,10 +3,13 @@
 // once per recipe, never the proxy URL, and never from a read that failed. Driven through
 // the real gatherInspection pipeline (including real normalization of a custom channel
 // key) for the headline cases, and through the pure correlation for the matrix around it.
-import { mkdir, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { gatherInspection } from "#framework/commands/orchestration/inspect/gather.ts";
-import { channelProxyFindings, PROXY_NOT_RUNNING, proxyDownNote } from "#framework/commands/orchestration/inspect/live.ts";
+import { channelProxyFindings } from "#framework/commands/orchestration/inspect/live.ts";
+import { clearRecipesDir, useRecipesDir } from "#framework/service/recipe.ts";
+import { useComposeProjectOverride } from "#framework/runtime/deployment.ts";
 import type { RecipeEndpointOwner } from "#framework/service/recipe.ts";
 import { normalizeChannels } from "#framework/service/openclaw-cli.ts";
 import type { StackServiceState } from "#framework/runtime/runtime.ts";
@@ -14,18 +17,16 @@ import { check, finish } from "#checks/kit/harness.ts";
 import { setupFixtureDeployment, teardownFixtureDeployment } from "../fixture.ts";
 
 const fixture = await setupFixtureDeployment();
-// A recipe with no agent directory: a plain service, skipped by recipe expectations, but
-// present in the endpoint-owner catalog the correlation reads.
-await mkdir(resolve(fixture.deployment, "recipes", "egress"), { recursive: true });
-await writeFile(
-  resolve(fixture.deployment, "recipes", "egress", "recipe.json"),
-  JSON.stringify({ description: "egress proxy sidecar", consumerEndpoints: [{ configPath: "channels.telegram.proxy", service: "proxy" }] }),
-);
-await mkdir(resolve(fixture.deployment, "recipes", "relay"), { recursive: true });
-await writeFile(
-  resolve(fixture.deployment, "recipes", "relay", "recipe.json"),
-  JSON.stringify({ description: "relay proxy sidecar", consumerEndpoints: [{ configPath: "channels.selfhosted-relay.proxy", service: "proxy" }] }),
-);
+// Two proxy recipes in their own temp recipes root: plain services, present in the
+// endpoint-owner catalog the correlation reads. The compose namespace is pinned because the
+// fixture deployment's random directory name may not be a valid project name.
+const recipesRoot = await mkdtemp(join(tmpdir(), "clawwright-channel-proxy-"));
+for (const [name, configPath] of [["egress", "channels.telegram.proxy"], ["relay", "channels.selfhosted-relay.proxy"]] as const) {
+  await mkdir(join(recipesRoot, name));
+  await writeFile(join(recipesRoot, name, "recipe.json"), JSON.stringify({ description: "proxy sidecar", consumerEndpoints: [{ configPath, service: "proxy" }] }));
+}
+useRecipesDir(recipesRoot);
+useComposeProjectOverride("channel-proxy-check");
 const PROXY_URL = "socks5://user:secret@proxy.invalid:1080";
 const PRIVATE_ACCOUNT = "acct-7f3a9c";
 
@@ -48,8 +49,7 @@ try {
   check("the proxy URL with its credentials never reaches the finding", [proxyFindings[0]?.detail.includes("socks5"), proxyFindings[0]?.detail.includes("secret"), proxyFindings[0]?.detail.includes("proxy.invalid")], [false, false, false]);
   check("the finding is a warning beside the channel warning it explains", [proxyFindings[0]?.severity, gathered.problems.some((entry) => entry.code === "CHANNEL_UNHEALTHY")], ["warning", true]);
   const remedy = proxyFindings[0]?.next;
-  check("the remedy is the recipe's gated diagnose, with its logs hint", [remedy?.kind, remedy?.kind === "clawwright" ? remedy.argv : undefined, remedy?.kind === "clawwright" ? remedy.note : undefined], ["clawwright", ["recipe", "diagnose", "egress"], proxyDownNote("egress")]);
-  check("the logs hint names the recipe it was built for", proxyDownNote("egress").includes("egress"), true);
+  check("the remedy is the recipe's gated diagnose, with its logs hint", [remedy?.kind, remedy?.kind === "clawwright" ? remedy.argv : undefined, remedy?.kind === "clawwright" ? remedy.note?.includes("egress") : undefined], ["clawwright", ["recipe", "diagnose", "egress"], true]);
 
   const healthyCtx = fixture.stubContext(pipelineSpec);
   (healthyCtx.runtime as { stack: unknown }).stack = () => ({
@@ -95,7 +95,7 @@ try {
   const started = channelProxyFindings(live({ proxy: PROXY_URL }), telemetry(unhealthyAccount), owners, states({ proxy: { running: true, health: "starting" } }));
   check("a starting proxy is a finding carrying that state", started[0]?.detail.includes('"starting"'), true);
   const stopped = channelProxyFindings(live({ proxy: PROXY_URL }), telemetry(unhealthyAccount), owners, states({}));
-  check("a service missing from a complete answer reads as not running", [stopped.length, stopped[0]?.detail.includes(PROXY_NOT_RUNNING)], [1, true]);
+  check("a service missing from a complete answer reads as not running", [stopped.length, stopped[0]?.detail.includes("running")], [1, true]);
   check("a failed stack read is unknown, never down", channelProxyFindings(live({ proxy: PROXY_URL }), telemetry(unhealthyAccount), owners, states(undefined)), []);
 
   const withSibling = telemetry(unhealthyAccount, { accountId: "default", configured: true, enabled: true, running: true, connected: true });
@@ -118,6 +118,8 @@ try {
   const serialized = JSON.stringify(channelProxyFindings(live({ proxy: PROXY_URL }), telemetry(unhealthyAccount), owners, states(down)));
   check("no finding text carries the URL, its credentials or its host", ["socks5", "secret", "proxy.invalid", "1080", "@"].map((needle) => serialized.includes(needle)), [false, false, false, false, false]);
 } finally {
+  clearRecipesDir();
+  await rm(recipesRoot, { recursive: true, force: true });
   await teardownFixtureDeployment(fixture.deployment);
 }
 

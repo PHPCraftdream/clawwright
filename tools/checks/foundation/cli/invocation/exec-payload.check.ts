@@ -332,8 +332,9 @@ const PIPED = Buffer.from("piped bytes\n");
   const seen: { stream?: boolean; input?: string }[] = [];
   const transport = {
     description: "stub",
-    async exec(_command: string, _args: string[], options?: { stream?: boolean; input?: string }): Promise<ExecResult> {
-      seen.push({ stream: options?.stream, input: options?.input });
+    async exec(_command: string, args: string[], options?: { stream?: boolean; input?: string }): Promise<ExecResult> {
+      // runOneOff makes other exec calls around the compose run; only the run itself is the subject.
+      if (args.includes("run")) seen.push({ stream: options?.stream, input: options?.input });
       return { code: 0, stdout: "", stderr: "" };
     },
   } as unknown as Transport;
@@ -489,7 +490,7 @@ const PIPED = Buffer.from("piped bytes\n");
       await symlink(payload2, link);
       const smuggled = await refusedRun("cli", ["--file", link, "load", "@file"]);
       checkTrue("a symbolic link is refused at the prepare stage", smuggled.stage === "prepare");
-      checkTrue("the symlink refusal names the link", smuggled.error instanceof Error && smuggled.error.message.includes("link.bin"));
+      checkTrue("the symlink refusal names the link", messageOf(smuggled.error).includes("link.bin"));
       check("the symlink refusal never contacts the target", smuggled.contacts, []);
     });
   } finally {
@@ -507,6 +508,7 @@ const PIPED = Buffer.from("piped bytes\n");
     await writeFile(payload, "payload-bytes");
 
     // Full cli() runs over the publish path; each run's mv target IS the staged file.
+    const stagedPaths: string[] = [];
     const stagedRun = async (): Promise<{ stagedPath: string; seenArgs: string[]; log: TargetLog }> => {
       const log = freshLog();
       let seenArgs: string[] = [];
@@ -517,6 +519,7 @@ const PIPED = Buffer.from("piped bytes\n");
         },
       }), ["--file", payload, "load", "@file"]);
       const mv = log.execs.filter((entry) => entry.command === "mv").at(-1)!;
+      stagedPaths.push(mv.args.at(-1)!);
       return { stagedPath: mv.args.at(-1)!, seenArgs, log };
     };
 
@@ -543,7 +546,7 @@ const PIPED = Buffer.from("piped bytes\n");
       }));
     check("the exact @file token is replaced by the staged copy's container path",
       [first.seenArgs, second.seenArgs],
-      [first.stagedPath, second.stagedPath].map((path) => ["load", paths.toContainer(path)]));
+      stagedPaths.map((path) => ["load", paths.toContainer(path)]));
 
     // A token merely CONTAINING @file is left alone.
     const partialLog = freshLog();
@@ -597,9 +600,9 @@ const PIPED = Buffer.from("piped bytes\n");
     staged.stagedTargetPath.startsWith(`${stubSettings.dataDir}/config/clawwright-cli-input-`));
   checkTrue("the publish renames onto the reported staged path",
     log.execs.some((entry) => entry.command === "mv" && entry.args.at(-1) === staged.stagedTargetPath));
-  check("the container path is the bridge's view of the staged path", staged.containerPath, paths.toContainer(staged.stagedTargetPath));
+  check("the container path is the bridge's view of the staged path", staged.containerPath, paths.toContainer(log.execs.filter((entry) => entry.command === "mv").slice(-1).map((entry) => entry.args.at(-1)!)[0]!));
   await staged.remove();
-  check("staged.remove() removes the staged copy", log.removes, [staged.stagedTargetPath]);
+  check("staged.remove() removes the staged copy", log.removes, log.execs.filter((entry) => entry.command === "mv").slice(-1).map((entry) => entry.args.at(-1)));
 
   const fallbackLog = freshLog();
   const fallback = await stagePayload(ctxWith([], publishTransport(fallbackLog, false)), Buffer.from("fallback-bytes"));

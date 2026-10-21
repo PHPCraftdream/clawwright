@@ -17,7 +17,7 @@ try {
   await mkdir(join(root, "config"));
   const token = 'synthetic-mcp-"failure' + String.fromCharCode(92) + "token";
   await writeFile(join(root, ".env"), `OC_DATA_DIR=${join(root, "data")}\nOC_TARGET_LOCATION=local\nOPENCLAW_GATEWAY_TOKEN=${token}\n`);
-  const moduleUrl = (path: string): string => new URL(`../../../framework/${path}.ts`, import.meta.url).href;
+  const moduleUrl = (path: string): string => new URL(`../../../../framework/${path}.ts`, import.meta.url).href;
   const script = `
     const {serveMcp}=await import(${JSON.stringify(moduleUrl("integration/mcp/server"))});
     const {useDeployment}=await import(${JSON.stringify(moduleUrl("runtime/deployment"))});

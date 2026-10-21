@@ -84,8 +84,11 @@ export function scanContracts(
       const fallbackRow = norm(data.after.get(`${entry.name} *`) ?? []);
       check(`${entry.name}: the flag row answers behind a pending option and a bound flag`,
         sameCandidates(norm(at(data, [entry.name, option, flagToken, ""], 3)), fallbackRow), true);
-      check(`${entry.name}: the flag row answers behind an unknown token`,
-        sameCandidates(norm(at(data, [entry.name, "--bogus", ""], 2)), fallbackRow), true);
+      // A verbatim tail (cli, exec) begins at the first unknown token: nothing behind it is a flag of ours.
+      if (!declared.some((argument) => argument.kind === "variadic" && (argument as { verbatim?: boolean }).verbatim === true)) {
+        check(`${entry.name}: the flag row answers behind an unknown token`,
+          sameCandidates(norm(at(data, [entry.name, "--bogus", ""], 2)), fallbackRow), true);
+      }
     }
 
     const inline = scanCall(shape, [`${option}=v`], entry.name, scan);

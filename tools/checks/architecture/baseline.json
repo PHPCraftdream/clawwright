@@ -715,7 +715,7 @@
       "tools/checks/foundation/cli/gate-commands.check.ts": 0,
       "tools/checks/foundation/cli/gate-dispatch.check.ts": 16,
       "tools/checks/foundation/cli/help-groups.check.ts": 1,
-      "tools/checks/foundation/cli/passthrough-help.check.ts": 2,
+      "tools/checks/foundation/cli/invocation/passthrough-help.check.ts": 2,
       "tools/checks/foundation/core/app-mounts-output.check.ts": 0,
       "tools/checks/foundation/core/archive.check.ts": 4,
       "tools/checks/foundation/core/command/completion/completion-behaviour.check.ts": 0,

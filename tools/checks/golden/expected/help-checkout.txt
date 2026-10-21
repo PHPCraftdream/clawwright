@@ -755,7 +755,7 @@
     By default each call is a fresh one-off container sharing the gateway's network namespace, paying for its create/destroy on every call.
     Run `./clawwright cli-start` once and this execs into that container instead, skipping that cost — noticeably faster, though both paths go through the WSL2/Docker Desktop boundary either way and neither is instant.
     `./clawwright cli --help` prints this text, same as `./clawwright help cli`; to reach OpenClaw's own --help instead, put it after a bare --: `./clawwright cli -- --help`.
-    Payloads travel two ways: --stdin pipes this process's standard input to the command (type patch.json | clawwright cli --stdin config patch --stdin), and --file stages a local file into the data directory wherever the argument list says @file (clawwright cli --file patch.json config patch --file @file), removing the staged copy afterwards.
+    Payloads travel two ways: --stdin pipes this process's standard input to the command, and --file stages a local file into the data directory and hands its container path to the command wherever the argument list says @file, removing the staged copy afterwards (worked examples: the commands guide).
     
     This command replaces or destroys state.
 
@@ -769,7 +769,7 @@
     Unlike `cli`, which always runs OpenClaw's own CLI entrypoint, this runs whatever command you give it, e.g. `./clawwright exec curl -fsS http://127.0.0.1:18789/healthz` or `./clawwright exec cat /app/docs/channels/telegram.md`.
     Same container as `cli`: the OpenClaw image, the gateway's network namespace, the same data mounts, the same one-off-vs-helper choice.
     A captured run (over MCP or a pipe) decodes its output as UTF-8 text: bytes that are not valid UTF-8 come back as replacement characters, not the original bytes.
-    Like `cli`, this takes --stdin (pipe data to the command's stdin, e.g. cat body.txt | clawwright exec --stdin curl -fsS -d @- http://127.0.0.1:18789/api) and --file (stage a local file, then name it with @file: clawwright exec --file patch.json sh -c "openclaw config patch --file @file").
+    Like `cli`, this takes --stdin (pipe this process's standard input to the command) and --file (stage a local file and name its container path with @file in the arguments).
     
     This command replaces or destroys state.
 

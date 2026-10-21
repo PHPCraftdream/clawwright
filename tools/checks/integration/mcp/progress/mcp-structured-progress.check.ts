@@ -19,7 +19,7 @@ try {
     output: "core/io/output",
     log: "core/io/log",
   };
-  const moduleUrl = (name: string) => new URL(`../../../framework/${modulePath[name]}.ts`, import.meta.url).href;
+  const moduleUrl = (name: string) => new URL(`../../../../framework/${modulePath[name]}.ts`, import.meta.url).href;
   const script = `
     const {serveMcp}=await import(${JSON.stringify(moduleUrl("mcp-server"))});
     const {useDeployment}=await import(${JSON.stringify(moduleUrl("deployment"))});
@@ -67,7 +67,7 @@ try {
       deployment: "runtime/deployment",
       log: "core/io/log",
     };
-    const moduleUrl = (name: string) => new URL(`../../../framework/${modulePath[name]}.ts`, import.meta.url).href;
+    const moduleUrl = (name: string) => new URL(`../../../../framework/${modulePath[name]}.ts`, import.meta.url).href;
     const script = `
       const {serveMcp}=await import(${JSON.stringify(moduleUrl("mcp-server"))});
       const {useDeployment}=await import(${JSON.stringify(moduleUrl("deployment"))});

@@ -46,7 +46,7 @@ export const EXEC_ARGUMENTS = [
     kind: "variadic",
     verbatim: true,
     required: true,
-    value: kinds.text("command and arguments", { leadingDash: "allow", lines: "multi" }),
+    value: kinds.text("command and arguments", { leadingDash: "allow", lines: "multi", example: "@file" }),
   },
 ] as const;
 

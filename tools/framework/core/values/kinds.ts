@@ -429,7 +429,7 @@ export function image(): ValueKind<ImageRef> {
 
 // "multi" is for argv passed through to a remote command (exec/cli/host), where a `sh -c`
 // script may span lines; TAB and LF stay accepted there, every other control character is refused.
-export function text(reason: string, options: { leadingDash: "refuse" | "allow"; lines?: "single" | "multi" } = { leadingDash: "refuse" }): ValueKind<string> {
+export function text(reason: string, options: { leadingDash: "refuse" | "allow"; lines?: "single" | "multi"; example?: string } = { leadingDash: "refuse" }): ValueKind<string> {
   const refuseDash = options.leadingDash !== "allow";
   const refused = options.lines === "multi" ? CONTROL_BUT_LINES : CONTROL;
   const invalid: InvalidSample[] = [{ raw: "", stage: "parse", why: "empty" }];
@@ -437,7 +437,7 @@ export function text(reason: string, options: { leadingDash: "refuse" | "allow";
   invalid.push({ raw: "a\u0000b", stage: "parse", why: "a control character" });
   return kindOf("text", {
     expected: reason,
-    example: "x",
+    example: options.example ?? "x",
     invalidExample: "",
     parse(raw) {
       if (raw === "") throw new ValueError("needs a value");

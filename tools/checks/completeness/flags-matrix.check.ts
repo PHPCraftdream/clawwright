@@ -46,7 +46,7 @@ const TABLE: Record<string, FlagPosition> = {
   restart: position({ json: false, jsonReason: CONSOLE_REASON, dryRun: false, dryRunReason: NOTHING_TO_PREVIEW }),
   down: position({ json: false, jsonReason: CONSOLE_REASON, dryRun: false, dryRunReason: NOTHING_TO_PREVIEW }),
   destroy: position({ json: false, jsonReason: "prints its plan/result as text; the plan is what a run without --yes shows", dryRun: false, dryRunReason: "a dry run is the default — only --yes performs the removal" }),
-  logs: position({ json: false, jsonReason: CONSOLE_REASON, dryRun: false, dryRunReason: CONSOLE_REASON }),
+  logs: position({ json: true, dryRun: false, dryRunReason: CONSOLE_REASON }),
   backup: position({ json: true, dryRun: true }),
   restore: position({ json: true, dryRun: true }),
   pull: position({ json: true, dryRun: false, dryRunReason: "only ever adds a new snapshot file — never replaces existing state, so there is nothing destructive to preview" }),

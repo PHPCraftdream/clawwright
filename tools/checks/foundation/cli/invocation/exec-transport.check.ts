@@ -5,6 +5,7 @@
 import { excludesFor } from "#framework/service/archive/index.ts";
 import { PRIVATE_STAGING_MARKER } from "#framework/runtime/transport/quoting.ts";
 import { terminalStreaming } from "#framework/runtime/transport/exec.ts";
+import { regexEscape } from "#framework/core/io/log.ts";
 import { check, checkTrue, finish } from "#checks/kit/harness.ts";
 
 // --- the terminal-streaming decision, as a pure truth table ----------------------------------------------
@@ -34,7 +35,7 @@ import { check, checkTrue, finish } from "#checks/kit/harness.ts";
   const markerEntry = `data/config/clawwright-cli-input-0123456789abcdef${PRIVATE_STAGING_MARKER}fedcba9876543210`;
   const family = (dataName: string): string => `${dataName}/*${PRIVATE_STAGING_MARKER}*`;
   const tarGlob = (pattern: string, name: string): boolean =>
-    new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, (c) => (c === "*" ? ".*" : `\\${c}`))}$`).test(name);
+    new RegExp(`^${regexEscape(pattern).replaceAll("\\*", ".*")}$`).test(name);
   for (const profile of ["full", "migrate", "share"] as const) {
     checkTrue(`the cli-input family is excluded (${profile})`, excludesFor(profile, "data").includes("data/config/clawwright-cli-input-*"));
     checkTrue(`the staging marker families stay excluded (${profile})`, excludesFor(profile, "data").includes(family("data")));

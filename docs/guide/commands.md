@@ -35,6 +35,13 @@ option's value is never the next token when that token is itself one of the comm
 literal binding, so `{"grep":"--tail"}` needs no shell quoting or regex workaround.
 A bare `--` ends option parsing, so everything after it is positional; `cli` and `exec`
 pass those subsequent tokens (including inline options) unchanged to the child program.
+`cli` and `exec` can also hand data to the container command. `--stdin` pipes this process's
+standard input to it (`type patch.json | clawwright cli --stdin config patch --stdin`); `--file <path>`
+stages a local file under a unique private name in the data directory and replaces the exact
+argument `@file` with its container path (`clawwright cli --file patch.json config patch --file @file`).
+The staged copy is removed afterwards, also when the command fails. Both are refused before any
+target contact: `--stdin` on a terminal or under MCP, `--file` without an `@file` argument or for
+anything that is not a regular file of at most 8 MiB.
 `backup`'s own action-specific
 flags (`--keep`, `--interval`) are refused by name when given to the wrong action, e.g.
 `backup list --keep 3` names `prune-replaced` rather than calling `--keep` unknown.
