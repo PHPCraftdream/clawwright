@@ -4,6 +4,43 @@ All notable changes to `@phpcraftdream/clawwright` will be documented here.
 
 ## Unreleased
 
+## 0.1.2
+
+Operator experience: logs that are in time order, data handed to a container command without
+quoting layers, security suppressions that can be scoped to one account, an MCP bridge that waits
+for a booting gateway, and a finding that names the proxy behind a silent channel.
+
+### Added
+* `cli` and `exec` take `--stdin` (this process's standard input, at most 8 MiB, becomes the command's stdin)
+  and `--file <local>` (the file is staged into the data directory under a unique private name, owned by the
+  runtime user; the exact argument `@file` becomes its container path; the copy is removed afterwards, also when
+  the command fails). Every refusal — a terminal or MCP standard input, no `@file` argument, a symlink, a
+  directory, a file over 8 MiB — happens before any contact with the target. No more documents embedded in a
+  heredoc inside `exec sh -c`.
+* `match` on an entry of `config/security-suppressions.json`: a plain substring the finding's title and message
+  must contain (for example `channels.telegram.accounts.public`) before the entry applies, so accepting one
+  public bot account's open DMs no longer silences the same checks for every account and agent. Entries
+  without `match` behave as before; several entries may share a `checkId`.
+* `mcp-serve --wait <seconds>` (default 90, `0` restores fail-fast): the bridge waits for the gateway to be
+  running and answer its health probe before it hands over stdio, so an MCP client started right after a reboot
+  no longer reports "failed to connect" and gives up. The wait is bounded as stated and writes to stderr only.
+* `CHANNEL_PROXY_DOWN` in `inspect` and `doctor`: a channel account that is unhealthy or of unknown health and
+  whose effective proxy belongs to a recipe (through `consumerEndpoints`) gets one finding naming the recipe, its
+  proxy service's state and the channels routed through it, with `recipe diagnose` as the next step and
+  `recipe logs` beside it. A failed read blames nothing; the proxy URL, which carries credentials, never appears.
+* `logs` and `recipe logs` take `--no-color` (also removes colour the application embeds, when following too)
+  and `--json` (one record per line: `ts`, `service`, `stream`, `text`).
+* For contributors: `npm run worktree -- add|remove <name>` and `docs/internal/new-command-checklist.md`.
+
+### Fixed
+* Logs are one chronological sequence. Not on a terminal, `docker compose logs` prints a container's stdout and
+  stderr as two blocks and the framework concatenated them, so "the last N lines" was neither the last N by time
+  nor free of days-old output (`recipe logs --tail 400` returned a previous run, `--tail 3000` nothing from today).
+  Lines are now ordered by instant and the tail applies after the merge; `recipe diagnose` and incident
+  snapshots read logs the same way.
+* With a finite input, `cli` and `exec` no longer capture the command's output; stdout and stderr stay on the
+  terminal while stdin is piped, and docker is not asked for a TTY next to a piped stdin.
+
 ## 0.1.1
 
 The framework becomes a bridge to OpenClaw's own capabilities: a new OpenClaw setting, list
