@@ -64,7 +64,7 @@ over automatically, without the flag.
 | `restart` | `[--break-lock] [--break-foreign-lock <hostId>]` | Restart so the instance re-reads its config |
 | `down` | `[--break-lock] [--break-foreign-lock <hostId>]` | Stop and remove the containers (data is kept) |
 | `destroy` | `[--data] [--backups] [--snapshots] [--yes] [--confirm-name <name>] [--break-lock] [--break-foreign-lock <hostId>]` | Remove what bootstrap created (destructive for some actions) |
-| `logs` | `[--tail <n>] [--since <duration\|timestamp>] [--grep <pattern>]` | Follow the service log, or read a tail |
+| `logs` | `[--tail <n>] [--since <duration\|timestamp>] [--grep <pattern>] [--no-color] [--json]` | Follow the service log, or read a tail |
 | `status` | `[--json]` | Show containers, image, health, data usage |
 
 ### Check
@@ -90,7 +90,7 @@ over automatically, without the flag.
 | `memory` | `<action> [--mode <mode>] [--backend <backend>] [--provider <id>] [--model <model>] [--env <var>] [--model-path <path>] [--model-checksum <sha256>] [--model-source <source>] [--model-version <version>] [--json] [--plugin-version <version>] [--model-max-bytes <bytes>] [--agent <id>] [--all-agents] [--allow-install] [--allow-download] [--deep] [--allow-spend]` | Declare, set up, inspect, index, verify memory (destructive for some actions) |
 | `configure-provider` | `[--provider <id>] [--env <var>] [--force] [--break-lock] [--break-foreign-lock <hostId>] [--json]` | Configure model providers from target env vars |
 | `secrets` | `[--template] [--print-template] [--init-store] [--apply] [--dump] [--store <name>] [--force] [--break-foreign-lock <hostId>] [--json]` | Show required secrets and their state (destructive for some actions) |
-| `recipe` | `[<action>] [<name>] [<new-name>] [<recipe-action>] [<arg…>] [--json] [--with-hooks] [--dry-run] [--break-lock] [--break-foreign-lock <hostId>] [--tail <n>] [--force-disabled] [--volumes] [--service <service>] [--build] [--pull] [--reconcile-consumer] [--helper-image <sha256>] [--shutdown-timeout <seconds>] [--apply] [--version <version>] [--artifact <basename>]` | Deploy service recipes beside the instance (destructive for some actions) |
+| `recipe` | `[<action>] [<name>] [<new-name>] [<recipe-action>] [<arg…>] [--json] [--with-hooks] [--dry-run] [--break-lock] [--break-foreign-lock <hostId>] [--tail <n>] [--force-disabled] [--volumes] [--service <service>] [--build] [--pull] [--reconcile-consumer] [--helper-image <sha256>] [--shutdown-timeout <seconds>] [--apply] [--since <duration\|timestamp>] [--no-color] [--version <version>] [--artifact <basename>]` | Deploy service recipes beside the instance (destructive for some actions) |
 | `files` | `[--apply] [--dry-run] [--json] [--break-lock] [--break-foreign-lock <hostId>]` | Apply or preview declared deployment files (destructive for some actions) |
 | `provision-agent` | `<recipe> [--break-lock] [--break-foreign-lock <hostId>] [--json]` | Wire a recipe's MCP server to an OpenClaw agent |
 | `set` | `<action> [<artifacts…>] [--name <name>] [--json] [--set <artifact>] [--from <artifact>] [--to <artifact>] [--set-id <id>] [--receipt <id>] [--with-model] [--keep] [--kind <kind>] [--break-lock] [--break-foreign-lock <hostId>]` | Build or validate the set artifact (destructive for some actions) |

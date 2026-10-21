@@ -13,7 +13,7 @@
 import type { Settings } from "../../core/env.ts";
 import type { PathBridge } from "../../core/paths.ts";
 import type { ExecResult, Transport } from "../transport/transport.ts";
-import { sleep, type Runtime, type RunOneOffOptions, type Stack } from "../runtime.ts";
+import { sleep, type Runtime, type RunOneOffOptions, type RuntimeLogRecord, type Stack } from "../runtime.ts";
 import { ComposeOperations, serializeComposeEnv } from "./compose-operations.ts";
 import { ContainerIntrospection } from "./container-introspection.ts";
 import { HelperContainer } from "./helper-container.ts";
@@ -98,6 +98,10 @@ export class DockerRuntime implements Runtime {
 
   async followLogs(extraArgs: string[] = []): Promise<void> {
     return this.#compose.followLogs(extraArgs);
+  }
+
+  async readLogRecords(tail?: string, extraArgs: string[] = []): Promise<RuntimeLogRecord[]> {
+    return this.#compose.readLogRecords(tail, extraArgs);
   }
 
   async readLogs(tail?: string, extraArgs: string[] = []): Promise<string> {

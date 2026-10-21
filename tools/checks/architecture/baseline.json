@@ -360,8 +360,8 @@
     "total": 85
   },
   "proseEquality": {
-    "comment": "Stage 5 + I9: assertion-owned legacy prose equality. Executed measurement records 195, including independently authored upstream stderr preservation in the operator-approved memory fixture. Structural selections exclude unrelated record fields; true expected prose stays counted.",
-    "total": 195
+    "comment": "Stage 5 + I9: assertion-owned legacy prose equality. Executed measurement records 195, including independently authored upstream stderr preservation in the operator-approved memory fixture. Structural selections exclude unrelated record fields; true expected prose stays counted. Log checks moved into runtime/service/logs/ and rebuilt from structural expectations: 195 -> 192.",
+    "total": 192
   },
   "proseFlags": {
     "comment": "stage 4 (design 2.3): a --name a declaration itself declares, spelled in its own details outside a token and outside a code span quoting another tool — each belongs in a {--name} token, so this counts down to 0",
@@ -1186,7 +1186,7 @@
       "tools/checks/runtime/service/deploy/root-boundary.check.ts": 8,
       "tools/checks/runtime/service/image-identity/compose-env.check.ts": 2,
       "tools/checks/runtime/service/image-identity/runtime-image-identity.check.ts": 1,
-      "tools/checks/runtime/service/logs-bounded.check.ts": 5,
+      "tools/checks/runtime/service/logs/logs-bounded.check.ts": 5,
       "tools/checks/runtime/service/restart.check.ts": 3,
       "tools/checks/runtime/service/restore/restore.check.ts": 14,
       "tools/checks/runtime/service/runtime-port.check.ts": 6,

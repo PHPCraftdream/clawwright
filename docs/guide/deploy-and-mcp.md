@@ -175,7 +175,10 @@ distinction a client should have to know about.
 A command whose *console* behaviour cannot survive being a tool call is mirrored in a
 bounded form rather than dropped: `logs` follows the log on a terminal and returns a fixed
 tail as a tool, because following would never produce the single result a tool call owes its
-caller. `recipe logs` does the same.
+caller. `recipe logs` does the same. The bounded tail is time-ordered across the split
+stdout/stderr streams docker delivers, so it is the last N lines by time even when recent
+ones arrived on stderr; `--no-color` strips ANSI escape sequences and `--json` emits one
+JSON object per line (ts, service, stream when known, text).
 
 What cannot be mirrored at all is a short list, and each entry says why:
 

@@ -104,6 +104,11 @@ export const lifecycleCommands: Record<string, AppCommand> = materializeCommands
       "declared default applies.\n" +
       "{--since} takes a duration (10m, 2h, 1h30m) or an RFC3339/ISO date-time, passed to " +
       "compose as-is; anything else is refused rather than forwarded.\n" +
+      "{--no-color} strips ANSI escape sequences from the output, including codes the " +
+      "service itself embedded in its log lines, and does so on a followed stream as well " +
+      "as on the bounded read.\n" +
+      "{--json} emits each line as a JSON object (ts, service, stream when known, text) " +
+      "instead of plain text; it reads a bounded tail even on a terminal.\n" +
       "{--grep} filters lines by a JS RegExp, on the bounded read and on a followed stream " +
       "alike (filtered line by line as it arrives); an invalid pattern is refused before " +
       "anything runs.",

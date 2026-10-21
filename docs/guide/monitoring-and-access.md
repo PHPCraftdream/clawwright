@@ -289,7 +289,8 @@ produce a non-zero exit after the remaining phases have been attempted.
 `--dry-run` prints the plan and performs none of it, not even taking the instance lock — but it
 still has to reach the target to build the plan, so a target it cannot reach ends the dry run
 with a non-zero exit (the contain failure is in the report, as a note).
-`--tail <n>` bounds how much log each of preserve/collect captures (default 500 lines).
+`--tail <n>` bounds how much log each of preserve/collect captures (default 500 lines);
+the captured tail is time-ordered across the container's two output streams.
 `--keep-exposure` proceeds past the publicly-bound refusal. `--json` emits the full report —
 every phase's actions and notes, preserve's confirmed `files`, any evidence-phase `error`,
 the security findings, and where the evidence went — as one JSON object.
