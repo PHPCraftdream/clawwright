@@ -24,7 +24,7 @@ export const EXEC_ARGUMENTS = [
     name: "stdin",
     summary: "Read this process's stdin as command stdin",
     description:
-      "{--stdin} reads this process's standard input to EOF (at most 8 MiB) and delivers it as the command's stdin inside the container. " +
+      "--stdin reads this process's standard input to EOF (at most 8 MiB) and delivers it as the command's stdin inside the container. " +
       "Refused on a terminal (nothing to read) and in captured mode, where stdin carries the MCP protocol",
     kind: "flag",
   },
@@ -34,7 +34,7 @@ export const EXEC_ARGUMENTS = [
     description:
       "Stage this local file (a regular file, at most 8 MiB) into the data directory, pass its container path wherever the " +
       "argument list contains the exact token @file, and always remove the staged copy afterwards. " +
-      "@file without {--file} is left untouched — it can be legitimate OpenClaw syntax",
+      "@file without --file is left untouched — it can be legitimate OpenClaw syntax",
     kind: "option",
     valueName: "path",
     value: kinds.localFile("a local file path"),

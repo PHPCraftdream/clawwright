@@ -619,6 +619,29 @@
   fixture L2 (a7d027e): v1 checkout launcher + legacy: ../../clawwright --app demo cli channels status --json  (check channel configuration and gateway logs before restarting)
   tool form: {"tool":"cli","arguments":{"args":["channels","status","--json"]},"note":"check channel configuration and gateway logs before restarting"}
 
+=== problem code: CHANNEL_PROXY_DOWN ===
+  checkout gate shim (cwd: checkout root): ./clawwright recipe list
+  checkout gate shim (cwd: docs): ../clawwright recipe list
+  checkout gate shim (cwd: apps/demo): ../../clawwright recipe list
+  checkout gate, handed over by the init shim: ./clawwright recipe list
+  checkout gate, handed over by the monorepo MCP launcher: ../../clawwright --app demo recipe list
+  MCP launcher (installed): no variables — the entry default: clawwright recipe list
+  defaultLaunch: global install: clawwright recipe list
+  defaultLaunch: checkout copy: ./clawwright recipe list
+  defaultLaunch: local package (posix): ./clawwright recipe list
+  defaultLaunch: local package (win32): node_modules\.bin\clawwright recipe list
+  defaultLaunch: local package (win32, Git Bash): node_modules/.bin/clawwright recipe list
+  manual verbatim (bare word): cw recipe list
+  manual verbatim (spaced program): '/opt/claw forge/clawwright' recipe list
+  system-wide inside apps/demo (cwd selection): clawwright recipe list
+  fixture G0: shim before 710cf66 wrote no variables: clawwright recipe list
+  fixture G1 (710cf66): the legacy variable alone: ./clawwright recipe list
+  fixture G2 (a7d027e): v1 installed + legacy (strict parse rejects): ./clawwright recipe list
+  fixture G3 (a841c16): v1 checkout + legacy: ./clawwright recipe list
+  fixture L1 (f620c8a): the legacy launcher variable: ../../clawwright --app demo recipe list
+  fixture L2 (a7d027e): v1 checkout launcher + legacy: ../../clawwright --app demo recipe list
+  tool form: {"tool":"recipe","arguments":{"action":"list"}}
+
 === problem code: MEMORY_UNKNOWN ===
   checkout gate shim (cwd: checkout root): ./clawwright cli memory status --json
   checkout gate shim (cwd: docs): ../clawwright cli memory status --json

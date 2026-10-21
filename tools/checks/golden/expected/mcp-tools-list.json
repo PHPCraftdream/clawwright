@@ -138,6 +138,14 @@
           "grep": {
             "type": "string",
             "description": "Only matching lines"
+          },
+          "no-color": {
+            "type": "boolean",
+            "description": "Strip ANSI escape sequences"
+          },
+          "json": {
+            "type": "boolean",
+            "description": "One JSON object per line"
           }
         }
       }
@@ -1346,6 +1354,14 @@
       "inputSchema": {
         "type": "object",
         "properties": {
+          "stdin": {
+            "type": "boolean",
+            "description": "Read this process's stdin as command stdin"
+          },
+          "file": {
+            "type": "string",
+            "description": "Stage a local file for the command"
+          },
           "args": {
             "type": "array",
             "items": {
@@ -1370,6 +1386,14 @@
       "inputSchema": {
         "type": "object",
         "properties": {
+          "stdin": {
+            "type": "boolean",
+            "description": "Read this process's stdin as command stdin"
+          },
+          "file": {
+            "type": "string",
+            "description": "Stage a local file for the command"
+          },
           "args": {
             "type": "array",
             "items": {
@@ -1579,7 +1603,7 @@
           },
           "json": {
             "type": "boolean",
-            "description": "Catalog as JSON (list); Inspect as JSON (inspect); Run result as JSON (run)"
+            "description": "Catalog as JSON (list); Inspect as JSON (inspect); One JSON object per line (logs); Run result as JSON (run)"
           },
           "with-hooks": {
             "type": "boolean",
@@ -1636,6 +1660,14 @@
           "apply": {
             "type": "boolean",
             "description": "Run the retirement (retire-legacy); Write the pin (pin)"
+          },
+          "since": {
+            "type": "string",
+            "description": "Lines at or after this time (logs)"
+          },
+          "no-color": {
+            "type": "boolean",
+            "description": "Strip ANSI escape sequences (logs)"
           },
           "version": {
             "type": "string",
