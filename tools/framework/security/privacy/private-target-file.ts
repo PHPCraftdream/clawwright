@@ -4,14 +4,16 @@ import type { Context } from "../../core/context.ts";
 import { OWNER, needsOwnerEscalation, runMaybePrivileged, sudoFor } from "../../runtime/files/datadir.ts";
 import { PRIVATE_STAGING_MARKER, privateWriteCommand } from "../../runtime/transport/quoting.ts";
 
-/** Publishes private target content atomically, with its runtime owner set before rename. */
-export async function publishPrivateTargetFile(ctx: Context, path: string, content: string): Promise<void> {
+/** Publishes private target content atomically, with its runtime owner set before rename.
+ *  Content may be bytes: the private-write path feeds it to the transport exec's `input`,
+ *  which is byte-faithful (`string | Uint8Array`). */
+export async function publishPrivateTargetFile(ctx: Context, path: string, content: string | Uint8Array): Promise<void> {
   const staging = `${path}${PRIVATE_STAGING_MARKER}${randomBytes(8).toString("hex")}`;
   let created = false;
   // Staging, rename and cleanup all write the directory, never the file: escalation is decided
   // there once. Re-asking per step lets a staging file chowned to this user skip sudo for mv/rm.
   const prefix = await sudoFor(ctx, posix.dirname(path));
-  const inDirectory = (command: string, args: string[], input?: string) => {
+  const inDirectory = (command: string, args: string[], input?: string | Uint8Array) => {
     const [head, ...rest] = [...prefix, command, ...args];
     return ctx.transport.exec(head, rest, input === undefined ? {} : { input });
   };

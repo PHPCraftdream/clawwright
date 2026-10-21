@@ -17,6 +17,7 @@
     "golden:update": "node --experimental-strip-types tools/dev/golden-update.ts",
     "docs:commands": "node --experimental-strip-types tools/dev/docs-commands.ts",
     "check:linux": "node --experimental-strip-types tools/dev/check-linux.ts",
+    "worktree": "node --experimental-strip-types tools/dev/worktree.ts",
     "test": "npm run check",
     "gate": "npm run typecheck && npm run lint && npm run check && npm run check:controls",
     "build": "node --experimental-strip-types tools/build-framework-package.ts",

@@ -13,7 +13,7 @@
 import type { Settings } from "../../core/env.ts";
 import type { PathBridge } from "../../core/paths.ts";
 import type { ExecResult, Transport } from "../transport/transport.ts";
-import { sleep, type Runtime, type RunOneOffOptions, type Stack } from "../runtime.ts";
+import { sleep, type Runtime, type RunOneOffOptions, type RuntimeLogRecord, type Stack } from "../runtime.ts";
 import { ComposeOperations, serializeComposeEnv } from "./compose-operations.ts";
 import { ContainerIntrospection } from "./container-introspection.ts";
 import { HelperContainer } from "./helper-container.ts";
@@ -100,6 +100,10 @@ export class DockerRuntime implements Runtime {
     return this.#compose.followLogs(extraArgs);
   }
 
+  async readLogRecords(tail?: string, extraArgs: string[] = []): Promise<RuntimeLogRecord[]> {
+    return this.#compose.readLogRecords(tail, extraArgs);
+  }
+
   async readLogs(tail?: string, extraArgs: string[] = []): Promise<string> {
     return this.#compose.readLogs(tail, extraArgs);
   }
@@ -183,7 +187,7 @@ export class DockerRuntime implements Runtime {
   async execInHelper(
     service: string,
     args: string[],
-    options: { input?: string; stdioProtocol?: boolean; allowFailure?: boolean; timeoutMs?: number } = {},
+    options: { input?: string; stream?: boolean; stdioProtocol?: boolean; allowFailure?: boolean; timeoutMs?: number } = {},
   ): Promise<ExecResult> {
     return this.#helper.execInHelper(service, args, options);
   }
@@ -192,7 +196,7 @@ export class DockerRuntime implements Runtime {
     service: string,
     command: string,
     args: string[],
-    options: { input?: string; stdioProtocol?: boolean; allowFailure?: boolean; timeoutMs?: number } = {},
+    options: { input?: string; stream?: boolean; stdioProtocol?: boolean; allowFailure?: boolean; timeoutMs?: number } = {},
   ): Promise<ExecResult> {
     return this.#helper.execCommand(service, command, args, options);
   }

@@ -5,7 +5,7 @@
 // kind refuses control characters at parse, before its own grammar runs.
 
 import { parseInterval, sinceValue } from "#src/core/values/durations.ts";
-import { nameValue, newNameValue, countValue, portValue, regexValue, ValueError, type ValueParser } from "#src/core/values/value.ts";
+import { nameValue, newNameValue, countValue, boundedCountValue, portValue, regexValue, ValueError, type ValueParser } from "#src/core/values/value.ts";
 import type { NameKind, NameOf, RecipeName } from "#src/core/values/names.ts";
 import type { LocalScope } from "#src/core/command/spec.ts";
 import type { InvalidSample, KindName, ValueKind } from "#src/core/values/kind.ts";
@@ -62,6 +62,16 @@ export function choice<T extends string = string>(values: readonly T[]): ValueKi
 
 export function count(expected = "a non-negative integer", refusal?: (raw: string) => string): ValueKind<number> {
   return kindOf("count", countValue(expected, refusal), [
+    { raw: "abc", stage: "parse", why: "not digits" },
+    { raw: "", stage: "parse", why: "empty" },
+  ]);
+}
+
+/** A whole number the command bounds itself (`mcp-serve --wait`): the parser owns the range
+ *  check, so the refusal moves from a command-side preflight into the kind's own voice. */
+export function boundedCount(max: number, expected?: string): ValueKind<number> {
+  return kindOf("boundedCount", boundedCountValue(max, expected), [
+    { raw: String(max + 1), stage: "parse", why: "above the bound" },
     { raw: "abc", stage: "parse", why: "not digits" },
     { raw: "", stage: "parse", why: "empty" },
   ]);
@@ -419,7 +429,7 @@ export function image(): ValueKind<ImageRef> {
 
 // "multi" is for argv passed through to a remote command (exec/cli/host), where a `sh -c`
 // script may span lines; TAB and LF stay accepted there, every other control character is refused.
-export function text(reason: string, options: { leadingDash: "refuse" | "allow"; lines?: "single" | "multi" } = { leadingDash: "refuse" }): ValueKind<string> {
+export function text(reason: string, options: { leadingDash: "refuse" | "allow"; lines?: "single" | "multi"; example?: string } = { leadingDash: "refuse" }): ValueKind<string> {
   const refuseDash = options.leadingDash !== "allow";
   const refused = options.lines === "multi" ? CONTROL_BUT_LINES : CONTROL;
   const invalid: InvalidSample[] = [{ raw: "", stage: "parse", why: "empty" }];
@@ -427,7 +437,7 @@ export function text(reason: string, options: { leadingDash: "refuse" | "allow";
   invalid.push({ raw: "a\u0000b", stage: "parse", why: "a control character" });
   return kindOf("text", {
     expected: reason,
-    example: "x",
+    example: options.example ?? "x",
     invalidExample: "",
     parse(raw) {
       if (raw === "") throw new ValueError("needs a value");

@@ -36,8 +36,9 @@ somewhere else anyway, narrowest scope first:
 An operator finds out the instance stopped doing its job without polling by hand.
 
 * `./clawwright watch check` — one probe cycle. Reuses exactly the findings `inspect`/`doctor`
-  already compute — `GATEWAY_DOWN`, `GATEWAY_UNHEALTHY`, `NOT_BOOTSTRAPPED`,
-  `EGRESS_UNREACHABLE` — and none of the rest (`CONFIG_DRIFT` and similar are real findings,
+  already compute — `NOT_BOOTSTRAPPED`, `TARGET_UNREACHABLE`, `GATEWAY_DOWN`,
+  `GATEWAY_UNHEALTHY`, `EGRESS_UNREACHABLE`, `CHANNEL_UNKNOWN`, `CHANNEL_PROXY_DOWN` — and
+  none of the rest (`CONFIG_DRIFT` and similar are real findings,
   but not about whether the instance is serving; `PROVIDER_MISSING` is excluded too — its
   detection cannot see an env-keyed, subscription-login or CLI-backend provider, so counting
   it here would page `degraded` forever on an instance that answers every prompt fine).
@@ -289,7 +290,8 @@ produce a non-zero exit after the remaining phases have been attempted.
 `--dry-run` prints the plan and performs none of it, not even taking the instance lock — but it
 still has to reach the target to build the plan, so a target it cannot reach ends the dry run
 with a non-zero exit (the contain failure is in the report, as a note).
-`--tail <n>` bounds how much log each of preserve/collect captures (default 500 lines).
+`--tail <n>` bounds how much log each of preserve/collect captures (default 500 lines);
+the captured tail is time-ordered across the container's two output streams.
 `--keep-exposure` proceeds past the publicly-bound refusal. `--json` emits the full report —
 every phase's actions and notes, preserve's confirmed `files`, any evidence-phase `error`,
 the security findings, and where the evidence went — as one JSON object.
@@ -311,7 +313,8 @@ A finding can be suppressed by upstream check id, in `config/security-suppressio
 ```json
 {
   "suppressions": [
-    { "checkId": "SOME_UPSTREAM_CHECK_ID", "reason": "why this is accepted here" }
+    { "checkId": "SOME_UPSTREAM_CHECK_ID", "reason": "why this is accepted here" },
+    { "checkId": "channels.telegram.dm.open", "match": "channels.telegram.accounts.public", "reason": "public help bot: open DMs are its purpose" }
   ],
   "acknowledgePublicBind": { "reason": "why this deployment is intentionally public" }
 }
@@ -321,11 +324,17 @@ A finding can be suppressed by upstream check id, in `config/security-suppressio
 `secrets audit`); `acknowledgePublicBind` is the explicit, on-the-record way to accept a
 gateway bound to every interface instead of loopback — without it, that reads as the blocking
 `GATEWAY_PUBLICLY_BOUND` finding. Every suppression needs a non-empty reason; there is no
-suppression without one. A suppressed finding is never simply gone: it still appears in
-`--json`/verbose output, marked `suppressed` with its reason, but is excluded from the count
-`doctor`/`accept` gate on. The file fails closed — missing is read as "nothing suppressed",
-but one that exists and cannot be parsed or validated stops the gate outright rather than
-being read as empty.
+suppression without one. An entry may add `match`: a non-empty string the finding's title and message
+(`accept` prints both, `doctor` the message) must contain as a plain substring before the entry applies.
+`match` is a substring test on that text — prefer matching the account/agent path you are
+accepting (for example `channels.telegram.accounts.public`). An entry without `match`
+silences the check instance-wide; a finding listing several contexts is only suppressed if
+the matched text appears in it. Multiple entries may share a `checkId` with different `match`
+values; the first matching entry, in file order, supplies the reason. A suppressed finding is
+never simply gone: it still appears in `--json`/verbose output, marked `suppressed` with its
+reason, but is excluded from the count `doctor`/`accept` gate on. The file fails closed —
+missing is read as "nothing suppressed", but one that exists and cannot be parsed or validated
+stops the gate outright rather than being read as empty.
 
 `OC_AUDIT_BLOCK` controls which OpenClaw security-audit findings block `doctor` and `accept`:
 `critical` (the default) blocks critical findings; `warn` also blocks warnings. Existing

@@ -75,7 +75,11 @@ export const managementCommands: Record<string, AppCommand> = materializeCommand
       "cost — noticeably faster, though both paths go through the WSL2/Docker Desktop " +
       "boundary either way and neither is instant.\n" +
       "`{clawwright cli --help}` prints this text, same as `{clawwright help cli}`; to reach OpenClaw's " +
-      "own --help instead, put it after a bare --: `{clawwright cli -- --help}`.",
+      "own --help instead, put it after a bare --: `{clawwright cli -- --help}`.\n" +
+      "Payloads travel two ways: {--stdin} pipes this process's standard input to the command, " +
+      "and {--file} stages a local file into the data directory and hands its container path to " +
+      "the command wherever the argument list says @file, removing the staged copy afterwards " +
+      "(worked examples: the commands guide).",
     // Declared destructive not because it destroys anything itself, but because it can run
     // anything OpenClaw's CLI can — including that CLI's own destructive subcommands. Over
     // MCP that earns the same confirmation push/restore/deploy need, rather than a second
@@ -92,7 +96,9 @@ export const managementCommands: Record<string, AppCommand> = materializeCommand
       "Same container as `cli`: the OpenClaw image, the gateway's network namespace, the " +
       "same data mounts, the same one-off-vs-helper choice.\n" +
       "A captured run (over MCP or a pipe) decodes its output as UTF-8 text: bytes that are " +
-      "not valid UTF-8 come back as replacement characters, not the original bytes.",
+      "not valid UTF-8 come back as replacement characters, not the original bytes.\n" +
+      "Like `cli`, this takes {--stdin} (pipe this process's standard input to the command) and " +
+      "{--file} (stage a local file and name its container path with @file in the arguments).",
     // Same reasoning as `cli`: it can run anything, so it gets the same MCP confirmation.
   },
   host: {
@@ -328,7 +334,11 @@ export const managementCommands: Record<string, AppCommand> = materializeCommand
       "commands as MCP tools instead — mcp-setup registers both.\n" +
       "By default this is a one-off container; run `{clawwright cli-start}` first and it execs into " +
       "that container instead, cutting the wait before the client's first response — paid " +
-      "once per connection either way.",
+      "once per connection either way.\n" +
+      "After the gateway's container exists, the bridge waits for it to answer its health " +
+      "probe — up to 90 seconds by default; {--wait} seconds overrides this (bounded at 600), " +
+      "and {--wait} 0 restores the old fail-fast behaviour. Everything the wait prints goes " +
+      "to stderr, never into the protocol stream.",
     // Owns stdin/stdout for JSON-RPC; cannot be a tool itself.
     consoleOnly: true,
   },

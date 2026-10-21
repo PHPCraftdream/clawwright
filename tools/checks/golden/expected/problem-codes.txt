@@ -17,6 +17,7 @@ CRON_DRIFT	blocking	./clawwright apply
 CLI_READ_FAILED	blocking	./clawwright inspect
 CHANNEL_UNKNOWN	warning	./clawwright cli channels status --json
 CHANNEL_UNHEALTHY	warning	./clawwright cli channels status --json  (check channel configuration and gateway logs before restarting)
+CHANNEL_PROXY_DOWN	warning	./clawwright recipe list
 MEMORY_UNKNOWN	warning	./clawwright cli memory status --json
 MEMORY_NOT_READY	warning	./clawwright cli memory status --json  (prepare the selected backend/provider before explicitly indexing; keyword-only memory needs no embedding model)
 LOCK_MISSING	warning	./clawwright lock

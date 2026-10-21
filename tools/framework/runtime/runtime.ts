@@ -63,12 +63,33 @@ export interface RunOneOffOptions {
   entrypoint?: string;
   /** Feed finite stdin; output is captured and stdin closes immediately. */
   input?: string;
+  /** Stream output live even with finite input: the child's stdin stays piped, but on a real
+   *  terminal stdout/stderr inherit instead of being accumulated (and lost). Default:
+   *  stream only when no input is given. */
+  stream?: boolean;
   /** Relay live process stdio as an exact duplex protocol, without capturing stdout. */
   stdioProtocol?: boolean;
   /** Return a non-zero exit as a normal ExecResult instead of throwing. Needed by callers
    *  that must inspect the *full* stdout/stderr — the thrown-error path truncates detail to
    *  a few lines. */
   allowFailure?: boolean;
+}
+
+/** One ordered log line, as the runtime's log reads hand them back. `ts` is the docker
+ *  timestamp (present when docker supplied one, used only for ordering and stripped from
+ *  display); `stream` and `service` are present when known. `text` is the line as it prints
+ *  today, timestamp prefix removed. */
+export interface RuntimeLogRecord {
+  ts?: string;
+  stream?: "stdout" | "stderr";
+  service?: string;
+  text: string;
+}
+
+/** Serialises records one JSON object per line (NDJSON); empty input yields an empty
+ *  string. Shared so the commands that emit logs keep an identical encoding. */
+export function jsonLogLines(records: RuntimeLogRecord[]): string {
+  return records.map((r) => JSON.stringify(r) + "\n").join("");
 }
 
 export interface Runtime {
@@ -96,8 +117,12 @@ export interface Runtime {
   reconcile?(): Promise<void>;
   /** Follows the log until interrupted. */
   followLogs(extraArgs?: string[]): Promise<void>;
-  /** Reads the last `tail` lines. Bounded counterpart of followLogs, for a caller that
-   *  cannot be interrupted. Omitting `tail` uses followLogs's default. */
+  /** Reads the last `tail` lines as ordered records, the two streams docker delivers merged
+   *  chronologically by timestamp. `readLogs` formats these. */
+  readLogRecords(tail?: string, extraArgs?: string[]): Promise<RuntimeLogRecord[]>;
+  /** Reads the last `tail` lines, time-ordered across both streams. Bounded counterpart of
+   *  followLogs, for a caller that cannot be interrupted. Omitting `tail` uses followLogs's
+   *  default. */
   readLogs(tail?: string, extraArgs?: string[]): Promise<string>;
   /** Shows what is running. */
   showStatus(): Promise<void>;
@@ -158,7 +183,7 @@ export interface Runtime {
   execInHelper(
     service: string,
     args: string[],
-    options?: { input?: string; stdioProtocol?: boolean; allowFailure?: boolean; timeoutMs?: number },
+    options?: { input?: string; stream?: boolean; stdioProtocol?: boolean; allowFailure?: boolean; timeoutMs?: number },
   ): Promise<ExecResult>;
   /** The general form of execInHelper: any command, not just the app's own CLI entrypoint —
    *  for ad hoc diagnostics. Throws HelperNotRunning when not up. `options.timeoutMs` bounds
@@ -167,7 +192,7 @@ export interface Runtime {
     service: string,
     command: string,
     args: string[],
-    options?: { input?: string; stdioProtocol?: boolean; allowFailure?: boolean; timeoutMs?: number },
+    options?: { input?: string; stream?: boolean; stdioProtocol?: boolean; allowFailure?: boolean; timeoutMs?: number },
   ): Promise<ExecResult>;
 
   /** Name of whatever already publishes `port` and does not belong to this deployment,
@@ -354,9 +379,12 @@ export interface Stack {
   /** Stops and removes it; --volumes only when explicitly asked. */
   down(removeVolumes?: boolean): Promise<void>;
   status(): Promise<void>;
-  followLogs(): Promise<void>;
+  /** Extra args such as --no-color pass through to compose logs. */
+  followLogs(extraArgs?: string[]): Promise<void>;
+  /** Same records as Runtime.readLogRecords, for a recipe's own stack. */
+  readLogRecords(tail: string, extraArgs?: string[]): Promise<RuntimeLogRecord[]>;
   /** Same bound as Runtime.readLogs, for a recipe's own stack. */
-  readLogs(tail: string): Promise<string>;
+  readLogs(tail: string, extraArgs?: string[]): Promise<string>;
   /** True when ANY container from this project is up — a single live sidecar satisfies it
    *  even while the main service is down. install's readiness check uses serviceStates()
    *  instead, which doesn't have that blind spot. */

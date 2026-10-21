@@ -129,6 +129,7 @@ function stubStack(calls: string[], states: () => Record<string, StackServiceSta
     async down() {},
     async status() {},
     async followLogs() {},
+    async readLogRecords(tail: string) { return [{ text: `stubbed log tail=${tail}` }]; },
     async readLogs(tail: string) { return `stubbed log tail=${tail}\n`; },
     async isRunning() { return true; },
     // Wrapped, not assigned directly: Stack.serviceStates() must answer a promise, and the
@@ -165,6 +166,7 @@ try {
       async down() {},
       async status() {},
       async followLogs() {},
+      async readLogRecords(tail: string) { return [{ text: `stubbed log tail=${tail}` }]; },
       async readLogs(tail: string) { return `stubbed log tail=${tail}\n`; },
       // The old, coarse probe: still true, because the sidecar is alive. Proves the fix does
       // not lean on isRunning() at all for this decision.
@@ -202,6 +204,7 @@ try {
       async down() {},
       async status() {},
       async followLogs() {},
+      async readLogRecords(tail: string) { return [{ text: `stubbed log tail=${tail}` }]; },
       async readLogs(tail: string) { return `stubbed log tail=${tail}\n`; },
       async isRunning() { return true; },
       async serviceStates() {

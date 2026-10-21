@@ -53,6 +53,8 @@ export const operateCommands: Record<string, AppCommand> = materializeCommands({
       "CHANNEL_UNKNOWN (degraded) when a requested channel read fails or returns malformed or " +
       "incomplete telemetry — it holds back a healthy recovery and the heartbeat ping; an " +
       "unrequested read adds no finding,\n" +
+      "CHANNEL_PROXY_DOWN (degraded) when a channel with a finding routes through a proxy " +
+      "recipe that is not reporting healthy — one finding per recipe, never the proxy URL,\n" +
       "and DISK_LOW/DISK_UNKNOWN for the data directory's free space against " +
       "OC_WATCH_DISK_MIN_MB (default 1024 MB; degraded below it, down below 10% of it or " +
       "100 MB, whichever is higher; DISK_UNKNOWN — always degraded, never a silent ok — " +

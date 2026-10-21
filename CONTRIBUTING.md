@@ -302,6 +302,18 @@ The command table in `docs/guide/commands.md`, between its `<!-- commands:begin 
 command declarations — `npm run docs:commands` rewrites both, and `docs-commands.check.ts` fails
 on a hand-edited block. The narrative around them stays manual.
 
+See `docs/internal/new-command-checklist.md` for the full list of registries, matrices, goldens and ratchets a new command or module touches.
+
+## Worktrees
+
+Development worktrees live in `worktrees/<name>/` and share the primary checkout's
+`node_modules` through a directory link. On Windows a plain `git worktree remove` has followed
+that junction and emptied the primary `node_modules`, so use the wrappers:
+`npm run worktree -- add <name> [base]` creates a worktree and links its `node_modules`;
+`npm run worktree -- remove <name>` unlinks the link first, refuses a real (non-link)
+`node_modules` directory, and only then runs git. `--force` relaxes only git's dirty-worktree
+guard, never the link check; `--delete-branch` also deletes the branch. Logic: `tools/dev/worktree.ts`.
+
 ## Negative controls
 
 Every evidence-bearing check — one that asserts an observable behavior, not a product table

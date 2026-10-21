@@ -136,7 +136,7 @@ try {
   useComposeProjectOverride("team-a");
   const projectA = recipeProjectName("cache");
   records.set(projectA, { id: containerId("container-A"), file: targetFile(fileA), running: true });
-  assert.equal(await unchanged(() => recipeStack(ctx, "cache", fileA).readLogs("10")), containerId("container-A"));
+  assert.equal((await unchanged(() => recipeStack(ctx, "cache", fileA).readLogs("10"))).trim(), containerId("container-A"));
   assert.deepEqual((await unchanged(() => recipeStack(ctx, "cache", fileA).inspect!())).namespaces, [
     { project: projectA, status: "present" },
     { project: "team-a-recipe-cache", status: "absent" },
@@ -146,7 +146,7 @@ try {
   useComposeProjectOverride("team-b");
   const projectB = recipeProjectName("cache");
   records.set(projectB, { id: containerId("container-B"), file: targetFile(fileB), running: true });
-  assert.equal(await unchanged(() => recipeStack(ctx, "cache", fileB).readLogs("10")), containerId("container-B"));
+  assert.equal((await unchanged(() => recipeStack(ctx, "cache", fileB).readLogs("10"))).trim(), containerId("container-B"));
 
   useDeployment(resolve(root, "a", "deployment"));
   useComposeProjectOverride("team-a");
@@ -214,15 +214,15 @@ try {
   const pairB = recipeStack(ctx, "worker", fileB);
   const keyB = recipeProjectName("worker");
   await unchanged(() => pairB.up(), [keyB]);
-  assert.equal(await unchanged(() => pairA.readLogs("10")), containerId(targetFile(fileA)));
-  assert.equal(await unchanged(() => pairB.readLogs("10")), containerId(targetFile(fileB)));
+  assert.equal((await unchanged(() => pairA.readLogs("10"))).trim(), containerId(targetFile(fileA)));
+  assert.equal((await unchanged(() => pairB.readLogs("10"))).trim(), containerId(targetFile(fileB)));
   await unchanged(() => pairB.up(), [keyB]);
   await unchanged(() => pairA.down(true), [keyA]);
   assert.equal(records.has(keyA), false);
   assert.equal(volumes.has(keyA), false);
   assert.equal(volumes.has(keyB), true);
   assert.equal(await unchanged(() => pairB.isRunning()), true);
-  assert.equal(await unchanged(() => pairB.readLogs("10")), containerId(targetFile(fileB)));
+  assert.equal((await unchanged(() => pairB.readLogs("10"))).trim(), containerId(targetFile(fileB)));
   assert.ok(wrappedQueries > 0, "ownership and running queries use the isolated sh Docker wrapper");
 
 } finally {

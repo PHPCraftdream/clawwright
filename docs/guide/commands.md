@@ -35,6 +35,13 @@ option's value is never the next token when that token is itself one of the comm
 literal binding, so `{"grep":"--tail"}` needs no shell quoting or regex workaround.
 A bare `--` ends option parsing, so everything after it is positional; `cli` and `exec`
 pass those subsequent tokens (including inline options) unchanged to the child program.
+`cli` and `exec` can also hand data to the container command. `--stdin` pipes this process's
+standard input to it (`type patch.json | clawwright cli --stdin config patch --stdin`); `--file <path>`
+stages a local file under a unique private name in the data directory and replaces the exact
+argument `@file` with its container path (`clawwright cli --file patch.json config patch --file @file`).
+The staged copy is removed afterwards, also when the command fails. Both are refused before any
+target contact: `--stdin` on a terminal or under MCP, `--file` without an `@file` argument or for
+anything that is not a regular file of at most 8 MiB.
 `backup`'s own action-specific
 flags (`--keep`, `--interval`) are refused by name when given to the wrong action, e.g.
 `backup list --keep 3` names `prune-replaced` rather than calling `--keep` unknown.
@@ -64,7 +71,7 @@ over automatically, without the flag.
 | `restart` | `[--break-lock] [--break-foreign-lock <hostId>]` | Restart so the instance re-reads its config |
 | `down` | `[--break-lock] [--break-foreign-lock <hostId>]` | Stop and remove the containers (data is kept) |
 | `destroy` | `[--data] [--backups] [--snapshots] [--yes] [--confirm-name <name>] [--break-lock] [--break-foreign-lock <hostId>]` | Remove what bootstrap created (destructive for some actions) |
-| `logs` | `[--tail <n>] [--since <duration\|timestamp>] [--grep <pattern>]` | Follow the service log, or read a tail |
+| `logs` | `[--tail <n>] [--since <duration\|timestamp>] [--grep <pattern>] [--no-color] [--json]` | Follow the service log, or read a tail |
 | `status` | `[--json]` | Show containers, image, health, data usage |
 
 ### Check
@@ -90,7 +97,7 @@ over automatically, without the flag.
 | `memory` | `<action> [--mode <mode>] [--backend <backend>] [--provider <id>] [--model <model>] [--env <var>] [--model-path <path>] [--model-checksum <sha256>] [--model-source <source>] [--model-version <version>] [--json] [--plugin-version <version>] [--model-max-bytes <bytes>] [--agent <id>] [--all-agents] [--allow-install] [--allow-download] [--deep] [--allow-spend]` | Declare, set up, inspect, index, verify memory (destructive for some actions) |
 | `configure-provider` | `[--provider <id>] [--env <var>] [--force] [--break-lock] [--break-foreign-lock <hostId>] [--json]` | Configure model providers from target env vars |
 | `secrets` | `[--template] [--print-template] [--init-store] [--apply] [--dump] [--store <name>] [--force] [--break-foreign-lock <hostId>] [--json]` | Show required secrets and their state (destructive for some actions) |
-| `recipe` | `[<action>] [<name>] [<new-name>] [<recipe-action>] [<arg…>] [--json] [--with-hooks] [--dry-run] [--break-lock] [--break-foreign-lock <hostId>] [--tail <n>] [--force-disabled] [--volumes] [--service <service>] [--build] [--pull] [--reconcile-consumer] [--helper-image <sha256>] [--shutdown-timeout <seconds>] [--apply] [--version <version>] [--artifact <basename>]` | Deploy service recipes beside the instance (destructive for some actions) |
+| `recipe` | `[<action>] [<name>] [<new-name>] [<recipe-action>] [<arg…>] [--json] [--with-hooks] [--dry-run] [--break-lock] [--break-foreign-lock <hostId>] [--tail <n>] [--force-disabled] [--volumes] [--service <service>] [--build] [--pull] [--reconcile-consumer] [--helper-image <sha256>] [--shutdown-timeout <seconds>] [--apply] [--since <duration\|timestamp>] [--no-color] [--version <version>] [--artifact <basename>]` | Deploy service recipes beside the instance (destructive for some actions) |
 | `files` | `[--apply] [--dry-run] [--json] [--break-lock] [--break-foreign-lock <hostId>]` | Apply or preview declared deployment files (destructive for some actions) |
 | `provision-agent` | `<recipe> [--break-lock] [--break-foreign-lock <hostId>] [--json]` | Wire a recipe's MCP server to an OpenClaw agent |
 | `set` | `<action> [<artifacts…>] [--name <name>] [--json] [--set <artifact>] [--from <artifact>] [--to <artifact>] [--set-id <id>] [--receipt <id>] [--with-model] [--keep] [--kind <kind>] [--break-lock] [--break-foreign-lock <hostId>]` | Build or validate the set artifact (destructive for some actions) |
@@ -119,7 +126,7 @@ over automatically, without the flag.
 | Command | Arguments | Summary |
 | --- | --- | --- |
 | `recover-env` | `[--dry-run] [--adopt-runtime] [--json]` | Repair .env from the running instance |
-| `mcp-serve` | — | stdio MCP bridge to the service's own channels |
+| `mcp-serve` | `[--wait <seconds>]` | stdio MCP bridge to the service's own channels |
 | `mcp-setup` | `[--client <client>] [--json] [--rewrite-launcher]` | Configure project MCP servers (Claude Code, Codex) |
 | `mcp-creds` | `[--json] [--token]` | Print service URL, token and MCP client config |
 
@@ -127,8 +134,8 @@ over automatically, without the flag.
 
 | Command | Arguments | Summary |
 | --- | --- | --- |
-| `cli` | `<args…>` | Run the OpenClaw CLI in a throwaway container (destructive) |
-| `exec` | `<args…>` | Run a command in the same sidecar as `cli` (destructive) |
+| `cli` | `[--stdin] [--file <path>] <args…>` | Run the OpenClaw CLI in a throwaway container (destructive) |
+| `exec` | `[--stdin] [--file <path>] <args…>` | Run a command in the same sidecar as `cli` (destructive) |
 | `host` | `<context> [--root] [--confirm-root] <args…>` | Run a command on the host, not in a container (destructive) |
 | `cli-start` | — | Start the persistent CLI helper |
 | `cli-stop` | — | Stop the persistent CLI helper |

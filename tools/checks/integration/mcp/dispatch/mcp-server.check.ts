@@ -52,7 +52,7 @@ function runServer(name: string, input: string): Promise<ProcessResult> {
 }
 
 /** The same stdio exchange, against a script that builds its own app in-process (the
- *  mcp-structured-progress check's harness): for a sweep that needs a command declaration
+ *  progress/mcp-structured-progress check's harness): for a sweep that needs a command declaration
  *  whose stack-bound actions cannot run here. The declaration under test is real; only the
  *  bytes the command emits are stood in for. */
 function runScript(script: string, input: string): Promise<ProcessResult> {

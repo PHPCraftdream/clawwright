@@ -111,6 +111,8 @@ function baseExcludes(dataName: string): string[] {
     `${root}/config/openclaw.json.last-good`,
     `${root}/config/clawwright-declared-config-patch.json`,
     `${root}/config/clawwright-declared-config-patch.dry-*.json`,
+    // Staged --file payloads for cli/exec (exec-payload.ts): private, transient, never state.
+    `${root}/config/clawwright-cli-input-*`,
     // Previous staging names remain excluded for archives made by older releases.
     `${root}/config/clawwright-desired.dry-*.json`,
     `${root}/config/clawwright-desired.json`,

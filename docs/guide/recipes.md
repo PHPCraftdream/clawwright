@@ -623,7 +623,9 @@ talks to an external system with live credentials is not isolated from that syst
 ## Durable repair and verification
 
 Use the framework's recipe commands to diagnose and recover a sidecar before resorting to
-manual administration. `recipe status` and `recipe logs` observe the stack; `recipe
+manual administration. `recipe logs` observes the stack and accepts `--tail`, `--since`,
+`--no-color` (strips ANSI escape sequences) and `--json` (one JSON object per line);
+`recipe
 diagnose` also invokes `verify.ts` and takes the instance lock because the hook may mutate
 state. An ownership/cutover refusal must be resolved deliberately, not hidden by a second
 Compose project or bypassed without the operator's agreement.

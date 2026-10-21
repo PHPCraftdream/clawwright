@@ -119,6 +119,9 @@ each list findings that the matching session-task list works through.
 * [refactor-stage5-design.md](refactor-stage5-design.md) — stage 5 design: one command registry, table-driven
   completion, MCP descriptions from `summary`, generated command table, structure-first checks.
 * [backlog-p3.md](backlog-p3.md) — P3 findings and accepted limits parked outside the review rounds.
+* [new-command-checklist.md](new-command-checklist.md) — the checklist of every registry,
+  matrix, golden and ratchet a new command or module has to touch, evidence-linked to
+  09cc99e/012473f/408e928.
 * [host-audit-macos-windows.md](host-audit-macos-windows.md) — host code on macOS and Windows
   without WSL (2026-09-29): 9 items, no P0; three P2 left for a separate task.
 * [field-feedback-sidecar-round-13.md](field-feedback-sidecar-round-13.md) — field feedback on

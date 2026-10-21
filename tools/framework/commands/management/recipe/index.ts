@@ -33,6 +33,7 @@ import {
   type Recipe,
 } from "#src/service/recipe.ts";
 import { guardedWith } from "#src/runtime/lock/instance-lock.ts";
+import { JSON_ARGUMENT, NO_COLOR_ARGUMENT, SINCE_ARGUMENT } from "#src/commands/lifecycle/instance/logs.ts";
 import { LOCK_TAKEOVER_ARGUMENTS, takeoverOf } from "#src/commands/interface/groups/shared-arguments.ts";
 import { prepareRecipeCheck, runCheckAction } from "./recovery/checks/check.ts";
 import {
@@ -428,8 +429,8 @@ export const RECIPE = multiActionBody({
     logs: defineAction({
       summary: "Read a recipe stack's logs",
       effect: "read",
-      arguments: [NAME_ARGUMENT, TAIL_ARGUMENT],
-      run: (ctx, values) => runLogsAction(ctx, values.name, values.tail),
+      arguments: [NAME_ARGUMENT, TAIL_ARGUMENT, SINCE_ARGUMENT, NO_COLOR_ARGUMENT, JSON_ARGUMENT],
+      run: (ctx, values) => runLogsAction(ctx, values.name, values.tail, values.since, values["no-color"] === true, values.json === true),
     }),
     pin: defineAction({
       summary: "Update a recipe Dockerfile artifact version and checksum",

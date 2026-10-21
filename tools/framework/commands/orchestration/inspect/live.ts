@@ -8,7 +8,8 @@ import { recipesDir } from "#src/runtime/deployment.ts";
 import { openclawCliBatch } from "#src/service/openclaw-cli.ts";
 import type { BatchedCliResult } from "#src/service/openclaw-cli.ts";
 import { recipeFileChecksums, agentBundleChecksums } from "#src/service/checksums.ts";
-import { recipeEndpointOwners, type RecipeEndpointOwner } from "#src/service/recipe.ts";
+import { loadRecipe, recipeEndpointOwners, recipeStack } from "#src/service/recipe.ts";
+import type { RecipeEndpointOwner } from "#src/service/recipe.ts";
 import { command as nextCommand } from "#src/core/io/invocation/advice.ts";
 import { readLedger, orphanedBy, foreign } from "#src/set/ownership/ledger.ts";
 import type { DeclaredOwnership, Ledger } from "#src/set/ownership/ledger.ts";
@@ -20,8 +21,11 @@ import {
   mcpServerMatches,
 } from "#src/commands/management/provision-agent/index.ts";
 import type { CronJob } from "#src/commands/management/provision-agent/index.ts";
-import { problem, normalizeChannels, channelProblems } from "#src/service/inspection.ts";
+import { problem, normalizeChannels, channelProblems, channelIdentities } from "#src/service/inspection.ts";
+import type { ChannelAccountStatus } from "#src/service/inspection.ts";
+import { readName } from "#src/core/values/names.ts";
 import type { Problem, DeclaredState, ObservedState, EgressObservation, ChannelsStatusResponse } from "#src/service/inspection.ts";
+import type { StackServiceState } from "#src/runtime/runtime.ts";
 import {
   PLUGINS_LIST_ARGS,
   SKILLS_LIST_ARGS,
@@ -166,6 +170,117 @@ async function observeEgress(
     observations.push(observation);
   }
   return observations;
+}
+
+/** One proxy service's verdict from the SAME per-service state install's readiness waits
+ *  on. Undefined means healthy enough (running with a settled or undeclared healthcheck) —
+ *  a green proxy never proves the egress behind it works, so it produces no finding. */
+export const PROXY_NOT_RUNNING = "not running";
+
+export function proxyServiceVerdict(state: StackServiceState | undefined): string | undefined {
+  if (state === undefined || state.running !== true) return PROXY_NOT_RUNNING;
+  if (state.health === "unhealthy" || state.health === "starting") return state.health;
+  return undefined;
+}
+
+/** The note beside the diagnose step: why it asks for confirmation, and the logs command to read first. */
+export function proxyDownNote(recipe: string): string {
+  return `gated like every mutation: asks for confirmation and holds the instance lock; recipe logs ${recipe} reads the container output without either`;
+}
+
+/** The one new finding per recipe when an unhealthy/unknown channel ACCOUNT routes through
+ *  a proxy: pure over the live configuration, the normalized channel telemetry (with its
+ *  PRIVATE identity table — real channel keys/account ids, never serialized), the strict
+ *  endpoint-owner catalog and a per-recipe serviceStates lookup, so the whole correlation is
+ *  testable without a target. The proxy URL itself (credentials included) never reaches the
+ *  finding text — channel names are the same opaque labels the channel findings use. */
+export function channelProxyFindings(
+  liveConfig: unknown,
+  channels: ChannelsStatusResponse | undefined,
+  owners: readonly RecipeEndpointOwner[],
+  serviceStates: (recipe: string) => Record<string, StackServiceState> | undefined,
+): Problem[] {
+  if (channels === undefined || liveConfig === null || typeof liveConfig !== "object") return [];
+  const sections = (liveConfig as { channels?: unknown }).channels;
+  if (sections === null || typeof sections !== "object" || Array.isArray(sections)) return [];
+  const idents = channelIdentities(channels);
+  const findings = new Map<string, { service: string; state: string; channels: string[] }>();
+  for (const [channelLabel, entries] of Object.entries(channels.channelAccounts ?? {})) {
+    // Correlation runs under the REAL key (`channels.<key>` in the live configuration);
+    // the display label is opaque and never a config key.
+    const channelKey = idents?.get(channelLabel)?.channelKey ?? channelLabel;
+    const section = (sections as Record<string, unknown>)[channelKey];
+    if (section === null || typeof section !== "object" || Array.isArray(section)) continue;
+    const { proxy, accounts } = section as { proxy?: unknown; accounts?: unknown };
+    const accountsRecord = accounts !== null && typeof accounts === "object" && !Array.isArray(accounts)
+      ? accounts as Record<string, unknown> : undefined;
+    const configured = (value: unknown): boolean => typeof value === "string" && value !== "";
+    for (const raw of entries as ChannelAccountStatus[]) {
+      // The production predicate scoped to THIS account: the proxy correlation fires
+      // exactly for accounts that carry a finding of their own, never for the channel.
+      if (channelProblems({ channelAccounts: { [channelLabel]: [raw] } }).length === 0) continue;
+      // Effective proxy for this account: its OWN key under `accounts` wins when present —
+      // an empty string there OVERRIDES the channel-level proxy to "no proxy" — otherwise
+      // the channel-level value. Without a real account id the account key cannot be
+      // named, so the channel-level value decides.
+      const accountId = idents?.get(channelLabel)?.accountIds.get(String(raw.accountId ?? ""));
+      const accountConfig = accountId !== undefined && accountsRecord !== undefined ? accountsRecord[accountId] : undefined;
+      // The override is the PROXY KEY being present on the account, not the account existing:
+      // an account with only `enabled` set inherits the channel-level proxy.
+      const ownsProxyKey = accountConfig !== null && typeof accountConfig === "object" && Object.hasOwn(accountConfig, "proxy");
+      const proxied = ownsProxyKey ? configured((accountConfig as { proxy?: unknown }).proxy) : configured(proxy);
+      if (!proxied) continue;
+      // The path a recipe must have declared is the one the effective proxy actually lives at.
+      const path = ownsProxyKey ? `channels.${channelKey}.accounts.${accountId}.proxy` : `channels.${channelKey}.proxy`;
+      const owner = owners.find((candidate) => candidate.configPath === path);
+      if (owner === undefined) continue; // somebody else's proxy: report nothing about it
+      // `serviceStates()` answers a COMPLETE map when the compose read succeeds — a stopped
+      // stack still lists its services (state "exited"/running:false) — so a service absent
+      // from a successful answer is genuinely not running. An undefined answer means the
+      // recipe or stack read FAILED: that is unknown, never down, so nothing is emitted.
+      const stack = serviceStates(owner.recipe);
+      if (stack === undefined) continue;
+      const state = proxyServiceVerdict(stack[owner.service]);
+      if (state === undefined) continue;
+      const known = findings.get(owner.recipe);
+      if (known === undefined) findings.set(owner.recipe, { service: owner.service, state, channels: [channelLabel] });
+      else if (!known.channels.includes(channelLabel)) known.channels.push(channelLabel);
+    }
+  }
+  return [...findings].map(([recipe, observed]) =>
+    problem(
+      "CHANNEL_PROXY_DOWN",
+      `recipe "${recipe}": its proxy service "${observed.service}" reports "${observed.state}", and channel(s) ${observed.channels.map((name) => `"${name}"`).join(", ")} route through it`,
+      // Two steps, spelled like EGRESS_UNREACHABLE's: the gated diagnose as the remedy, the
+      // log read beside it with the recipe name filled in.
+      nextCommand(["recipe", "diagnose", recipe], { note: proxyDownNote(recipe) }),
+    ));
+}
+
+/** Asks every recipe that could own a proxied channel for the same per-service state
+ *  install's readiness reads. Only a SUCCESSFUL read is recorded: a recipe or stack read
+ *  that fails stays absent from the map, which `channelProxyFindings` treats as unknown —
+ *  a broken manifest or transport failure must not read the service as down. */
+async function observeChannelProxies(ctx: Context, liveConfig: unknown, channels: ChannelsStatusResponse, problems: Problem[]): Promise<void> {
+  if (channelProblems(channels).length === 0) return;
+  let owners: readonly RecipeEndpointOwner[];
+  try {
+    owners = await recipeEndpointOwners();
+  } catch {
+    // Broken endpoint ownership is its own finding (observeEgress reports it too); no
+    // owner can be inferred, so nothing is blamed for the channel here either.
+    return;
+  }
+  const states = new Map<string, Record<string, StackServiceState>>();
+  for (const recipe of new Set(owners.map((entry) => entry.recipe))) {
+    try {
+      const loaded = await loadRecipe(readName("recipe", recipe));
+      states.set(recipe, await recipeStack(ctx, loaded.name, loaded.definitionPath).serviceStates());
+    } catch {
+      // Leave the recipe out: unknown, not down.
+    }
+  }
+  problems.push(...channelProxyFindings(liveConfig, channels, owners, (recipe) => states.get(recipe)));
 }
 
 /** Probes, the runtime's health verdict, and RESTART_REQUIRED (from the same startedAt()
@@ -421,6 +536,9 @@ export async function observeLive(
   // --- what OpenClaw itself has registered ----------------------------------------------
   const registrations = await observeRegistrations(ctx, includeChannels, problems);
   const { agents, mcpServerEntries, mcpServers, liveJobs, cronJobs, channels, memory, openclawVersion, plugins, skills } = registrations;
+
+  // After the channel findings: when one explains itself with a down proxy, name it.
+  if (channels !== undefined) await observeChannelProxies(ctx, liveConfig, channels, problems);
 
   const expectations = await recipeExpectations();
   const { ledger, foreignObjects } = await observeOwnership(ctx, problems, expectations, agents, mcpServers, liveJobs);

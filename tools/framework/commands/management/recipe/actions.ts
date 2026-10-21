@@ -23,7 +23,10 @@ import type { LocalRecipeSource, RecipeRef } from "#src/core/values/plan.ts";
  *  (S2.5). Both are string brands, so the runs need no cast. */
 type ExistingRecipe = RecipeName | RecipeRef;
 import { waitForRecipeReadiness, DEFAULT_READINESS_GRACE_MS, DEFAULT_DECLARED_READINESS_TIMEOUT_MS } from "./recovery/readiness.ts";
-import { isCaptured, shouldFollow, emit, emitRaw } from "#src/core/io/output.ts";
+import { isCaptured, shouldFollow, emit, emitRaw, withOutputSink } from "#src/core/io/output.ts";
+import { ansiStripSink } from "#src/commands/lifecycle/instance/logs.ts";
+import { jsonLogLines } from "#src/runtime/runtime.ts";
+import { stripAnsi } from "#src/runtime/docker/compose-operations.ts";
 import { importHookModule } from "./hook-runtime.ts";
 
 /** The readiness actions read and print; everything else is a lifecycle change. Kept beside
@@ -365,13 +368,31 @@ export async function runStatusAction(ctx: Context, name: ExistingRecipe): Promi
   info((await stack.isRunning()) ? "running" : "not running");
 }
 
-export async function runLogsAction(ctx: Context, name: ExistingRecipe, tail: number | undefined): Promise<void> {
+export async function runLogsAction(ctx: Context, name: ExistingRecipe, tail: number | undefined, since?: string, noColor?: boolean, json?: boolean): Promise<void> {
   const { stack } = await stackFor(ctx, name);
-  // Following runs until interrupted, which only an attended terminal can do. Same choice
-  // as instance/logs.ts's logs.
-  if (!shouldFollow()) {
-    emitRaw(await stack.readLogs(tail === undefined ? "100" : String(tail)));
+  const rest = since === undefined ? [] : ["--since", since];
+  if (noColor) rest.push("--no-color");
+  // Following runs until interrupted, which only an attended terminal can do — and --json
+  // needs one object per line, so it always forces a bounded read. Same choice as
+  // instance/logs.ts's logs.
+  if (!shouldFollow() || json) {
+    const tailArg = tail === undefined ? "100" : String(tail);
+    if (json) {
+      const records = await stack.readLogRecords(tailArg, rest);
+      const shaped = noColor ? records.map((record) => ({ ...record, text: stripAnsi(record.text) })) : records;
+      // JSON.stringify drops undefined keys, so ts/service/stream appear only when known.
+      emitRaw(jsonLogLines(shaped));
+      return;
+    }
+    const output = await stack.readLogs(tailArg, rest);
+    emitRaw(noColor ? stripAnsi(output) : output);
     return;
   }
-  await stack.followLogs();
+  // --no-color on the followed stream also needs to strip codes the service embedded, which
+  // compose's own --no-color cannot reach — same sink as instance/logs.ts's follow branch.
+  if (noColor) {
+    await withOutputSink(ansiStripSink(), () => stack.followLogs(rest));
+    return;
+  }
+  await stack.followLogs(rest);
 }

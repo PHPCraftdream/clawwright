@@ -1,6 +1,7 @@
 // Pre-mutation evidence for the `incident` command's "preserve" phase.
 
 import type { Transport } from "../transport/transport.ts";
+import { formatLogRecords, mergeLogStreams } from "./compose-operations.ts";
 
 /** `docker inspect` output with every Config.Env value replaced: the container environment
  *  carries the gateway token and provider keys, and evidence must name them, not hold them.
@@ -31,12 +32,12 @@ export async function captureIncidentSnapshot(
 ): Promise<{ logs: string; inspect: string } | undefined> {
   if (containerId === undefined) return undefined;
   const [logs, inspect] = await Promise.all([
-    transport.exec("docker", ["logs", "--tail", tail, containerId], { allowFailure: true }),
+    transport.exec("docker", ["logs", "--timestamps", "--tail", tail, containerId], { allowFailure: true }),
     transport.exec("docker", ["inspect", containerId], { allowFailure: true }),
   ]);
   if (logs.code !== 0 && inspect.code !== 0) return undefined;
   return {
-    logs: logs.code === 0 ? `${logs.stdout}${logs.stderr}` : `(could not read logs: exit ${logs.code})`,
+    logs: logs.code === 0 ? formatLogRecords(mergeLogStreams(logs.stdout, logs.stderr, Number(tail))) : `(could not read logs: exit ${logs.code})`,
     inspect: inspect.code === 0 ? redactInspectEnv(inspect.stdout) : `(could not inspect: exit ${inspect.code})`,
   };
 }

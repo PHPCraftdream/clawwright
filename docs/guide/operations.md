@@ -54,6 +54,23 @@ polling telemetry is not proven disconnection. No channel probe is requested by 
 a probe verdict is shown only when upstream actually supplies one. Disabled accounts do not
 alarm. Unknown or malformed telemetry is not healthy.
 
+The link between a channel and its egress proxy is data, not folklore: an installed recipe
+declares the configuration path it serves under `consumerEndpoints` (for example
+`channels.telegram.proxy`), so when a channel account already carries a
+`CHANNEL_UNHEALTHY` or `CHANNEL_UNKNOWN` finding and that path — or an account-level
+`channels.<channel>.accounts.<account>.proxy` overriding it — is configured, `inspect`
+reads the owning recipe's Compose service the same way install's readiness check does. A
+service that is not running, or whose healthcheck reports `unhealthy` or `starting`, adds
+one `CHANNEL_PROXY_DOWN` finding per recipe, naming the recipe, the health state and the
+affected channel labels; the next action is `recipe diagnose <recipe>` (gated like every
+mutation: confirmation plus the instance lock) beside `recipe logs <recipe>`. The proxy
+URL never appears in the finding — it carries credentials. What the finding does NOT
+prove: a proxy that reports `healthy` is only a green healthcheck, not working Tor or
+egress — the recipe's own `recipe verify` covers the actual path — so no finding is added
+when the proxy is healthy, and a proxy configured without any recipe declaring its path
+(a foreign proxy) is never blamed for a channel.
+
+
 Memory status is normal, not `--deep`: it does not index, reindex, fix, download a model or
 spend embedding API credit. Per-agent source scans, indexed files/chunks, dirty state,
 metadata identity and FTS/vector/embedding capabilities are separate observations. FTS

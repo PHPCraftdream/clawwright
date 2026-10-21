@@ -211,14 +211,18 @@
 
 === logs --help ===
 ==> logs — Follow the service log, or read a tail
-    Usage: ./clawwright logs [--tail <n>] [--since <duration|timestamp>] [--grep <pattern>]
+    Usage: ./clawwright logs [--tail <n>] [--since <duration|timestamp>] [--grep <pattern>] [--no-color] [--json]
       --tail <n>             Lines to return
       --since <duration|timestamp> Only lines at or after this duration/timestamp (10m, 2h, 1h30m, or RFC3339/ISO)
       --grep <pattern>       Only matching lines
+      --no-color             Remove ANSI escape sequences (colour and cursor control) from the output, including codes embedded in the log lines themselves
+      --json                 Emit each line as a JSON object (ts, service, stream when known, text) instead of plain text; reads a bounded tail even on a terminal
     
     On a terminal this follows the log until interrupted. Called as a tool it reads the last lines and returns them instead — following would never produce the single result a tool call owes its caller.
     --tail sets how many lines the bounded read returns; without it the deployment's own declared default applies.
     --since takes a duration (10m, 2h, 1h30m) or an RFC3339/ISO date-time, passed to compose as-is; anything else is refused rather than forwarded.
+    --no-color strips ANSI escape sequences from the output, including codes the service itself embedded in its log lines, and does so on a followed stream as well as on the bounded read.
+    --json emits each line as a JSON object (ts, service, stream when known, text) instead of plain text; it reads a bounded tail even on a terminal.
     --grep filters lines by a JS RegExp, on the bounded read and on a followed stream alike (filtered line by line as it arrives); an invalid pattern is refused before anything runs.
 
 === backup --help ===
@@ -585,6 +589,7 @@
     check — one probe cycle, reusing exactly the findings `inspect`/`doctor` already compute (GATEWAY_DOWN, GATEWAY_UNHEALTHY, NOT_BOOTSTRAPPED, EGRESS_UNREACHABLE — never PROVIDER_MISSING, whose detection is unreliable enough that it would page degraded forever on an instance answering fine, nor CONFIG_DRIFT or the rest, which are real but not about whether the instance is serving),
     then adds findings of its own: CHANNEL_UNHEALTHY (degraded) for a configured, enabled channel account that `openclaw channels status --json` reports not running, erroring or not connected (skipped while the gateway itself is down — nothing to exec a CLI call into; verified on OpenClaw 2026.6.34 — that CLI has no dead-letter/delivery-failure signal, only connection/auth trouble, so that is all this reports),
     CHANNEL_UNKNOWN (degraded) when a requested channel read fails or returns malformed or incomplete telemetry — it holds back a healthy recovery and the heartbeat ping; an unrequested read adds no finding,
+    CHANNEL_PROXY_DOWN (degraded) when a channel with a finding routes through a proxy recipe that is not reporting healthy — one finding per recipe, never the proxy URL,
     and DISK_LOW/DISK_UNKNOWN for the data directory's free space against OC_WATCH_DISK_MIN_MB (default 1024 MB; degraded below it, down below 10% of it or 100 MB, whichever is higher; DISK_UNKNOWN — always degraded, never a silent ok — when `df` itself fails or cannot be parsed).
     All of this collapses into ok / degraded / down.
     If gathering the base findings itself fails outright — the Docker daemon down, an SSH host refusing the connection, wsl.exe never answering — that reads as down too, reason TARGET_UNREACHABLE, rather than dying before a cycle can alert or record anything (channel/disk are skipped in that case, and also while NOT_BOOTSTRAPPED — no data directory yet to measure).
@@ -740,7 +745,9 @@
 
 === cli --help ===
 ==> cli — Run the OpenClaw CLI in a throwaway container
-    Usage: ./clawwright cli <args…>
+    Usage: ./clawwright cli [--stdin] [--file <path>] <args…>
+      --stdin                --stdin reads this process's standard input to EOF (at most 8 MiB) and delivers it as the command's stdin inside the container. Refused on a terminal (nothing to read) and in captured mode, where stdin carries the MCP protocol
+      --file <path>          Stage this local file (a regular file, at most 8 MiB) into the data directory, pass its container path wherever the argument list contains the exact token @file, and always remove the staged copy afterwards. @file without --file is left untouched — it can be legitimate OpenClaw syntax
       <args…>                Arguments passed to OpenClaw's CLI verbatim, e.g. ["config", "get", "gateway.mode"] (required)
     
     Everything after `cli` is passed straight through to OpenClaw's own CLI, e.g.
@@ -748,17 +755,21 @@
     By default each call is a fresh one-off container sharing the gateway's network namespace, paying for its create/destroy on every call.
     Run `./clawwright cli-start` once and this execs into that container instead, skipping that cost — noticeably faster, though both paths go through the WSL2/Docker Desktop boundary either way and neither is instant.
     `./clawwright cli --help` prints this text, same as `./clawwright help cli`; to reach OpenClaw's own --help instead, put it after a bare --: `./clawwright cli -- --help`.
+    Payloads travel two ways: --stdin pipes this process's standard input to the command, and --file stages a local file into the data directory and hands its container path to the command wherever the argument list says @file, removing the staged copy afterwards (worked examples: the commands guide).
     
     This command replaces or destroys state.
 
 === exec --help ===
 ==> exec — Run a command in the same sidecar as `cli`
-    Usage: ./clawwright exec <args…>
+    Usage: ./clawwright exec [--stdin] [--file <path>] <args…>
+      --stdin                --stdin reads this process's standard input to EOF (at most 8 MiB) and delivers it as the command's stdin inside the container. Refused on a terminal (nothing to read) and in captured mode, where stdin carries the MCP protocol
+      --file <path>          Stage this local file (a regular file, at most 8 MiB) into the data directory, pass its container path wherever the argument list contains the exact token @file, and always remove the staged copy afterwards. @file without --file is left untouched — it can be legitimate OpenClaw syntax
       <args…>                Command and arguments to run, e.g. ["curl", "-fsS", "http://127.0.0.1:18789/healthz"] (required)
     
     Unlike `cli`, which always runs OpenClaw's own CLI entrypoint, this runs whatever command you give it, e.g. `./clawwright exec curl -fsS http://127.0.0.1:18789/healthz` or `./clawwright exec cat /app/docs/channels/telegram.md`.
     Same container as `cli`: the OpenClaw image, the gateway's network namespace, the same data mounts, the same one-off-vs-helper choice.
     A captured run (over MCP or a pipe) decodes its output as UTF-8 text: bytes that are not valid UTF-8 come back as replacement characters, not the original bytes.
+    Like `cli`, this takes --stdin (pipe this process's standard input to the command) and --file (stage a local file and name its container path with @file in the arguments).
     
     This command replaces or destroys state.
 
@@ -844,13 +855,13 @@
 
 === recipe --help ===
 ==> recipe — Deploy service recipes beside the instance
-    Usage: ./clawwright recipe [<action>] [<name>] [<new-name>] [<recipe-action>] [<arg…>] [--json] [--with-hooks] [--dry-run] [--break-lock] [--break-foreign-lock <hostId>] [--tail <n>] [--force-disabled] [--volumes] [--service <service>] [--build] [--pull] [--reconcile-consumer] [--helper-image <sha256>] [--shutdown-timeout <seconds>] [--apply] [--version <version>] [--artifact <basename>]
+    Usage: ./clawwright recipe [<action>] [<name>] [<new-name>] [<recipe-action>] [<arg…>] [--json] [--with-hooks] [--dry-run] [--break-lock] [--break-foreign-lock <hostId>] [--tail <n>] [--force-disabled] [--volumes] [--service <service>] [--build] [--pull] [--reconcile-consumer] [--helper-image <sha256>] [--shutdown-timeout <seconds>] [--apply] [--since <duration|timestamp>] [--no-color] [--version <version>] [--artifact <basename>]
       <action>               Recipe action [list|import|new|check|verify|onboard|diagnose|install|trial|remove|inspect|recover|migrate|retire-legacy|status|logs|pin|run]
       <name>                 Directory to copy the recipe from (import); Recipe name (new, verify, onboard, diagnose, install, trial, remove, inspect, recover, migrate, retire-legacy, status, logs, pin, run); Recipe whose *.check.ts files to run — they run with your rights, not sandboxed (check)
       <new-name>             import under this name instead of the source directory's own name (import)
       <recipe-action>        the action declared in the recipe's manifest (recipe inspect lists them) (run)
       <arg…>                 action argument as key=value (run)
-      --json                 emit the catalog (recipes, agent/MCP bundles, broken manifests) as JSON (list); emit inspection evidence as JSON (inspect); emit the action's result as JSON (run)
+      --json                 emit the catalog (recipes, agent/MCP bundles, broken manifests) as JSON (list); emit inspection evidence as JSON (inspect); Emit each line as a JSON object (ts, service, stream when known, text) instead of plain text; reads a bounded tail even on a terminal (logs); emit the action's result as JSON (run)
       --with-hooks           add commented prepare.ts/verify.ts stubs (new)
       --dry-run              list files without executing recipe code (check); show what would happen (install, remove); show what would be copied, the project name and the override (trial); preview without locks or hooks (recover); preview without locks, hooks or target writes (migrate); pass dryRun to the action; treated as read-only (run)
       --break-lock           Take over the instance lock held by another operation (verify, onboard, diagnose, install, trial, remove, pin, run); Take over the instance lock held by another operation (recover, migrate, retire-legacy)
@@ -865,6 +876,8 @@
       --helper-image <sha256> Trusted local sha256 image ID for storage tools; never built or pulled (migrate, retire-legacy)
       --shutdown-timeout <seconds> Finite 1..3600 seconds, default 180; never escalates to forced kill (migrate, retire-legacy)
       --apply                stop, back up and remove the legacy containers; previews by default (retire-legacy); confirm and atomically update the Dockerfile (pin)
+      --since <duration|timestamp> Only lines at or after this duration/timestamp (10m, 2h, 1h30m, or RFC3339/ISO) (logs)
+      --no-color             Remove ANSI escape sequences (colour and cursor control) from the output, including codes embedded in the log lines themselves (logs)
       --version <version>    new plain-token release version (pin)
       --artifact <basename>  select a declaration by its expanded asset basename (version placeholders use the current version) (pin)
     
@@ -963,12 +976,15 @@
 
 === mcp-serve --help ===
 ==> mcp-serve — stdio MCP bridge to the service's own channels
+    Usage: ./clawwright mcp-serve [--wait <seconds>]
+      --wait <seconds>       How long to wait for the gateway to be ready before handing over stdio (0 does not wait)
     
     Runs OpenClaw's own `mcp serve` and speaks JSON-RPC straight through stdio —
     this is the bridge an MCP client (Claude Code, Codex, Claude Desktop) uses to read and send messages in OpenClaw's channels.
     Set up a client with `./clawwright mcp-setup`; this command is what the generated config actually invokes, not something to run by hand.
     Not the same thing as `./clawwright control-mcp`, which exposes this deployment's own commands as MCP tools instead — mcp-setup registers both.
     By default this is a one-off container; run `./clawwright cli-start` first and it execs into that container instead, cutting the wait before the client's first response — paid once per connection either way.
+    After the gateway's container exists, the bridge waits for it to answer its health probe — up to 90 seconds by default; --wait seconds overrides this (bounded at 600), and --wait 0 restores the old fail-fast behaviour. Everything the wait prints goes to stderr, never into the protocol stream.
 
 === mcp-setup --help ===
 ==> mcp-setup — Configure project MCP servers (Claude Code, Codex)

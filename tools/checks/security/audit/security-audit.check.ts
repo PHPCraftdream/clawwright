@@ -209,6 +209,110 @@ await withDeployment(async (dir) => {
   checkTrue("a suppression missing its reason is refused", thrown.includes("reason"));
 });
 
+// --- scoped suppressions: a `match` narrows a checkId entry to one finding text --------------
+
+// Real finding shapes (2026.6.34): the DM-policy check fires per account, and the exposure
+// check lists every open context plus a runtime/FS line — instance-wide suppression of either
+// would also silence future exposures of other accounts/agents.
+const TELEGRAM_DM_JSON = JSON.stringify({ findings: [
+  {
+    checkId: "channels.telegram.dm.open",
+    severity: "warn",
+    detail: "channels.telegram.accounts.public.dmPolicy=\"open\" allows anyone to DM the bot.",
+  },
+  {
+    checkId: "channels.telegram.dm.open",
+    severity: "warn",
+    detail: "channels.telegram.accounts.other.dmPolicy=\"open\" allows anyone to DM the bot.",
+  },
+] });
+
+const EXPOSURE_JSON = JSON.stringify({ findings: [
+  {
+    checkId: "security.exposure.open_groups_with_runtime_or_fs",
+    severity: "critical",
+    detail: "Found inbound policy=\"open\" at:\n- channels.telegram.accounts.public.dmPolicy=\"open\"\nRuntime/process tools are exposed without full sandboxing in at least one context.\n- agents.list.main (sandbox=off; runtime=[exec, process])",
+  },
+] });
+
+function dmAnswered(): Record<string, string> {
+  return { "security audit": TELEGRAM_DM_JSON, "secrets audit": "{\"findings\":[]}" };
+}
+
+await withDeployment(async (dir) => {
+  const scoped = { suppressions: [{ checkId: "channels.telegram.dm.open", match: "channels.telegram.accounts.public", reason: "r-public" }] };
+  await writeFile(resolve(dir, "config", "security-suppressions.json"), JSON.stringify(scoped), "utf8");
+  const report = await runSecurityAudit(stubContext({ cliAnswers: dmAnswered() }));
+  check("match narrows the suppression to the finding whose text carries the path", ["channels.telegram.accounts.public", "channels.telegram.accounts.other"].map((account) => {
+    const finding = report.findings.find((f) => f.message.includes(`${account}.dmPolicy`));
+    return { suppressed: finding?.suppressed, suppressedReason: finding?.suppressedReason };
+  }), [{ suppressed: true, suppressedReason: "r-public" }, { suppressed: false, suppressedReason: undefined }]);
+});
+
+await withDeployment(async (dir) => {
+  // No `match`: exactly today's behaviour — the whole check instance-wide.
+  await writeFile(
+    resolve(dir, "config", "security-suppressions.json"),
+    JSON.stringify({ suppressions: [{ checkId: "channels.telegram.dm.open", reason: "dmPolicy accepted here" }] }),
+    "utf8",
+  );
+  const report = await runSecurityAudit(stubContext({ cliAnswers: dmAnswered() }));
+  check("a checkId-only entry is still instance-wide", report.findings.filter((f) => f.checkId === "channels.telegram.dm.open").map((f) => f.suppressed), [true, true]);
+});
+
+await withDeployment(async (dir) => {
+  const scoped = { suppressions: [
+    { checkId: "channels.telegram.dm.open", match: "channels.telegram.accounts.public", reason: "r-public" },
+    { checkId: "channels.telegram.dm.open", match: "channels.telegram.accounts.other", reason: "r-other" },
+  ] };
+  await writeFile(resolve(dir, "config", "security-suppressions.json"), JSON.stringify(scoped), "utf8");
+  const report = await runSecurityAudit(stubContext({ cliAnswers: dmAnswered() }));
+  check("two entries, same checkId, different match, both apply", report.findings.map((f) => f.suppressedReason), ["r-public", "r-other"]);
+});
+
+await withDeployment(async (dir) => {
+  // Both entries match the public finding; file order decides — the earlier one wins.
+  const scoped = { suppressions: [
+    { checkId: "channels.telegram.dm.open", match: "channels.telegram.accounts.", reason: "r-first" },
+    { checkId: "channels.telegram.dm.open", match: "channels.telegram.accounts.public", reason: "r-second" },
+  ] };
+  await writeFile(resolve(dir, "config", "security-suppressions.json"), JSON.stringify(scoped), "utf8");
+  const report = await runSecurityAudit(stubContext({ cliAnswers: dmAnswered() }));
+  check("first matching entry wins, in file order", report.findings.map((f) => f.suppressedReason), ["r-first", "r-first"]);
+});
+
+await withDeployment(async (dir) => {
+  // The exposure finding lists several contexts; a match must still be present verbatim in it.
+  const scoped = { suppressions: [{ checkId: "security.exposure.open_groups_with_runtime_or_fs", match: "channels.telegram.accounts.public", reason: "r-exposure" }] };
+  await writeFile(resolve(dir, "config", "security-suppressions.json"), JSON.stringify(scoped), "utf8");
+  const report = await runSecurityAudit(stubContext({ cliAnswers: { "security audit": EXPOSURE_JSON, "secrets audit": "{\"findings\":[]}" } }));
+  check("a match found anywhere in the finding's full text suppresses the multi-context finding", report.findings.map((f) => f.suppressedReason), ["r-exposure"]);
+});
+
+await withDeployment(async (dir) => {
+  await writeFile(resolve(dir, "config", "security-suppressions.json"), JSON.stringify({ suppressions: [{ checkId: "x", reason: "r", match: "" }] }), "utf8");
+  const ctx = stubContext({});
+  let thrown = "";
+  try {
+    await runSecurityAudit(ctx);
+  } catch (error) {
+    thrown = error instanceof Error ? error.message : String(error);
+  }
+  checkTrue("an empty match is refused", thrown.includes("non-empty"));
+});
+
+await withDeployment(async (dir) => {
+  await writeFile(resolve(dir, "config", "security-suppressions.json"), JSON.stringify({ suppressions: [{ checkId: "x", reason: "r", match: 7 }] }), "utf8");
+  const ctx = stubContext({});
+  let thrown = "";
+  try {
+    await runSecurityAudit(ctx);
+  } catch (error) {
+    thrown = error instanceof Error ? error.message : String(error);
+  }
+  checkTrue("a non-string match is refused", thrown.includes("match"));
+});
+
 // --- host-side: the gateway published on every interface -------------------------------------
 
 await withDeployment(async () => {

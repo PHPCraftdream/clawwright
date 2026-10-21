@@ -3,7 +3,8 @@ import type { PathBridge } from "../../../core/paths.ts";
 import { UserError } from "../../../core/io/log.ts";
 import { command, manual } from "../../../core/io/invocation/advice.ts";
 import type { ExecResult, Transport } from "../../transport/transport.ts";
-import type { Stack, StackServiceState } from "../../runtime.ts";
+import type { RuntimeLogRecord, Stack, StackServiceState } from "../../runtime.ts";
+import { mergeLogStreams, formatLogRecords } from "../compose-operations.ts";
 import { createIO, readCompose, json, object, array, ids, RecipeReadError, type StackIO } from "./io.ts";
 import { inspectStack, requireOwned } from "./inspection.ts";
 import { recoveryAPI } from "./recovery/index.ts";
@@ -47,14 +48,20 @@ export function buildStack(transport: Transport, paths: PathBridge, getSettings:
     });
   };
   const voidly = async (args: string[]): Promise<void> => { await compose(args); };
+  const readLogRecords = async (tail: string, extraArgs: string[] = []): Promise<RuntimeLogRecord[]> => {
+    const result = await compose(["logs", "--timestamps", "--tail", tail, ...extraArgs], false);
+    return mergeLogStreams(result.stdout, result.stderr, Number(tail));
+  };
   return {
     inspect: (options) => inspectStack(io, options),
     ...recoveryAPI(io), ...retireAPI(io), ...migrationAPI(io),
     build: () => voidly(["build"]),
     up: (options) => voidly(["up", "--detach", ...(options?.wait ? ["--wait", "--wait-timeout", String(options.timeoutSeconds ?? 60)] : [])]),
     down: (removeVolumes = false) => voidly(["down", ...(removeVolumes ? ["--volumes"] : [])]),
-    status: () => voidly(["ps"]), followLogs: () => voidly(["logs", "--follow", "--tail", "100"]),
-    readLogs: async (tail) => (await compose(["logs", "--tail", tail], false)).stdout,
+    status: () => voidly(["ps"]),
+    followLogs: (extraArgs: string[] = []) => voidly(["logs", "--follow", "--tail", "100", ...extraArgs]),
+    readLogRecords,
+    readLogs: async (tail, extraArgs = []) => formatLogRecords(await readLogRecords(tail, extraArgs)),
     isRunning: async () => {
       await verify();
       const listed = ids((await io.run(["ps", "--quiet", "--no-trunc", "--filter", `label=com.docker.compose.project=${project}`])).stdout);

@@ -181,6 +181,25 @@ async function processTree(root: number): Promise<number[]> {
   return tree;
 }
 
+/** The pure stdio decision behind spawnLocal: a run that streams to a real terminal
+ *  inherits stdout/stderr (its stdin stays piped when finite input is delivered), everything
+ *  else — captured, piped, non-terminal — is piped so the output is collectable. Exported so
+ *  the check can pin the decision without spawning a child. */
+export function spawnStdio(streamToTerminal: boolean, hasInput: boolean): ["pipe" | "inherit", "inherit" | "pipe", "inherit" | "pipe"] {
+  if (!streamToTerminal) return ["pipe", "pipe", "pipe"];
+  return [hasInput ? "pipe" : "inherit", "inherit", "inherit"];
+}
+
+/** Whether a child's output goes straight to this process's terminal. Finite input is NOT a
+ *  factor: it only keeps the child's stdin piped (see spawnStdio), so a --stdin run still
+ *  shows its output. */
+export function terminalStreaming(facts: {
+  readonly protocol: boolean; readonly stream: boolean | undefined; readonly hasSink: boolean;
+  readonly stdoutTty: boolean; readonly stderrTty: boolean;
+}): boolean {
+  return !facts.protocol && facts.stream === true && !facts.hasSink && facts.stdoutTty && facts.stderrTty;
+}
+
 /** Spawns a process locally. Arguments are passed as an array — never a shell string —
  *  so quoting is impossible to get wrong. */
 export function spawnLocal(command: string, args: string[], options: ExecOptions = {}): Promise<ExecResult> {
@@ -193,16 +212,20 @@ export function spawnLocal(command: string, args: string[], options: ExecOptions
     const protocol = options.stdioProtocol === true;
     // Streaming means "watch it happen on a real terminal", not merely "no sink": a plain
     // pipe has no sink either, but inheriting stdio onto it wires wsl.exe straight to an MSYS
-    // pipe on Windows — Node dies with exit 139 the moment the child writes.
+    // pipe on Windows — Node dies with exit 139 the moment the child writes. Finite input
+    // only forces the child's stdin to stay piped (the bytes arrive via child.stdin.end
+    // below); stdout/stderr still inherit, so a --stdin run's output is not swallowed.
     const sink = outputSink();
-    const streamToTerminal = !protocol && options.stream === true && sink === undefined && options.input === undefined
-      && process.stdout.isTTY === true && process.stderr.isTTY === true;
+    const streamToTerminal = terminalStreaming({
+      protocol, stream: options.stream, hasSink: sink !== undefined,
+      stdoutTty: process.stdout.isTTY === true, stderrTty: process.stderr.isTTY === true,
+    });
 
     const environment = { ...process.env, ...options.env };
     unsetInheritedEnvironment(environment, options.unsetEnv ?? []);
 
     const child = spawn(command, args, {
-      stdio: streamToTerminal ? ["inherit", "inherit", "inherit"] : ["pipe", "pipe", "pipe"],
+      stdio: spawnStdio(streamToTerminal, options.input !== undefined),
       env: environment,
     });
     // A deadline ends the child's whole tree: its own children would outlive it and hold the
