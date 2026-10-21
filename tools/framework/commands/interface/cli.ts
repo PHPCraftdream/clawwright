@@ -9,7 +9,6 @@ import type { ExecResult } from "#src/runtime/transport/transport.ts";
 import { HelperNotRunning, requireBootstrapped } from "#src/runtime/runtime.ts";
 import { commandBody, runOnContext } from "#src/core/command/index.ts";
 import * as kinds from "#src/core/values/kinds.ts";
-import type { LocalArtifact } from "#src/core/values/plan.ts";
 import { CLI_HELPER_SERVICE } from "./cli-helper.ts";
 import {
   capturedStdinRefusalMessage, cliFailureHeadline, noFileTokenRefusalMessage, readPayloadFile,
@@ -59,7 +58,7 @@ export const CLI = commandBody({
     const v = call.values;
     const passed = [...(v.args as readonly string[])];
     // localFile's resolve hands over the proven artifact, not the raw path string.
-    const file = (v.file as LocalArtifact | undefined)?.path;
+    const file = v.file?.path;
     if (v.stdin === true) {
       if (isCaptured()) {
         call.refuse("stdin", capturedStdinRefusalMessage);
