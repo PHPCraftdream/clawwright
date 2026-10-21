@@ -7,7 +7,7 @@
 import type { ValueParser } from "./value.ts";
 import type { LocalScope } from "#src/core/command/spec.ts";
 
-export type KindName = "choice" | "count" | "port" | "pattern" | "duration" | "interval" | "since" | "name" | "id" | "positive" | "receipt" | "checksum" | "hostId" | "sshDestination" | "commandName" | "absolutePath" | "localFile" | "localDirectory" | "recipeRef" | "image" | "text";
+export type KindName = "choice" | "count" | "boundedCount" | "port" | "pattern" | "duration" | "interval" | "since" | "name" | "id" | "positive" | "receipt" | "checksum" | "hostId" | "sshDestination" | "commandName" | "absolutePath" | "localFile" | "localDirectory" | "recipeRef" | "image" | "text";
 
 /** One refused value the sweep turns into a case: refused where (`parse` now, `prepare`
  *  once the later stage owns it) and why. */

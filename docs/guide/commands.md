@@ -119,7 +119,7 @@ over automatically, without the flag.
 | Command | Arguments | Summary |
 | --- | --- | --- |
 | `recover-env` | `[--dry-run] [--adopt-runtime] [--json]` | Repair .env from the running instance |
-| `mcp-serve` | — | stdio MCP bridge to the service's own channels |
+| `mcp-serve` | `[--wait <seconds>]` | stdio MCP bridge to the service's own channels |
 | `mcp-setup` | `[--client <client>] [--json] [--rewrite-launcher]` | Configure project MCP servers (Claude Code, Codex) |
 | `mcp-creds` | `[--json] [--token]` | Print service URL, token and MCP client config |
 

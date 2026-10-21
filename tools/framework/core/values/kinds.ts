@@ -5,7 +5,7 @@
 // kind refuses control characters at parse, before its own grammar runs.
 
 import { parseInterval, sinceValue } from "#src/core/values/durations.ts";
-import { nameValue, newNameValue, countValue, portValue, regexValue, ValueError, type ValueParser } from "#src/core/values/value.ts";
+import { nameValue, newNameValue, countValue, boundedCountValue, portValue, regexValue, ValueError, type ValueParser } from "#src/core/values/value.ts";
 import type { NameKind, NameOf, RecipeName } from "#src/core/values/names.ts";
 import type { LocalScope } from "#src/core/command/spec.ts";
 import type { InvalidSample, KindName, ValueKind } from "#src/core/values/kind.ts";
@@ -62,6 +62,16 @@ export function choice<T extends string = string>(values: readonly T[]): ValueKi
 
 export function count(expected = "a non-negative integer", refusal?: (raw: string) => string): ValueKind<number> {
   return kindOf("count", countValue(expected, refusal), [
+    { raw: "abc", stage: "parse", why: "not digits" },
+    { raw: "", stage: "parse", why: "empty" },
+  ]);
+}
+
+/** A whole number the command bounds itself (`mcp-serve --wait`): the parser owns the range
+ *  check, so the refusal moves from a command-side preflight into the kind's own voice. */
+export function boundedCount(max: number, expected?: string): ValueKind<number> {
+  return kindOf("boundedCount", boundedCountValue(max, expected), [
+    { raw: String(max + 1), stage: "parse", why: "above the bound" },
     { raw: "abc", stage: "parse", why: "not digits" },
     { raw: "", stage: "parse", why: "empty" },
   ]);

@@ -1092,7 +1092,7 @@
       "tools/checks/integration/mcp/dispatch/option-literals.check.ts": 4,
       "tools/checks/integration/mcp/mcp-mirror.check.ts": 1,
       "tools/checks/integration/mcp/mcp-project.check.ts": 9,
-      "tools/checks/integration/mcp/mcp-structured-progress.check.ts": 3,
+      "tools/checks/integration/mcp/progress/mcp-structured-progress.check.ts": 3,
       "tools/checks/integration/mcp/openclaw-cli.check.ts": 8,
       "tools/checks/integration/mcp/transport-listing.check.ts": 15,
       "tools/checks/integration/recipe/hooks/recipe-lifecycle-hooks.check.ts": 6,

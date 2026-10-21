@@ -41,6 +41,17 @@ export function countValue(expected = "a non-negative integer", refusal: Refusal
   };
 }
 
+/** A whole number bounded above (seconds to wait, lines to keep …). */
+export function boundedCountValue(max: number, expected = `a whole number from 0 to ${max}`): ValueParser<number> {
+  return {
+    expected, example: "30", invalidExample: String(max + 1),
+    parse(raw) {
+      if (!/^\d+$/.test(raw) || Number(raw) > max) throw new ValueError(takesNot(expected)(raw));
+      return Number(raw);
+    },
+  };
+}
+
 /** A TCP port, 1-65535. Empty is its own refusal, as `--local-port` has always had. */
 export const PORT_RANGE = "must be a port number between 1 and 65535";
 

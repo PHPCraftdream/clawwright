@@ -334,7 +334,11 @@ export const managementCommands: Record<string, AppCommand> = materializeCommand
       "commands as MCP tools instead — mcp-setup registers both.\n" +
       "By default this is a one-off container; run `{clawwright cli-start}` first and it execs into " +
       "that container instead, cutting the wait before the client's first response — paid " +
-      "once per connection either way.",
+      "once per connection either way.\n" +
+      "After the gateway's container exists, the bridge waits for it to answer its health " +
+      "probe — up to 90 seconds by default; {--wait} seconds overrides this (bounded at 600), " +
+      "and {--wait} 0 restores the old fail-fast behaviour. Everything the wait prints goes " +
+      "to stderr, never into the protocol stream.",
     // Owns stdin/stdout for JSON-RPC; cannot be a tool itself.
     consoleOnly: true,
   },
