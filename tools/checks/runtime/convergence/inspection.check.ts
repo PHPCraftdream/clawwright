@@ -51,6 +51,9 @@ check(
     "BACKUP_MISSING",
     "BACKUP_STALE",
     "BACKUP_UNREADABLE",
+    // Emitted only beside a channel finding it explains: the recipe owning the channel's
+    // proxy config path, when that recipe's proxy service is not healthy.
+    "CHANNEL_PROXY_DOWN",
     "CHANNEL_UNHEALTHY",
     "CHANNEL_UNKNOWN",
     "CLI_READ_FAILED",

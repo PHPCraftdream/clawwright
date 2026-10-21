@@ -36,8 +36,9 @@ somewhere else anyway, narrowest scope first:
 An operator finds out the instance stopped doing its job without polling by hand.
 
 * `./clawwright watch check` — one probe cycle. Reuses exactly the findings `inspect`/`doctor`
-  already compute — `GATEWAY_DOWN`, `GATEWAY_UNHEALTHY`, `NOT_BOOTSTRAPPED`,
-  `EGRESS_UNREACHABLE` — and none of the rest (`CONFIG_DRIFT` and similar are real findings,
+  already compute — `NOT_BOOTSTRAPPED`, `TARGET_UNREACHABLE`, `GATEWAY_DOWN`,
+  `GATEWAY_UNHEALTHY`, `EGRESS_UNREACHABLE`, `CHANNEL_UNKNOWN`, `CHANNEL_PROXY_DOWN` — and
+  none of the rest (`CONFIG_DRIFT` and similar are real findings,
   but not about whether the instance is serving; `PROVIDER_MISSING` is excluded too — its
   detection cannot see an env-keyed, subscription-login or CLI-backend provider, so counting
   it here would page `degraded` forever on an instance that answers every prompt fine).

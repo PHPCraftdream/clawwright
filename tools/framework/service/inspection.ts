@@ -40,6 +40,7 @@ export type ProblemCode =
   | "CLI_READ_FAILED"
   | "CHANNEL_UNKNOWN"
   | "CHANNEL_UNHEALTHY"
+  | "CHANNEL_PROXY_DOWN"
   | "MEMORY_UNKNOWN"
   | "MEMORY_NOT_READY"
   | "LOCK_MISSING"
@@ -194,6 +195,14 @@ export const PROBLEM_CODES: Record<ProblemCode, CodeMeaning> = {
     severity: "warning",
     summary: "a configured channel account is not operational",
     next: command("cli channels status --json", { note: "check channel configuration and gateway logs before restarting" }),
+  },
+  CHANNEL_PROXY_DOWN: {
+    // Warning, not blocking: the CHANNEL_UNHEALTHY/CHANNEL_UNKNOWN finding it explains
+    // carries the verdict; this one only names the dependency those findings point at.
+    // A healthy proxy proves nothing about Tor/egress — recipe verify covers that.
+    severity: "warning",
+    summary: "a recipe whose proxy service configured channels route through is not reporting healthy",
+    next: command("recipe list"),
   },
   MEMORY_UNKNOWN: {
     severity: "warning",
@@ -497,88 +506,13 @@ export interface SecretStoreObservation {
   readonly missing: readonly string[];
 }
 
-/** Channel telemetry fields are unknown until the response is validated. */
-export interface ChannelAccountStatus {
-  readonly accountId?: unknown;
-  readonly enabled?: unknown;
-  readonly configured?: unknown;
-  readonly running?: unknown;
-  readonly connected?: unknown;
-  readonly lastError?: unknown;
-  readonly tokenSource?: unknown;
-  readonly credentialPresent?: unknown;
-  readonly restartPending?: unknown;
-  readonly healthState?: unknown;
-  readonly lastInboundAt?: unknown;
-  readonly lastOutboundAt?: unknown;
-  readonly probe?: unknown;
-}
-
-/** `openclaw channels status --json`'s own shape, by channel name. */
-export interface ChannelsStatusResponse {
-  readonly channelAccounts?: Record<string, unknown>;
-}
-
-/** Confirms the channel report's structure before interpreting liveness. */
-export function isChannelsStatusResponse(value: unknown): value is ChannelsStatusResponse {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  const accounts = (value as ChannelsStatusResponse).channelAccounts;
-  if (accounts === undefined || accounts === null || typeof accounts !== "object" || Array.isArray(accounts)) return false;
-  return Object.values(accounts).every((entries) => Array.isArray(entries) && entries.every((entry: unknown) => {
-    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) return false;
-    const account = entry as ChannelAccountStatus;
-    if (typeof account.configured !== "boolean") return false;
-    for (const field of [account.enabled, account.running, account.connected, account.credentialPresent, account.restartPending]) {
-      if (field !== undefined && typeof field !== "boolean") return false;
-    }
-    if (account.accountId !== undefined && typeof account.accountId !== "string") return false;
-    if (account.lastError !== undefined && account.lastError !== null && typeof account.lastError !== "string") return false;
-    if (account.healthState !== undefined && !["healthy", "unhealthy", "not-running", "starting", "unknown"].includes(String(account.healthState))) return false;
-    for (const at of [account.lastInboundAt, account.lastOutboundAt]) {
-      if (at !== undefined && at !== null && (typeof at !== "number" || !Number.isFinite(at) || at < 0)) return false;
-    }
-    if (account.probe !== undefined && (account.probe === null || typeof account.probe !== "object" || typeof (account.probe as { ok?: unknown }).ok !== "boolean")) return false;
-    return true;
-  }));
-}
-
-/** Whitelist telemetry; opaque account labels deliberately do not preserve upstream IDs. */
-export function normalizeChannels(value: unknown): ChannelsStatusResponse | undefined {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const envelope = (value as ChannelsStatusResponse).channelAccounts;
-  if (envelope === null || typeof envelope !== "object" || Array.isArray(envelope)) return undefined;
-  const accounts = Object.entries(envelope);
-  if (accounts.length > 32) return undefined;
-  const channelAccounts: Record<string, unknown> = Object.create(null);
-  const known = new Set(["telegram", "discord", "slack", "whatsapp", "signal", "matrix", "teams", "irc", "webchat"]);
-  for (const [name, entries] of accounts) {
-    const label = known.has(name) ? name : `channel-${Object.keys(channelAccounts).length + 1}`;
-    const bounded = Array.isArray(entries) && entries.length <= 64 ? entries : [null];
-    channelAccounts[label] = bounded.map((entry: unknown, index) => {
-      const raw = entry !== null && typeof entry === "object" && !Array.isArray(entry) ? entry as ChannelAccountStatus : {} as ChannelAccountStatus;
-      const safe: Record<string, unknown> = { accountId: raw.accountId === "default" ? "default" : `account-${index + 1}` };
-      if (typeof raw.configured === "boolean") safe.configured = raw.configured;
-      const valid = isChannelsStatusResponse({ channelAccounts: { account: [raw] } });
-      if (!valid) safe.healthState = "unknown";
-      for (const key of ["enabled", "running", "connected", "credentialPresent", "restartPending"] as const) {
-        if (typeof raw[key] === "boolean") safe[key] = raw[key];
-      }
-      if (raw.credentialPresent === undefined && ["config", "env", "secret", "none"].includes(String(raw.tokenSource))) safe.credentialPresent = raw.tokenSource !== "none";
-      if (valid && ["healthy", "unhealthy", "not-running", "starting", "unknown"].includes(String(raw.healthState))) safe.healthState = raw.healthState;
-      for (const key of ["lastInboundAt", "lastOutboundAt"] as const) {
-        const at = raw[key];
-        if (typeof at === "number" && Number.isFinite(at) && at >= 0) safe[key] = at;
-      }
-      if (typeof raw.lastError === "string" && raw.lastError.trim() !== "") {
-        safe.lastError = /auth|token|unauthorized|forbidden/i.test(raw.lastError) ? "authentication" : /timeout/i.test(raw.lastError) ? "timeout" : /network|connect|dns/i.test(raw.lastError) ? "network" : "unknown";
-      }
-      const probe = raw.probe;
-      if (probe !== null && typeof probe === "object" && typeof (probe as { ok?: unknown }).ok === "boolean") safe.probe = { ok: (probe as { ok: boolean }).ok };
-      return safe;
-    });
-  }
-  return { channelAccounts };
-}
+// Channel telemetry vocabulary lives beside the CLI reader whose `channels status --json`
+// answer it sanitizes; re-exported here because inspect/doctor/watch import it from this
+// module, and the code-names contract must not split across two import paths.
+import { normalizeChannels } from "./openclaw-cli.ts";
+import type { ChannelAccountStatus, ChannelsStatusResponse } from "./openclaw-cli.ts";
+export { channelIdentities, isChannelsStatusResponse, normalizeChannels } from "./openclaw-cli.ts";
+export type { ChannelAccountStatus, ChannelsStatusResponse, ChannelIdentity } from "./openclaw-cli.ts";
 
 /** Shared by watch and inspection: API authentication is not polling liveness. */
 export function channelProblems(response: ChannelsStatusResponse | undefined): Problem[] {

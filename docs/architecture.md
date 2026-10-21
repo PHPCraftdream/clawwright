@@ -593,9 +593,10 @@ map every other module uses.
 instance match what this repository declares", but "is it doing its job right now". It calls
 the same `gatherInspection()` those two commands do — a second gatherer would eventually
 answer the same question differently, which is exactly the reasoning `gather.ts`'s own header
-already states for `inspect` and `doctor` sharing one — and keeps only five problem codes:
-`GATEWAY_DOWN`, `GATEWAY_UNHEALTHY`, `NOT_BOOTSTRAPPED`, `EGRESS_UNREACHABLE`,
-`PROVIDER_MISSING`. Severity decides the bucket, read rather than re-decided: a blocking
+already states for `inspect` and `doctor` sharing one — and keeps exactly these liveness
+problem codes, in the order `LIVENESS_CODES` lists them: `NOT_BOOTSTRAPPED`,
+`TARGET_UNREACHABLE`, `GATEWAY_DOWN`, `GATEWAY_UNHEALTHY`, `EGRESS_UNREACHABLE`,
+`CHANNEL_UNKNOWN`, `CHANNEL_PROXY_DOWN`. Severity decides the bucket, read rather than re-decided: a blocking
 liveness finding is `down`, a warning one is `degraded`, none at all is `ok` — so `watch` can
 never disagree with `doctor` about what counts as blocking.
 
