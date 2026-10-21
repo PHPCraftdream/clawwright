@@ -75,7 +75,11 @@ export const managementCommands: Record<string, AppCommand> = materializeCommand
       "cost — noticeably faster, though both paths go through the WSL2/Docker Desktop " +
       "boundary either way and neither is instant.\n" +
       "`{clawwright cli --help}` prints this text, same as `{clawwright help cli}`; to reach OpenClaw's " +
-      "own --help instead, put it after a bare --: `{clawwright cli -- --help}`.",
+      "own --help instead, put it after a bare --: `{clawwright cli -- --help}`.\n" +
+      "Payloads travel two ways: {--stdin} pipes this process's standard input to the command " +
+      "(type patch.json | clawwright cli --stdin config patch --stdin), and {--file} stages a local " +
+      "file into the data directory wherever the argument list says @file " +
+      "(clawwright cli --file patch.json config patch --file @file), removing the staged copy afterwards.",
     // Declared destructive not because it destroys anything itself, but because it can run
     // anything OpenClaw's CLI can — including that CLI's own destructive subcommands. Over
     // MCP that earns the same confirmation push/restore/deploy need, rather than a second
@@ -92,7 +96,9 @@ export const managementCommands: Record<string, AppCommand> = materializeCommand
       "Same container as `cli`: the OpenClaw image, the gateway's network namespace, the " +
       "same data mounts, the same one-off-vs-helper choice.\n" +
       "A captured run (over MCP or a pipe) decodes its output as UTF-8 text: bytes that are " +
-      "not valid UTF-8 come back as replacement characters, not the original bytes.",
+      "not valid UTF-8 come back as replacement characters, not the original bytes.\n" +
+      "Like `cli`, this takes {--stdin} (pipe data to the command's stdin, e.g. cat body.txt | clawwright exec --stdin curl -fsS -d @- http://127.0.0.1:18789/api) and {--file} " +
+      "(stage a local file, then name it with @file: clawwright exec --file patch.json sh -c \"openclaw config patch --file @file\").",
     // Same reasoning as `cli`: it can run anything, so it gets the same MCP confirmation.
   },
   host: {

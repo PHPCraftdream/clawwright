@@ -187,7 +187,7 @@ export class DockerRuntime implements Runtime {
   async execInHelper(
     service: string,
     args: string[],
-    options: { input?: string; stdioProtocol?: boolean; allowFailure?: boolean; timeoutMs?: number } = {},
+    options: { input?: string; stream?: boolean; stdioProtocol?: boolean; allowFailure?: boolean; timeoutMs?: number } = {},
   ): Promise<ExecResult> {
     return this.#helper.execInHelper(service, args, options);
   }
@@ -196,7 +196,7 @@ export class DockerRuntime implements Runtime {
     service: string,
     command: string,
     args: string[],
-    options: { input?: string; stdioProtocol?: boolean; allowFailure?: boolean; timeoutMs?: number } = {},
+    options: { input?: string; stream?: boolean; stdioProtocol?: boolean; allowFailure?: boolean; timeoutMs?: number } = {},
   ): Promise<ExecResult> {
     return this.#helper.execCommand(service, command, args, options);
   }

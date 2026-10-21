@@ -63,6 +63,10 @@ export interface RunOneOffOptions {
   entrypoint?: string;
   /** Feed finite stdin; output is captured and stdin closes immediately. */
   input?: string;
+  /** Stream output live even with finite input: the child's stdin stays piped, but on a real
+   *  terminal stdout/stderr inherit instead of being accumulated (and lost). Default:
+   *  stream only when no input is given. */
+  stream?: boolean;
   /** Relay live process stdio as an exact duplex protocol, without capturing stdout. */
   stdioProtocol?: boolean;
   /** Return a non-zero exit as a normal ExecResult instead of throwing. Needed by callers
@@ -179,7 +183,7 @@ export interface Runtime {
   execInHelper(
     service: string,
     args: string[],
-    options?: { input?: string; stdioProtocol?: boolean; allowFailure?: boolean; timeoutMs?: number },
+    options?: { input?: string; stream?: boolean; stdioProtocol?: boolean; allowFailure?: boolean; timeoutMs?: number },
   ): Promise<ExecResult>;
   /** The general form of execInHelper: any command, not just the app's own CLI entrypoint —
    *  for ad hoc diagnostics. Throws HelperNotRunning when not up. `options.timeoutMs` bounds
@@ -188,7 +192,7 @@ export interface Runtime {
     service: string,
     command: string,
     args: string[],
-    options?: { input?: string; stdioProtocol?: boolean; allowFailure?: boolean; timeoutMs?: number },
+    options?: { input?: string; stream?: boolean; stdioProtocol?: boolean; allowFailure?: boolean; timeoutMs?: number },
   ): Promise<ExecResult>;
 
   /** Name of whatever already publishes `port` and does not belong to this deployment,

@@ -56,6 +56,13 @@ function hasUnsupportedControls(value: string): boolean {
 }
 
 /** Encodes values as literal double-quoted Compose env-file entries. */
+/** The pure `-T` decision for `compose run`: no PTY whenever our stdout is not a terminal, in
+ *  stdio-protocol mode, or when finite input is piped in — compose would otherwise allocate a
+ *  pseudo-TTY against that pipe. Exported so the check pins the decision without a docker call. */
+export function oneOffDisableTty(isTTY: boolean, hasInput: boolean, stdioProtocol: boolean): boolean {
+  return stdioProtocol || isTTY !== true || hasInput;
+}
+
 export function serializeComposeEnv(env: Record<string, string>): string {
   const entries = Object.entries(env);
   const invalidNames = entries.filter(([name]) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)).map(([name]) => name);
@@ -406,20 +413,21 @@ export class ComposeOperations {
 
   /** `-T` is added whenever our stdout is not a terminal: compose otherwise allocates a
    *  pseudo-TTY, and a TTY does not survive the trip through wsl.exe — the command
-   *  succeeds while its output vanishes. */
+   *  succeeds while its output vanishes. Also with finite input: a PTY against this
+   *  process's piped stdin breaks the run (see oneOffDisableTty). */
   async runOneOff(service: string, args: string[], options: RunOneOffOptions = {}): Promise<ExecResult> {
     const prefix: string[] = [];
     if (options.profile !== undefined) prefix.push("--profile", options.profile);
 
     const runArgs = ["run", "--rm"];
-    if (options.stdioProtocol === true || process.stdout.isTTY !== true) runArgs.push("-T");
+    if (oneOffDisableTty(process.stdout.isTTY === true, options.input !== undefined, options.stdioProtocol === true)) runArgs.push("-T");
     if (options.noDeps === true) runArgs.push("--no-deps");
     if (options.entrypoint !== undefined) runArgs.push("--entrypoint", options.entrypoint);
 
     return this.withEnvFile(async (envFile) => {
       const base = await this.#composeArgs(envFile);
       return this.#transport.exec("docker", [...base, ...prefix, ...runArgs, service, ...args], {
-        stream: options.input === undefined,
+        stream: options.stream ?? options.input === undefined,
         input: options.input,
         stdioProtocol: options.stdioProtocol,
         allowFailure: options.allowFailure,

@@ -127,8 +127,8 @@ over automatically, without the flag.
 
 | Command | Arguments | Summary |
 | --- | --- | --- |
-| `cli` | `<args…>` | Run the OpenClaw CLI in a throwaway container (destructive) |
-| `exec` | `<args…>` | Run a command in the same sidecar as `cli` (destructive) |
+| `cli` | `[--stdin] [--file <path>] <args…>` | Run the OpenClaw CLI in a throwaway container (destructive) |
+| `exec` | `[--stdin] [--file <path>] <args…>` | Run a command in the same sidecar as `cli` (destructive) |
 | `host` | `<context> [--root] [--confirm-root] <args…>` | Run a command on the host, not in a container (destructive) |
 | `cli-start` | — | Start the persistent CLI helper |
 | `cli-stop` | — | Stop the persistent CLI helper |
