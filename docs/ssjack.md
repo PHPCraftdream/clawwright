@@ -6,7 +6,11 @@ Clawwright can operate without ssjack. The integration is an optional runtime pr
 
 `runtime/transport/remote/ssjack-contract.ts` owns the requirements. The pinned HTTPS/MCP client checks the actual serving keeper for protocol 1, 16384-byte chunks, `exec`, `stdin`, `binary`, `backpressure`, `cancel` and `connection-only` cancellation. The keeper reports its source commit. A compatible protocol does not prove a binary's supply provenance, and a matching filename does not prove compatibility.
 
-Managed transport activation is separate from the client and supply contract. Until the transport is wired into target selection, shipping these modules alone does not enable remote Clawwright commands through ssjack.
+Managed transport activation is separate from the client, finite executor and supply contract. Until the transport is wired into target selection, Context/path treatment, Compose staging and unsupported-route guards, shipping these modules alone does not enable remote Clawwright commands through ssjack.
+
+The finite executor pumps 16 KiB stdin frames and drains output concurrently. Only `accepted: false` permits retrying the identical encoded input; uncertain responses fail the scope, never replay it. Output DTOs and canonical base64 are validated before use. Captured output has an explicit 64 MiB combined bound and fails rather than overwriting unread bytes. A binary sink can replace capture; it is awaited before another frame is read, must honor the operation's AbortSignal, and owns its own destination/publication rules. Buffered command results decode UTF-8 only after reassembly. The transport preserves the existing distinction between terminal streaming and captured output.
+
+Finite deadlines and caller cancellation request `transport_cancel` once. Neither an acknowledgement nor closing the client confirms termination of a detached remote process. Stdio protocol relay and persistent client invocation explicitly refuse this temporary route. The new transport does not inherit from the external-SSH implementation.
 
 ## Binary supply pin
 
