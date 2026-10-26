@@ -7,7 +7,7 @@
 // of an existing tree is an explicit --adopt operation that lists what the mirror would
 // replace first, and a root carrying a FOREIGN marker is never adoptable at all.
 
-import { log, info, die } from "#src/core/io/log.ts";
+import { log, info, die, UserError } from "#src/core/io/log.ts";
 import {
   MARKER_FILE,
   MARKER_PREFIX,
@@ -38,6 +38,7 @@ export function runRemote(
   script: string,
   options: { stream?: boolean; allowFailure?: boolean; tty?: boolean } = {},
 ): Promise<ExecResult> {
+  if (ctx.transport.sessionScoped === true) return Promise.reject(new UserError("SSJACK_SECOND_HOP_UNSUPPORTED"));
   const tty = options.tty === true ? ["-t"] : [];
   return ctx.transport.exec(
     "ssh",

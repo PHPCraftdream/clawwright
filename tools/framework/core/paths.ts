@@ -14,6 +14,7 @@
 
 import { isAbsolute, relative, resolve } from "node:path";
 import { DEFAULT_WSL_DISTRO } from "./env.ts";
+import { UserError } from "./io/log.ts";
 
 /** One bind mount, in the two coordinate systems it connects. */
 export interface MountPoint {
@@ -91,16 +92,47 @@ export class SshPathBridge implements PathBridge {
   }
 }
 
+/** A scoped target shares mount coordinates, never the operator's filesystem or checkout. */
+export class ScopedPathBridge implements PathBridge {
+  readonly #mounts: MountPoint[];
+
+  /** Copy application-owned mounts without inventing an operator/target path mapping. */
+  constructor(mounts: MountPoint[]) {
+    this.#mounts = mounts.map((mount) => ({ ...mount }));
+  }
+
+  /** Operator files must be explicitly staged through the transport. */
+  async toTarget(_toolPath: string): Promise<never> {
+    throw new UserError("SSJACK_PATH_MAPPING_UNSUPPORTED");
+  }
+
+  /** A target path is not an operator-side readable file. */
+  async toTool(_targetPath: string): Promise<never> {
+    throw new UserError("SSJACK_PATH_MAPPING_UNSUPPORTED");
+  }
+
+  /** Translate only the application-declared target/container mount relationship. */
+  toContainer(targetPath: string): string {
+    return toContainerPath(targetPath, this.#mounts);
+  }
+
+  /** Recover target coordinates from an application-declared container mount. */
+  fromContainer(containerPath: string): string {
+    return fromContainerPath(containerPath, this.#mounts);
+  }
+}
+
 /** Builds the bridge for a transport. The automount root is read from the target rather
  *  than assumed, which is why this is async. */
 export async function createPathBridge(options: {
   readFile: (path: string) => Promise<string>;
   mounts: MountPoint[];
-  kind: "local" | "wsl" | "ssh";
+  kind: "local" | "wsl" | "ssh" | "scoped";
   distro?: string;
   localRepo?: string;
   remoteRepo?: string;
 }): Promise<PathBridge> {
+  if (options.kind === "scoped") return new ScopedPathBridge(options.mounts);
   if (options.kind === "local") return new LocalPathBridge(options.mounts);
 
   if (options.kind === "ssh") {

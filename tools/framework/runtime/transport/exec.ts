@@ -102,6 +102,8 @@ export function composeExecFailure(command: string, args: string[], result: Exec
 export interface Transport {
   /** Human-readable name for diagnostics: "local", "wsl:Ubuntu-24.04", "ssh:user@host". */
   readonly description: string;
+  /** Temporary keeper scope: no shared checkout, persistent invocation or implicit second hop. */
+  readonly sessionScoped?: true;
   /** True only when aborting the local child confirms target-command termination. */
   readonly cancellation?: "confirmed-local" | "local-only" | "unsupported";
   exec(command: string, args: string[], options?: ExecOptions): Promise<ExecResult>;

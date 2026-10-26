@@ -3,6 +3,9 @@
 // read and write goes through the accessors the caller supplies.
 
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { posix } from "node:path";
+import { UserError } from "../../core/io/log.ts";
 import { composeFile, locksDir, toSettings, loadEnv, type Settings } from "../../core/env.ts";
 import { deploymentDir, composeProjectName } from "../deployment.ts";
 import { machineName, ownProcessStartedAt, localLiveness } from "../lock/process-identity.ts";
@@ -241,6 +244,10 @@ export class ComposeOperations {
     action: (path: string) => Promise<T>,
     settings: Settings = this.#getSettings(),
   ): Promise<T> {
+    const stageDefinition = this.#transport.writePrivateFile?.bind(this.#transport);
+    if (this.#transport.sessionScoped === true && stageDefinition === undefined) {
+      throw new UserError("SSJACK_PRIVATE_STAGING_REQUIRED");
+    }
     const directory = locksDir(settings.dataDir);
     const privateDirectory = `${directory}/compose-${randomUUID()}`;
     const path = `${privateDirectory}/compose.env`;
@@ -270,6 +277,10 @@ export class ComposeOperations {
       // Owner recorded before the token-bearing file: a crash between these two writes still
       // leaves owner.json in place, which the sweep above needs.
       await this.#transport.writeFile(ownerPath, owner, "600");
+      if (this.#transport.sessionScoped === true) {
+        const definition = await readFile(composeFile);
+        await stageDefinition!(`${privateDirectory}/compose.yaml`, definition);
+      }
       await this.#transport.writeFile(path, body, "600");
       result = await action(path);
     } catch (error) {
@@ -298,10 +309,13 @@ export class ComposeOperations {
     // separate. Project name is stated rather than left to compose, or they'd share
     // containers/networks/volumes. --env-file REPLACES the project directory's own .env, so
     // the file written above carries the whole environment, not just the secret part.
-    const [file, projectDir] = await Promise.all([
-      this.#paths.toTarget(composeFile),
-      this.#paths.toTarget(deploymentDir()),
-    ]);
+    const scopedDirectory = posix.dirname(envFileOnTarget);
+    const [file, projectDir] = this.#transport.sessionScoped === true
+      ? [posix.join(scopedDirectory, "compose.yaml"), scopedDirectory]
+      : await Promise.all([
+        this.#paths.toTarget(composeFile),
+        this.#paths.toTarget(deploymentDir()),
+      ]);
     return [
       "compose",
       "--env-file",
@@ -416,6 +430,9 @@ export class ComposeOperations {
    *  succeeds while its output vanishes. Also with finite input: a PTY against this
    *  process's piped stdin breaks the run (see oneOffDisableTty). */
   async runOneOff(service: string, args: string[], options: RunOneOffOptions = {}): Promise<ExecResult> {
+    if (this.#transport.sessionScoped === true && options.stdioProtocol === true) {
+      throw new UserError("SSJACK_STDIO_PROTOCOL_UNSUPPORTED");
+    }
     const prefix: string[] = [];
     if (options.profile !== undefined) prefix.push("--profile", options.profile);
 

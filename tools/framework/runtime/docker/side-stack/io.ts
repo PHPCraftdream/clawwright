@@ -195,6 +195,9 @@ export async function readCompose(io: Pick<StackIO, "file" | "getSettings" | "ru
 }
 export function createIO(transport: Transport, paths: PathBridge, getSettings: () => Settings,
   project: string, definitionPath: string, legacy: readonly string[]): StackIO {
+  if (transport.sessionScoped === true) {
+    throw new RefusalError("Recipe definition delivery is unsupported in a temporary keeper scope.", "SSJACK_RECIPE_STAGING_UNSUPPORTED");
+  }
   const file = async (): Promise<string> => {
     const target = await paths.toTarget(definitionPath);
     if (!target.startsWith("/") || posix.normalize(target) !== target || Array.from(target).some((char) => char === "," || char.charCodeAt(0) <= 31 || char.charCodeAt(0) === 127))

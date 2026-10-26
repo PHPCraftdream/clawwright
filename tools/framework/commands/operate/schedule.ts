@@ -17,7 +17,7 @@
 import { access, realpath } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { posix, resolve } from "node:path";
-import { die, info, regexEscape } from "../../core/io/log.ts";
+import { die, info, regexEscape, UserError } from "../../core/io/log.ts";
 import { SHIM_PROGRAM } from "../../core/io/invocation/render.ts";
 import { handoverOf, targetFrame, type Frame } from "../../core/io/invocation/frame.ts";
 import { monorepoRoot } from "../../core/env.ts";
@@ -257,6 +257,7 @@ export function crontabConfirmFailure(description: string): string {
 
 /** Updates one owned job under a target-account flock, independent of instance data paths. */
 export async function updateCrontab(ctx: Context, job: string, name: string, line?: string, prior?: PriorSchedule): Promise<boolean> {
+  requirePersistentTransport(ctx);
   if (line !== undefined && /[\r\n]/.test(line)) die(CRONTAB_ENTRY_ONE_LINE);
   if (line !== undefined && !ownedCronLine(line, job, name)) die(CRONTAB_ENTRY_OWNED);
   const result = await ctx.transport.exec("sh", [
@@ -269,6 +270,11 @@ export async function updateCrontab(ctx: Context, job: string, name: string, lin
   if (result.stdout.trim() === "updated") return true;
   if (result.stdout.trim() === "unchanged") return false;
   die(crontabConfirmFailure(ctx.transport.description));
+}
+
+/** Refuse persistence before reading identities or mutating either scheduler. */
+function requirePersistentTransport(ctx: Context): void {
+  if (ctx.transport.sessionScoped === true) throw new UserError("SSJACK_PERSISTENT_INVOCATION_UNSUPPORTED");
 }
 
 export interface SchedulingSupport {
@@ -284,6 +290,7 @@ export const WSL_SCHEDULING_REASON =
   "proven to also run — a crontab entry installed there cannot be trusted to find either one unattended";
 
 export function schedulingSupport(ctx: Context): SchedulingSupport {
+  if (ctx.transport.sessionScoped === true) return { supported: false, reason: "SSJACK_PERSISTENT_INVOCATION_UNSUPPORTED" };
   const description = ctx.transport.description;
   if (description.startsWith("ssh:")) return { supported: true };
   if (description === "local" && schedulerPlatform !== "win32") return { supported: true };
@@ -431,6 +438,7 @@ export async function printSchedulingInstructions(
   jobArgs: readonly string[],
   apply: boolean,
 ): Promise<boolean> {
+  requirePersistentTransport(ctx);
   const installed = await installedShimExists(deploymentDir());
   // The stored line is built from the TARGET frame (S1.5): the shim at the root the job
   // runs from decides where the entry lives and how the stored text names it; the
@@ -476,6 +484,7 @@ export async function printSchedulingInstructions(
 
 /** Prints or removes this job's deterministic Task Scheduler entry on Windows. */
 export async function printUnschedulingInstructions(ctx: Context, job: string, apply: boolean): Promise<boolean> {
+  requirePersistentTransport(ctx);
   if (schedulerPlatform !== "win32") {
     info(`remove any entry you wired in yourself (e.g. Windows Task Scheduler): ${scheduledTaskName(job, await schedulerIdentity(ctx))}`);
     if (apply) die(`${REFUSING_APPLY}: no correct unattended uninstall exists for this target`);

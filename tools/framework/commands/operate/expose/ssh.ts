@@ -4,7 +4,7 @@
 // (or a shared filesystem, for local) already forwards the published port to this machine's
 // own loopback.
 
-import { log, info, die, dieWithExitCode } from "#src/core/io/log.ts";
+import { log, info, die, dieWithExitCode, UserError } from "#src/core/io/log.ts";
 import { commandLine, renderArguments } from "#src/core/io/invocation/render.ts";
 import { spawnLocal } from "#src/runtime/transport/transport.ts";
 import { shouldFollow } from "#src/core/io/output.ts";
@@ -48,6 +48,7 @@ export function sshTunnelCommand(host: string, localPort: string, gatewayPort: s
 }
 
 async function runSsh(ctx: Context, values: Values<typeof EXPOSE_SSH_ARGUMENTS>): Promise<void> {
+  if (ctx.transport.sessionScoped === true) throw new UserError("SSJACK_PORT_FORWARDING_UNSUPPORTED");
   const requestedPort = values["local-port"];
   const { run } = values;
 

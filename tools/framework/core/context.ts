@@ -80,11 +80,13 @@ export async function createContext(options: ContextOptions = {}): Promise<Conte
     sshHost: config.sshHost,
   });
 
-  const kind = transport instanceof WslTransport
-    ? "wsl"
-    : transport instanceof SshTransport
-      ? "ssh"
-      : "local";
+  const kind = transport.sessionScoped === true
+    ? "scoped"
+    : transport instanceof WslTransport
+      ? "wsl"
+      : transport instanceof SshTransport
+        ? "ssh"
+        : "local";
 
   const paths = await createPathBridge({
     readFile: (path) => transport.readFile(path),

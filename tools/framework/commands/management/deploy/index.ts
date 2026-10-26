@@ -13,7 +13,7 @@
 // frameworkSourceRoot below): installed as a package, monorepoRoot would resolve to an
 // unrelated directory and mirroring it with --delete would be dangerous.
 
-import { log, info } from "#src/core/io/log.ts";
+import { log, info, UserError } from "#src/core/io/log.ts";
 import { emit, withOutputSink } from "#src/core/io/output.ts";
 import type { Context } from "#src/core/context.ts";
 import { commandBody, runOnContext } from "#src/core/command/index.ts";
@@ -92,6 +92,7 @@ export async function deploy(ctx: Context, args: string[]): Promise<void> {
 }
 
 async function runDeployCommand(ctx: Context, prepared: DeployPrepared): Promise<void> {
+  if (ctx.transport.sessionScoped === true) throw new UserError("SSJACK_SECOND_HOP_UNSUPPORTED");
   // Every local fact was already derived (and refused) in prepare; run only plans.
   const plan = resolveDeployArguments(ctx, prepared);
 
