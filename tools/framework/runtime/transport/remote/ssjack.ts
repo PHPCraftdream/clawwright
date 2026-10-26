@@ -49,7 +49,7 @@ export class SsjackTransport implements Transport {
         stdoutTty: process.stdout.isTTY === true, stderrTty: process.stderr.isTTY === true,
       }),
       ...(options.stream === true ? {
-        onChunk: async (stream: "stdout" | "stderr", bytes: Buffer, signal: AbortSignal): Promise<void> => {
+        onChunk: async (stream: "stdout" | "stderr", bytes: Uint8Array, signal: AbortSignal): Promise<void> => {
           signal.throwIfAborted();
           if (sink !== undefined) {
             const value = decoders[stream].write(bytes);
@@ -70,8 +70,9 @@ export class SsjackTransport implements Transport {
         if (trailing !== "") sink(trailing);
       }
     }
+    const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
     const output: ExecResult = {
-      code: result.code, stdout: result.stdout.toString("utf8"), stderr: result.stderr.toString("utf8"),
+      code: result.code, stdout: decoder.decode(result.stdout), stderr: decoder.decode(result.stderr),
       ...(result.timedOut === true ? { timedOut: true } : {}),
     };
     if ((output.code !== 0 || output.timedOut === true) && options.allowFailure !== true) {

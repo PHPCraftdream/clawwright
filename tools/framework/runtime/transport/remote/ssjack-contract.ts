@@ -8,7 +8,7 @@ export const SSJACK_ENV = {
 } as const;
 
 /** Scrub only the supplied environment copy, including stale case variants on every OS. */
-export function clearSsjackEnvironment(environment: NodeJS.ProcessEnv): void {
+export function clearSsjackEnvironment(environment: Record<string, string | undefined>): void {
   const names = new Set(Object.values(SSJACK_ENV).map((name) => name.toLowerCase()));
   for (const name of Object.keys(environment)) {
     if (names.has(name.toLowerCase())) delete environment[name];

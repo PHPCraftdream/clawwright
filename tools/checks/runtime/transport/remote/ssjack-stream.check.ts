@@ -110,7 +110,7 @@ let release!: () => void;
 let entered!: () => void;
 const waiting = new Promise<void>((resolve) => { entered = resolve; });
 const gate = new Promise<void>((resolve) => { release = resolve; });
-const streamed: Buffer[] = [];
+const streamed: Uint8Array[] = [];
 let first = true;
 const streaming = runSsjack(bounded, "copy", {
   input: bytes, capture: false,

@@ -74,6 +74,12 @@ const streamed = await withOutputSink((chunk) => { chunks.push(chunk); },
 assert.equal(chunks.join(""), "€");
 assert.equal(streamed.stdout, "€");
 
+const bomPeer = new Fixture();
+const bomBytes = Buffer.from([239, 187, 191, 226, 130, 172]);
+bomPeer.frames = [{ done: false, stream: "stdout", data: bomBytes.toString("base64") }];
+const bomResult = await new SsjackTransport(bomPeer, "fixture").exec("tool", []);
+assert.deepEqual(Buffer.from(bomResult.stdout, "utf8"), bomBytes);
+
 const failedPeer = new Fixture();
 failedPeer.code = 9;
 const failed = new SsjackTransport(failedPeer, "fixture");

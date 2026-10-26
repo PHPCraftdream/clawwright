@@ -4,7 +4,7 @@ import { SSJACK_REQUIREMENTS } from "./ssjack-contract.ts";
 /** One validated transport-read reply; output bytes have not been decoded as text. */
 export type SsjackFrame =
   | { readonly kind: "pending" }
-  | { readonly kind: "data"; readonly stream: "stdout" | "stderr"; readonly data: Buffer }
+  | { readonly kind: "data"; readonly stream: "stdout" | "stderr"; readonly data: Uint8Array }
   | { readonly kind: "done"; readonly code: number; readonly timedOut: boolean; readonly error?: string };
 
 /** Refuse malformed DTOs without echoing untrusted response values or credentials. */

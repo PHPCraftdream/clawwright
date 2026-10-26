@@ -37,7 +37,7 @@ export function validateBootstrap(value: SsjackBootstrap): void {
   }
 }
 
-export function ssjackBootstrap(env: NodeJS.ProcessEnv = process.env): SsjackBootstrap | undefined {
+export function ssjackBootstrap(env: Readonly<Record<string, string | undefined>> = process.env): SsjackBootstrap | undefined {
   const values = Object.values(SSJACK_ENV).map((name) => env[name]);
   if (values.every((value) => value === undefined)) return undefined;
   registerSecret(env[SSJACK_ENV.token]);

@@ -14,14 +14,14 @@ export interface SsjackStreamOptions {
   readonly signal?: AbortSignal;
   readonly captureLimit?: number;
   readonly capture?: boolean;
-  readonly onChunk?: (stream: "stdout" | "stderr", bytes: Buffer, signal: AbortSignal) => Promise<void>;
+  readonly onChunk?: (stream: "stdout" | "stderr", bytes: Uint8Array, signal: AbortSignal) => Promise<void>;
 }
 
 /** Byte-preserving result; consumers choose when to perform any text decoding. */
 export interface SsjackBytes {
   readonly code: number;
-  readonly stdout: Buffer;
-  readonly stderr: Buffer;
+  readonly stdout: Uint8Array;
+  readonly stderr: Uint8Array;
   readonly timedOut?: true;
 }
 
@@ -46,7 +46,7 @@ export async function runSsjack(client: SsjackRpc, command: string, options: Ssj
   }
   if (options.signal?.aborted) throw new UserError("SSJACK_OPERATION_CANCELLED");
   const input = typeof options.input === "string" ? Buffer.from(options.input) : options.input ?? new Uint8Array();
-  const output: Record<"stdout" | "stderr", Buffer[]> = { stdout: [], stderr: [] };
+  const output: Record<"stdout" | "stderr", Uint8Array[]> = { stdout: [], stderr: [] };
   const operation = new AbortController();
   let captured = 0;
   let job: string | undefined;
