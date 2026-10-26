@@ -6,7 +6,7 @@
 // with a GNU userland works here too, not only the CI one.
 
 import { SshTransport } from "#framework/runtime/transport/transport.ts";
-import { runTransportScenarios } from "./scenarios/contract.ts";
+import { runTransportScenarios } from "../scenarios/contract.ts";
 import { finish } from "#checks/kit/harness.ts";
 
 const host = process.env.OC_CHECK_SSH_HOST ?? "localhost";

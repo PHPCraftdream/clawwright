@@ -126,7 +126,7 @@ target-reached sibling of `LOCAL_TARGET_UNSUPPORTED` above. It is checked only b
   quoting, file round trips, a timeout that actually ends the target process, unreachable-target
   classification — and three capability-gated files run it against a real
   `LocalTransport`/`WslTransport`/`SshTransport`: `local.check.ts` (needs `linux-host`),
-  `wsl.check.ts` (needs `wsl` + `windows-host`), `ssh.check.ts` (needs `ssh-loopback`). Each
+  `wsl.check.ts` (needs `wsl` + `windows-host`), `remote/ssh.check.ts` (needs `ssh-loopback`). Each
   skips with a `SKIP` line, not a failure, on a host that cannot satisfy it.
 * **`npm run check:linux`** — reproduces `ci.yml`'s Linux job inside the official `node:24`
   Docker image, on any host that has Docker: the closest thing to running the Linux-host row
