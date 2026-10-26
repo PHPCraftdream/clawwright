@@ -30,7 +30,8 @@ export interface SsjackBytes {
  *
  * @remarks
  * Input is retried only after accepted:false. Lost replies are never replayed.
- * A supplied sink replaces capture and is awaited before reading another chunk.
+ * A sink is awaited before reading another chunk and disables capture by default.
+ * Explicit capture:true retains a bounded copy as well, for the ExecResult contract.
  * Cancellation closes SSH connections only; detached remote processes may survive.
  * Failed calls invalidate the client, preventing silent reuse or standalone fallback.
  */

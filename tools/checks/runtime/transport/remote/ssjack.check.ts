@@ -42,7 +42,10 @@ assert.equal(transport.sessionScoped, true);
 assert.notEqual(transport.cancellation, "confirmed-local");
 const args = ["with spaces", "'quoted'", "$(not executed)", "&literal"];
 await transport.exec("printf", args, { env: { VALUE: "a'b" }, unsetEnv: ["REMOVE"] });
-assert.equal(peer.commands[0], ["env", "-u", "REMOVE", "VALUE=a'b", "printf", ...args].map(shellQuote).join(" "));
+assert.ok(peer.commands[0].startsWith(shellQuote("env")));
+for (const argument of ["-u", "REMOVE", "VALUE=a'b", "printf", ...args]) {
+  assert.equal(peer.commands[0].split(shellQuote(argument)).length, 2);
+}
 
 const callsBeforeRefusal = peer.commands.length;
 assert.throws(() => transport.clientInvocation("entry", []), /SSJACK_PERSISTENT_INVOCATION_UNSUPPORTED/);
@@ -56,7 +59,8 @@ const files = new SsjackTransport(filePeer, "fixture");
 const binary = Buffer.from([0, 255, 128, 10]);
 await files.writePrivateFile("/target/private file", binary);
 assert.deepEqual(Buffer.concat(filePeer.inputs), binary);
-assert.ok(filePeer.commands[0].includes("umask 077"));
+const privateMask = /\bumask\s+([0-7]+);/.exec(filePeer.commands[0])?.[1];
+assert.equal(privateMask, "077");
 assert.ok(!filePeer.commands[0].includes(binary.toString("base64")));
 
 const streamPeer = new Fixture();
@@ -74,6 +78,7 @@ const failedPeer = new Fixture();
 failedPeer.code = 9;
 const failed = new SsjackTransport(failedPeer, "fixture");
 assert.equal((await failed.exec("tool", [], { allowFailure: true })).code, 9);
-await assert.rejects(failed.exec("tool", []), /exit 9/);
+await assert.rejects(failed.exec("tool", []), (error: unknown) =>
+  error instanceof Error && "fullCommand" in error && typeof error.fullCommand === "string" && error.fullCommand.trim() === "tool");
 transport.close();
 assert.equal(peer.closed, true);

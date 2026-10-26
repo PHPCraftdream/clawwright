@@ -4,6 +4,8 @@ import { runSsjack, type SsjackRpc } from "#framework/runtime/transport/remote/s
 import type { SsjackInfo, SsjackTool } from "#framework/runtime/transport/remote/ssjack-client.ts";
 import { readFrame, inputAccepted, startIdentity } from "#framework/runtime/transport/remote/ssjack-frames.ts";
 
+const lostInputReply = new Error("SSJACK_FIXTURE_INPUT_REPLY_LOST");
+
 /** Bounded synthetic peer: input cannot advance indefinitely without output draining. */
 class Peer implements SsjackRpc {
   closed = false;
@@ -37,7 +39,7 @@ class Peer implements SsjackRpc {
       const bytes = Buffer.from(args.data as string, "base64");
       assert.ok(bytes.length <= 16384);
       this.accepted.push(bytes);
-      if (this.mode === "lost-input") throw new Error("response lost after input was accepted");
+      if (this.mode === "lost-input") throw lostInputReply;
       this.queue.push({ done: false, stream: "stdout", data: args.data });
       return { accepted: true };
     }
@@ -68,7 +70,7 @@ assert.equal(peer.closed, false);
 
 const uncertain = new Peer();
 uncertain.mode = "lost-input";
-await assert.rejects(runSsjack(uncertain, "copy", { input: bytes }), /response lost/);
+await assert.rejects(runSsjack(uncertain, "copy", { input: bytes }), (error: unknown) => error === lostInputReply);
 assert.equal(uncertain.accepted.length, 1);
 assert.equal(uncertain.cancelled, true);
 assert.equal(uncertain.closed, true);

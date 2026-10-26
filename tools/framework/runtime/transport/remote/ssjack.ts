@@ -3,9 +3,9 @@ import { UserError } from "#src/core/io/log.ts";
 import { outputSink, recordStreamedStdout } from "#src/core/io/output.ts";
 import { shellQuote } from "#src/core/io/shell.ts";
 import { listFilesVia } from "#src/security/transport-listing.ts";
-import type { ExecOptions, ExecResult, Transport } from "../exec.ts";
-import { composeExecFailure, terminalStreaming } from "../exec.ts";
-import { existsVia, privateWriteCommand, publishCommand, withEnvPrefix } from "../quoting.ts";
+import type { ExecOptions, ExecResult, Transport } from "#src/runtime/transport/exec.ts";
+import { composeExecFailure, terminalStreaming } from "#src/runtime/transport/exec.ts";
+import { existsVia, privateWriteCommand, publishCommand, withEnvPrefix } from "#src/runtime/transport/quoting.ts";
 import { runSsjack, type SsjackRpc } from "./ssjack-stream.ts";
 
 /**
