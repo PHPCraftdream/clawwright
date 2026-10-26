@@ -6,7 +6,7 @@
 // know that.
 //
 // This file is the module's public entry point; the contract and every implementation
-// (exec.ts, quoting.ts, local.ts, wsl.ts, ssh.ts) are re-exported here, and this file
+// (exec.ts, quoting.ts, local.ts, wsl.ts, remote/ssh.ts) are re-exported here, and this file
 // assembles a Transport from a TransportConfig.
 //
 // Rule for everything built on top: never touch target files with node:fs directly. The
@@ -18,7 +18,7 @@ import { DEFAULT_WSL_DISTRO } from "../../core/env.ts";
 import type { Transport } from "./exec.ts";
 import { LocalTransport } from "./local.ts";
 import { WslTransport } from "./wsl.ts";
-import { SshTransport } from "./ssh.ts";
+import { SshTransport } from "./remote/ssh.ts";
 
 export type { ExecOptions, ExecResult, CommandFailure, Transport } from "./exec.ts";
 export { spawnLocal, TransportUnreachableError, isWrapperFailureCode, toSignedExitCode } from "./exec.ts";
@@ -26,7 +26,7 @@ export { tarLocalFlags, tarLocalPath, tarFlagRejected, TAR_REMOTE_HOST_NOISE } f
 export { PRIVATE_STAGING_MARKER, PUBLISH_STAGING_MARKER, withEnvPrefix, existsVia } from "./quoting.ts";
 export { LocalTransport } from "./local.ts";
 export { WslTransport, stripWslNuls } from "./wsl.ts";
-export { SshTransport } from "./ssh.ts";
+export { SshTransport } from "./remote/ssh.ts";
 export { listFilesVia } from "../../security/transport-listing.ts";
 export type { TargetRead } from "./quoting.ts";
 export { TargetReadUnknownError, listIfExists, probeExists, probeEntryExists, readIfExists } from "./quoting.ts";

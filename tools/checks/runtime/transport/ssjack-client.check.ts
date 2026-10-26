@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { spawnLocal } from "#framework/runtime/transport/transport.ts";
-import { SsjackClient, ssjackBootstrap, validateBootstrap } from "#framework/runtime/transport/ssjack/client.ts";
+import { SsjackClient, ssjackBootstrap, validateBootstrap } from "#framework/runtime/transport/remote/ssjack-client.ts";
 import { maskSecrets } from "#framework/core/io/log.ts";
 
 const token = "a".repeat(64);

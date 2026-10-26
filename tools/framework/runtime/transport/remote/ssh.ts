@@ -4,11 +4,11 @@
 // single remote command line, so anything containing spaces is quoted here rather than
 // hoping the remote shell agrees with us.
 
-import { listFilesVia } from "../../security/transport-listing.ts";
-import { shellQuote } from "../../core/io/shell.ts";
-import type { CommandFailure, ExecOptions, ExecResult, Transport } from "./exec.ts";
-import { spawnLocal, isWrapperFailureCode, composeExecFailure, TransportUnreachableError } from "./exec.ts";
-import { existsVia, privateWriteCommand, publishCommand, withEnvPrefix } from "./quoting.ts";
+import { listFilesVia } from "../../../security/transport-listing.ts";
+import { shellQuote } from "../../../core/io/shell.ts";
+import type { CommandFailure, ExecOptions, ExecResult, Transport } from "../exec.ts";
+import { spawnLocal, isWrapperFailureCode, composeExecFailure, TransportUnreachableError } from "../exec.ts";
+import { existsVia, privateWriteCommand, publishCommand, withEnvPrefix } from "../quoting.ts";
 
 /** Lines ssh writes for its own connection failures (exit 255 alone is ambiguous). */
 const SSH_OWN_FAILURE = [
