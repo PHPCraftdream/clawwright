@@ -19,6 +19,8 @@ import type { Transport } from "./exec.ts";
 import { LocalTransport } from "./local.ts";
 import { WslTransport } from "./wsl.ts";
 import { SshTransport } from "./remote/ssh.ts";
+import { SsjackClient, ssjackBootstrap } from "./remote/ssjack-client.ts";
+import { SsjackTransport } from "./remote/ssjack.ts";
 
 export type { ExecOptions, ExecResult, CommandFailure, Transport } from "./exec.ts";
 export { spawnLocal, TransportUnreachableError, isWrapperFailureCode, toSignedExitCode } from "./exec.ts";
@@ -27,6 +29,7 @@ export { PRIVATE_STAGING_MARKER, PUBLISH_STAGING_MARKER, withEnvPrefix, existsVi
 export { LocalTransport } from "./local.ts";
 export { WslTransport, stripWslNuls } from "./wsl.ts";
 export { SshTransport } from "./remote/ssh.ts";
+export { SsjackTransport } from "./remote/ssjack.ts";
 export { listFilesVia } from "../../security/transport-listing.ts";
 export type { TargetRead } from "./quoting.ts";
 export { TargetReadUnknownError, listIfExists, probeExists, probeEntryExists, readIfExists } from "./quoting.ts";
@@ -71,12 +74,25 @@ function refuseLocalTarget(platform: string): never {
   );
 }
 
-/** Picks the transport. "auto": WSL on Windows, local on Linux, refusal elsewhere. An explicit
- *  setting wins over auto-detection, but not over the local-target refusal. */
+/**
+ * Pick a verified keeper for auto when its child context is supplied; otherwise keep
+ * platform defaults. Explicit ssjack requires context, while explicit standalone targets
+ * remain explicit. Invalid or disconnected supplied context never falls back to SSH.
+ */
 export async function createTransport(config: TransportConfig = {}): Promise<Transport> {
   const location = (config.location ?? "auto").toLowerCase();
   const distro = config.wslDistro ?? DEFAULT_WSL_DISTRO;
   const platform = config.platform ?? hostPlatform.current;
+
+  if (location === "auto" || location === "ssjack") {
+    const bootstrap = ssjackBootstrap();
+    if (bootstrap !== undefined) {
+      const client = new SsjackClient(bootstrap);
+      const info = await client.info();
+      return new SsjackTransport(client, info.profile);
+    }
+    if (location === "ssjack") throw new UserError("SSJACK_CONTEXT_REQUIRED");
+  }
 
   switch (location) {
     case "local":
@@ -96,6 +112,6 @@ export async function createTransport(config: TransportConfig = {}): Promise<Tra
       if (platform !== "linux") refuseLocalTarget(platform);
       return new LocalTransport();
     default:
-      return die(`unknown target location: ${location} (expected local, wsl, ssh or auto)`);
+      return die(`unknown target location: ${location} (expected local, wsl, ssh, ssjack or auto)`);
   }
 }

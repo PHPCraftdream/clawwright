@@ -11,6 +11,7 @@ import { maskSecrets, UserError } from "../../core/io/log.ts";
 import { manual } from "../../core/io/invocation/advice.ts";
 import { outputSink, recordStreamedStdout } from "../../core/io/output.ts";
 import { meaningfulLines, describeInvocation, noiseFilteredForwarder } from "./spawn-failure.ts";
+import { clearSsjackEnvironment } from "./remote/ssjack-contract.ts";
 
 export interface ExecOptions {
   /** Bytes are passed through unchanged; strings retain the existing UTF-8 behavior. */
@@ -224,6 +225,7 @@ export function spawnLocal(command: string, args: string[], options: ExecOptions
     });
 
     const environment = { ...process.env, ...options.env };
+    clearSsjackEnvironment(environment);
     unsetInheritedEnvironment(environment, options.unsetEnv ?? []);
 
     const child = spawn(command, args, {

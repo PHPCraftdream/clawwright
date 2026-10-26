@@ -5,8 +5,8 @@ import { createServer } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
-import { spawnLocal } from "#framework/runtime/transport/transport.ts";
-import { SsjackClient, ssjackBootstrap, validateBootstrap } from "#framework/runtime/transport/remote/ssjack-client.ts";
+import { spawnLocal, createTransport, SsjackTransport } from "#framework/runtime/transport/transport.ts";
+import { SSJACK_ENV, SsjackClient, ssjackBootstrap, validateBootstrap } from "#framework/runtime/transport/remote/ssjack-client.ts";
 import { maskSecrets } from "#framework/core/io/log.ts";
 
 const token = "a".repeat(64);
@@ -66,12 +66,33 @@ try {
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
   const endpoint = `https://127.0.0.1:${(server.address() as AddressInfo).port}/mcp`;
   const clients: SsjackClient[] = [];
+  const managed: SsjackTransport[] = [];
+  const previous = new Map(Object.values(SSJACK_ENV).map((name) => [name, process.env[name]]));
   const client = (certificatePin = actualPin): SsjackClient => {
     const value = new SsjackClient({ endpoint, token, pin: certificatePin });
     clients.push(value);
     return value;
   };
   try {
+    process.env[SSJACK_ENV.endpoint] = endpoint;
+    process.env[SSJACK_ENV.token] = token;
+    process.env[SSJACK_ENV.pin] = actualPin;
+    for (const location of ["auto", "ssjack"]) {
+      const selected = await createTransport({ location, platform: "win32" });
+      assert.ok(selected instanceof SsjackTransport);
+      managed.push(selected);
+      assert.equal(selected.sessionScoped, true);
+      assert.equal(selected.description, "ssjack:dev.profile");
+    }
+    mode = "incompatible";
+    await assert.rejects(createTransport({ location: "auto", platform: "win32" }), /SSJACK_PROTOCOL_INCOMPATIBLE/);
+    mode = "normal";
+    process.env[SSJACK_ENV.pin] = "0".repeat(64);
+    const unauthenticated = count;
+    await assert.rejects(createTransport({ location: "auto", platform: "win32" }), /SSJACK_CERTIFICATE_MISMATCH/);
+    assert.equal(count, unauthenticated);
+    process.env[SSJACK_ENV.pin] = actualPin;
+
     const before = count;
     await assert.rejects(client("0".repeat(64)).info(), /SSJACK_CERTIFICATE_MISMATCH/);
     assert.equal(count, before, "no HTTP or Authorization before certificate pin verification");
@@ -105,6 +126,11 @@ try {
       mode = "normal";
     }
   } finally {
+    for (const [name, value] of previous) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    for (const current of managed) current.close();
     for (const current of clients) current.close();
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => { server.close((error) => error ? reject(error) : resolve()); });

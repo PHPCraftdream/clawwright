@@ -1,5 +1,21 @@
 import { UserError } from "#src/core/io/log.ts";
 
+/** Temporary child credentials; these names must never reach unrelated subprocesses. */
+export const SSJACK_ENV = {
+  endpoint: "SSJACK_APP_ENDPOINT",
+  token: "SSJACK_APP_TOKEN",
+  pin: "SSJACK_APP_CERTIFICATE_SHA256",
+} as const;
+
+/** Scrub only the supplied environment copy, including stale case variants on every OS. */
+export function clearSsjackEnvironment(environment: NodeJS.ProcessEnv): void {
+  const names = new Set(Object.values(SSJACK_ENV).map((name) => name.toLowerCase()));
+  for (const name of Object.keys(environment)) {
+    if (names.has(name.toLowerCase())) delete environment[name];
+  }
+}
+
+/** Minimum optional serving protocol, independent of where a binary was prepared. */
 export const SSJACK_REQUIREMENTS = {
   optional: true,
   protocol: 1,

@@ -4,13 +4,9 @@ import type { ClientRequest } from "node:http";
 import { connect, type TLSSocket } from "node:tls";
 import { TextDecoder } from "node:util";
 import { UserError, registerSecret } from "#src/core/io/log.ts";
-import { SSJACK_REQUIREMENTS } from "./ssjack-contract.ts";
+import { SSJACK_ENV, SSJACK_REQUIREMENTS } from "./ssjack-contract.ts";
 
-export const SSJACK_ENV = {
-  endpoint: "SSJACK_APP_ENDPOINT",
-  token: "SSJACK_APP_TOKEN",
-  pin: "SSJACK_APP_CERTIFICATE_SHA256",
-} as const;
+export { SSJACK_ENV } from "./ssjack-contract.ts";
 
 export interface SsjackBootstrap {
   readonly endpoint: string;
