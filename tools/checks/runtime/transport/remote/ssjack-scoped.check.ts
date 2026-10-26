@@ -7,6 +7,7 @@ import { createPathBridge, type PathBridge } from "#framework/core/paths.ts";
 import type { Context } from "#framework/core/context.ts";
 import type { ExecResult, Transport } from "#framework/runtime/transport/transport.ts";
 import { ComposeOperations } from "#framework/runtime/docker/compose-operations.ts";
+import { DockerRuntime } from "#framework/runtime/docker/runtime-docker.ts";
 import { createIO, RefusalError } from "#framework/runtime/docker/side-stack/io.ts";
 import { runRemote } from "#framework/commands/management/deploy/server.ts";
 import { exposeSsh } from "#framework/commands/operate/expose/ssh.ts";
@@ -93,7 +94,12 @@ assert.equal(failedStage.removed.length, 1);
 assert.equal(failedStage.executions.some((entry) => entry.program === "docker"), false);
 
 const guarded = new Recording();
-const context = { settings, transport: guarded, paths } as Context;
+const context: Context = {
+  settings,
+  transport: guarded,
+  paths,
+  runtime: new DockerRuntime(guarded, settings, paths, { service: "gateway" }),
+};
 assert.equal(schedulingSupport(context).supported, false);
 await assert.rejects(updateCrontab(context, "fixture", "fixture"), /SSJACK_PERSISTENT_INVOCATION_UNSUPPORTED/);
 await assert.rejects(printSchedulingInstructions(context, "fixture", "fixture", 60, [], true), /SSJACK_PERSISTENT_INVOCATION_UNSUPPORTED/);
