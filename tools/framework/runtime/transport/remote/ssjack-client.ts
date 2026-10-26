@@ -4,6 +4,7 @@ import type { ClientRequest } from "node:http";
 import { connect, type TLSSocket } from "node:tls";
 import { TextDecoder } from "node:util";
 import { UserError, registerSecret } from "#src/core/io/log.ts";
+import { SSJACK_REQUIREMENTS } from "./ssjack-contract.ts";
 
 export const SSJACK_ENV = {
   endpoint: "SSJACK_APP_ENDPOINT",
@@ -105,11 +106,11 @@ export class SsjackClient {
       await this.#send({ jsonrpc: "2.0", method: "notifications/initialized" }, true);
       const info = await this.#tool("transport_info", {});
       const capabilities = info.capabilities;
-      if (info.protocol !== 1 || info.chunk_size !== 16384 || info.cancellation !== "connection-only" ||
+      if (info.protocol !== SSJACK_REQUIREMENTS.protocol || info.chunk_size !== SSJACK_REQUIREMENTS.chunkSize || info.cancellation !== SSJACK_REQUIREMENTS.cancellation ||
           typeof info.profile !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(info.profile) ||
           typeof info.commit !== "string" || info.commit.length === 0 || info.commit.length > 128 ||
           !Array.isArray(capabilities) || !capabilities.every((value) => typeof value === "string") ||
-          !["exec", "stdin", "binary", "backpressure", "cancel"].every((name) => capabilities.includes(name))) {
+          !SSJACK_REQUIREMENTS.capabilities.every((name) => capabilities.includes(name))) {
         throw failure("SSJACK_PROTOCOL_INCOMPATIBLE");
       }
       return { protocol: 1, profile: info.profile, commit: info.commit, chunkSize: 16384, capabilities, cancellation: "connection-only" };

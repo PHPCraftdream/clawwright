@@ -72,6 +72,26 @@
   "dependencies": {
     "json5": "^2.2.3"
   },
+  "ssjackRuntime": {
+    "requirements": {
+      "optional": true,
+      "protocol": 1,
+      "chunkSize": 16384,
+      "capabilities": ["exec", "stdin", "binary", "backpressure", "cancel"],
+      "cancellation": "connection-only"
+    },
+    "supply": {
+      "kind": "ci",
+      "repository": "PHPCraftdream/ssjack",
+      "commit": "032b6730209d58ddb21d7066a5b7001391295df0",
+      "platform": "linux-amd64",
+      "runId": 40342299627,
+      "artifactId": 12659098663,
+      "artifactName": "verified-cli-Linux-X64",
+      "archiveSHA256": "7d622fd539d426b8b597e03aceb836806686c2bf7eca5bb71b0b8af642b6d854",
+      "executableSHA256": "7ca7398bf7ddbe6bce0a663b91f6a1e19579a8ae78b02e54fc3bdcc1519aae8f"
+    }
+  },
   "publishConfig": {
     "access": "public"
   },
