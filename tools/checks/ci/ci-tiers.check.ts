@@ -373,7 +373,7 @@ for (const job of EXPECTED_JOBS) {
   );
 
   const uses = steps.map((step) => asText(step.uses)).filter((value) => value !== "");
-  check(`${job}: exactly two uses: pins`, uses.length, 2);
+  check(`${job}: action pin count`, uses.length, job === "checks" ? 3 : 2);
   allUses.push(...uses);
 }
 
@@ -388,8 +388,21 @@ const EXPECTED_PINS: readonly string[] = [
   "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
   "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
   "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+  "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
 ];
 check("sorted list of action pins across ci.yml", [...allUses].sort(), EXPECTED_PINS);
+
+const linuxSteps = stepsOf(jobs["checks"]);
+const packCandidate = findStep(linuxSteps, spaced("Pack", "the", "verified", "development", "candidate"));
+const retainCandidate = findStep(linuxSteps, spaced("Retain", "the", "development", "candidate"));
+checkTrue("candidate packing requires full tier", asText(packCandidate?.if) === FULL_GUARD);
+checkTrue("candidate packing disables lifecycle scripts", containsText(asText(packCandidate?.run), spaced("npm", "pack", "--ignore-scripts")));
+checkTrue("candidate records checksums and commit", containsText(asText(packCandidate?.run), "sha256sum") && containsText(asText(packCandidate?.run), "BUILD_COMMIT"));
+checkTrue("candidate upload requires full tier", asText(retainCandidate?.if) === FULL_GUARD);
+check("candidate artifact name", asRecord(retainCandidate?.with).name, "clawwright-candidate");
+check("candidate artifact path", asRecord(retainCandidate?.with).path, "artifacts/");
+check("candidate artifact retention", asRecord(retainCandidate?.with)["retention-days"], 7);
+check("candidate artifact absence fails", asRecord(retainCandidate?.with)["if-no-files-found"], "error");
 
 // --- windows-controls: the controls run in parallel shards, full tier only -------------------
 

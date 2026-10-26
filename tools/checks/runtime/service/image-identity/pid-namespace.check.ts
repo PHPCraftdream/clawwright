@@ -10,10 +10,7 @@ import { requires } from "#checks/kit/harness.ts";
 await requires("docker", "CLI state-owner PID identity", async () => {
   const image = "alpine:3.20";
   const available = await spawnLocal("docker", ["image", "inspect", image], { allowFailure: true });
-  if (available.code !== 0) {
-    process.stderr.write("skip live PID identity: alpine:3.20 is not cached\n");
-    return;
-  }
+  assert.equal(available.code, 0, "cache alpine:3.20 before running Docker namespace checks");
   const scratch = await mkdtemp(join(tmpdir(), "clawwright-pid-"));
   const project = `pid-${randomBytes(6).toString("hex")}`;
   const file = join(scratch, "compose.json");
