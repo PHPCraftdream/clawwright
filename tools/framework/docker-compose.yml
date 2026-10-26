@@ -58,13 +58,14 @@ services:
       retries: 5
       start_period: 20s
 
-  # One-shot CLI container: shares the gateway's network namespace, so 127.0.0.1:18789
-  # inside it is the gateway. Started on demand by the `cli` and `mcp-serve` commands whenever
+  # Shared network reaches the gateway; shared PIDs keep state-owner liveness checks valid.
+  # One-shot CLI container: started by the `cli` and `mcp-serve` commands whenever
   # cli-helper below is not running.
   cli:
     image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:extended-stable}
     profiles: ["cli"]
     network_mode: "service:gateway"
+    pid: "service:gateway"
     environment:
       <<: *openclaw-env
       BROWSER: echo
@@ -89,6 +90,7 @@ services:
     image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:extended-stable}
     profiles: ["cli"]
     network_mode: "service:gateway"
+    pid: "service:gateway"
     environment:
       <<: *openclaw-env
       BROWSER: echo

@@ -82,6 +82,19 @@ Every installed distribution is probed; one that could not be reached, or a dist
 listing that failed outright, is reported by name too — an unanswered probe is never read as
 "not exposed".
 
+## CLI process identity
+
+The one-shot `cli` and persistent `cli-helper` services share the gateway's PID namespace as
+well as its network and state mounts. OpenClaw's state-owner locks record process IDs and
+start times: a process in a different PID namespace can mistake a live owner for a stale
+one and invalidate the gateway's SQLite ownership during an inspection. Sharing only files
+and networking is not sufficient.
+
+This is `pid: service:gateway`, never host PID access or privileged mode. Existing helpers
+must be recreated when adopting this definition. If an earlier sidecar already invalidated
+the state-owner lock, stop that helper and restart the gateway before checking again; do not
+delete live locks or weaken ownership validation.
+
 ## Target userland
 
 The GNU/Linux-specific commands above assume a *GNU* userland specifically — being Linux is

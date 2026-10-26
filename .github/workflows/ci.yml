@@ -90,6 +90,10 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
           ssh -o BatchMode=yes -o ConnectTimeout=5 localhost true
 
+      - name: Cache the disposable PID namespace fixture
+        if: env.FULL_TIER == 'true'
+        run: docker pull --quiet alpine:3.20
+
       - name: Run checks
         if: env.FULL_TIER == 'true'
         # ubuntu-latest ships a working docker daemon, a GNU userland (linux-host, posix-sh,
@@ -133,6 +137,24 @@ jobs:
       - name: Verify package contents
         if: env.FULL_TIER == 'true'
         run: npm run pack:check
+
+      - name: Pack the verified development candidate
+        if: env.FULL_TIER == 'true'
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          (cd tools/framework && npm pack --ignore-scripts --pack-destination "$GITHUB_WORKSPACE/artifacts")
+          printf '%s\n' "$GITHUB_SHA" > artifacts/BUILD_COMMIT
+          (cd artifacts && sha256sum *.tgz > SHA256SUMS)
+
+      - name: Retain the development candidate
+        if: env.FULL_TIER == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: clawwright-candidate
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: error
 
       - name: Check timing summary
         if: always()
