@@ -45,3 +45,4 @@ Thumbs.db
 
 # /wrush task worktrees — always created here, in-tree
 /worktrees/
+/.rush/
