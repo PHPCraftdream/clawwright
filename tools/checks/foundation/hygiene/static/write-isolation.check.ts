@@ -548,6 +548,9 @@ check(
 const recorded = JSON.parse(await readFile(resolve(repoRoot, "tools", "checks", "architecture", "baseline.json"), "utf8")) as { writeTargetsUnresolved: { readonly total: number } };
 checkTrue("write-isolation: unresolved write targets only shrink (writeTargetsUnresolved in baseline.json)", approximations.length <= recorded.writeTargetsUnresolved.total);
 checkTrue("write-isolation: unresolved write targets match the recorded total (lower writeTargetsUnresolved in baseline.json when it shrinks)", approximations.length === recorded.writeTargetsUnresolved.total);
+if (approximations.length !== recorded.writeTargetsUnresolved.total) {
+  console.error(`write-isolation: ${approximations.length} unresolved approximation targets: ${approximations.map(({ file, hit }) => `${file} [${hit.call} ${hit.target}]`).join(", ")}`);
+}
 check(
   "write-isolation: no createApp outside an isolated apps sandbox",
   createAppOffenders.filter((file) => !ALLOW.includes(file)),

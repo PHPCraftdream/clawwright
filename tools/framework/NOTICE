@@ -1,6 +1,6 @@
 Clawwright
 Copyright (c) 2026 PHPCraftdream.
 
-This package includes an adapted OpenClaw Docker Compose definition. See
-`THIRD_PARTY_NOTICES.md` and https://github.com/openclaw/openclaw for the upstream project,
-license, and notices.
+This distribution includes an adapted OpenClaw Docker Compose definition in
+`dist/docker-compose.yml`. OpenClaw is a separate project; its source and license are
+available at https://github.com/openclaw/openclaw. See THIRD_PARTY_NOTICES.md.
