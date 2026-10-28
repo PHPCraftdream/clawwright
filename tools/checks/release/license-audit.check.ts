@@ -1,21 +1,29 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { audit } from "./license-audit.ts";
 
 type Lock = { packages: Record<string, Record<string, unknown>> };
+
 const root = resolve(import.meta.dirname, "../../..");
 const sandbox = mkdtempSync(resolve(tmpdir(), "license-audit-"));
-const paths = ["package-lock.json", "tools/framework/package.json", "tools/checks/release/license-audit.ts", "LICENSE", "LICENSE-MIT", "LICENSE-APACHE", "NOTICE", "tools/framework/LICENSE", "tools/framework/LICENSE-MIT", "tools/framework/LICENSE-APACHE", "tools/framework/NOTICE"];
+const paths = ["package-lock.json", "tools/framework/package.json", "LICENSE", "LICENSE-MIT", "LICENSE-APACHE", "NOTICE", "tools/framework/LICENSE", "tools/framework/LICENSE-MIT", "tools/framework/LICENSE-APACHE", "tools/framework/NOTICE"];
 try {
   for (const path of paths) {
     const target = resolve(sandbox, path);
     mkdirSync(resolve(target, ".."), { recursive: true });
     writeFileSync(target, readFileSync(resolve(root, path)));
   }
-  const run = (): ReturnType<typeof spawnSync> => spawnSync(process.execPath, ["--experimental-strip-types", resolve(sandbox, "tools/checks/release/license-audit.ts")], { encoding: "utf8" });
+  const run = (): string | undefined => {
+    try {
+      audit(sandbox);
+      return undefined;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  };
   const valid = run();
-  if (valid.status !== 0) throw new Error(`Valid inventory unexpectedly failed: ${valid.stderr}`);
+  if (valid !== undefined) throw new Error(`Valid inventory unexpectedly failed: ${valid}`);
 
   const mutateLock = (update: (lock: Lock) => void): void => {
     const path = resolve(sandbox, "package-lock.json");
@@ -74,14 +82,14 @@ try {
     const result = run();
     writeFileSync(lockPath, originalLock);
     writeFileSync(manifestPath, originalManifest);
-    if (result.status === 0) throw new Error(`Adversarial mutation passed: ${description}`);
-    if (!(result.stderr ?? "").includes(expected)) throw new Error(`Mutation ${description} failed for the wrong reason: ${result.stderr}`);
+    if (result === undefined) throw new Error(`Adversarial mutation passed: ${description}`);
+    if (!result.includes(expected)) throw new Error(`Mutation ${description} failed for the wrong reason: ${result}`);
   }
   const notice = resolve(sandbox, "tools/framework/NOTICE");
   const originalNotice = readFileSync(notice, "utf8");
   writeFileSync(notice, `${originalNotice}\nforged`);
   const noticeResult = run();
-  if (noticeResult.status === 0) throw new Error("Notice-copy mutation passed");
+  if (noticeResult === undefined) throw new Error("Notice-copy mutation passed");
   console.log(`License audit regression checks passed: valid inventory and ${adversarial.length + 1} fail-closed mutations.`);
 } finally {
   rmSync(sandbox, { recursive: true, force: true });

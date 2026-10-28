@@ -50,6 +50,7 @@ const BOTH_TIER_STEPS = new Set([
   "Check out",
   "Set up Node",
   "Install development dependencies",
+  "Fail-closed production license audit",
   "Check timing summary",
   FAST_STEP_NAME,
 ]);
@@ -346,6 +347,10 @@ for (const job of EXPECTED_JOBS) {
   checkTrue(`${job}: checkout is full-depth (fetch-depth: 0)`, asRecord(checkout?.with)["fetch-depth"] === 0);
 
   // The fast step: explicit merge-base --base, all three commands, and bash on every host.
+  const licenseAudit = findStep(steps, "Fail-closed production license audit");
+  checkTrue(`${job}: mandatory production license audit runs npm run license:audit`, containsText(asText(licenseAudit?.run), "npm run license:audit"));
+  checkTrue(`${job}: mandatory production license audit is unguarded in both tiers`, licenseAudit !== undefined && licenseAudit.if === undefined);
+
   const fast = findStep(steps, FAST_STEP_NAME);
   const fastRun = asText(fast?.run);
   checkTrue(`${job}: has a fast-tier step`, fast !== undefined);

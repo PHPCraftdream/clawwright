@@ -378,6 +378,7 @@ for (const [name, source, expected] of [
   ["R3 unknown named member", `import * as fs from 'node:fs'; fs.mystery(target);`, "UNKNOWN"],
   ["R3 computed isolated", `import * as fs from 'node:fs'; fs['writeFile'](join(tmpdir(),'notes'),'x');`, "CLEAN"],
   ["R3 Node isolated", `spawnSync(process.execPath,['-e',"require('node:fs').writeFileSync('notes','x')"],{cwd:tmpdir()});`, "CLEAN"],
+  ["R3 absolute checkout writer", `spawnSync(process.execPath,['-e',"require('node:fs').writeFileSync('/checkout/notes','x')"],{cwd:tmpdir()});`, "ANCHORED"],
   ["R3 prefix assertion", `import * as fs from 'node:fs'; (<any>fs.writeFile)(monorepoRoot,'x');`, "ANCHORED"],
   ["R3 exec shell writer", `execSync('echo LOST > notes',{cwd:monorepoRoot});`, "ANCHORED"],
   ["R3 exec unknown source", `execSync(command,{cwd:monorepoRoot});`, "UNKNOWN"],
