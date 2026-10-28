@@ -58,6 +58,9 @@ jobs:
       - name: Install development dependencies
         run: npm ci --include=dev
 
+      - name: Fail-closed production license audit
+        run: npm run license:audit
+
       - name: Fast tier — typecheck, lint, affected checks
         if: env.FULL_TIER != 'true'
         shell: bash
@@ -142,8 +145,16 @@ jobs:
         if: env.FULL_TIER == 'true'
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p artifacts
           (cd tools/framework && npm pack --ignore-scripts --pack-destination "$GITHUB_WORKSPACE/artifacts")
+          archive="$(ls artifacts/*.tgz)"
+          tar -tzf "$archive" > "$RUNNER_TEMP/packed-files.txt"
+          for file in LICENSE LICENSE-MIT LICENSE-APACHE NOTICE THIRD_PARTY_NOTICES.md; do
+            grep -qx "package/$file" "$RUNNER_TEMP/packed-files.txt"
+            tar -xOf "$archive" "package/$file" | cmp - "tools/framework/$file"
+          done
+          tar -xOf "$archive" package/package.json | cmp - tools/framework/package.json
           printf '%s\n' "$GITHUB_SHA" > artifacts/BUILD_COMMIT
           (cd artifacts && sha256sum *.tgz > SHA256SUMS)
 
@@ -187,6 +198,9 @@ jobs:
 
       - name: Install development dependencies
         run: npm ci --include=dev
+
+      - name: Fail-closed production license audit
+        run: npm run license:audit
 
       - name: Fast tier — typecheck, lint, affected checks
         if: env.FULL_TIER != 'true'
@@ -286,6 +300,9 @@ jobs:
 
       - name: Install development dependencies
         run: npm ci --include=dev
+
+      - name: Fail-closed production license audit
+        run: npm run license:audit
 
       - name: Fast tier — typecheck, lint, affected checks
         if: env.FULL_TIER != 'true'
@@ -390,6 +407,9 @@ jobs:
 
       - name: Install development dependencies
         run: npm ci --include=dev
+
+      - name: Fail-closed production license audit
+        run: npm run license:audit
 
       - name: Fast tier — typecheck, lint, affected checks
         if: env.FULL_TIER != 'true'

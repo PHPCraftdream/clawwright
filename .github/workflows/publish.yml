@@ -52,6 +52,9 @@ jobs:
       - name: Install development dependencies
         run: npm ci --include=dev
 
+      - name: Fail-closed production license audit
+        run: npm run license:audit
+
       - name: Test
         run: npm test
 
@@ -68,6 +71,18 @@ jobs:
       - name: Pack the release tarball
         working-directory: tools/framework
         run: npm pack
+
+      - name: Inspect packed license evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$(ls tools/framework/*.tgz)"
+          tar -tzf "$archive" > "$RUNNER_TEMP/packed-files.txt"
+          for file in LICENSE LICENSE-MIT LICENSE-APACHE NOTICE THIRD_PARTY_NOTICES.md; do
+            grep -qx "package/$file" "$RUNNER_TEMP/packed-files.txt"
+            tar -xOf "$archive" "package/$file" | cmp - "tools/framework/$file"
+          done
+          tar -xOf "$archive" package/package.json | cmp - tools/framework/package.json
 
       - name: Upload the release tarball
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

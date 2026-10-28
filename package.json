@@ -25,7 +25,8 @@
     "typecheck": "tsgo --noEmit",
     "lint": "oxlint tools --deny-warnings",
     "format:check": "npm run typecheck && npm run lint",
-    "pack:check": "cd tools/framework && npm pack --dry-run --json"
+    "pack:check": "cd tools/framework && npm pack --dry-run --json",
+    "license:audit": "node --experimental-strip-types tools/checks/release/license-audit.ts && node --experimental-strip-types tools/checks/release/license-audit.check.ts"
   },
   "devDependencies": {
     "@types/node": "24.13.6",
