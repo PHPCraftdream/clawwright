@@ -1,4 +1,4 @@
-import { inspectBody, readScript, sourcePath, type SourceContext } from "./body.ts";
+import { inspectBody, writerRoots, readScript, sourcePath, type SourceContext } from "./body.ts";
 import { childBodyCapable, childBodyAnchored } from "./index.ts";
 import { extractArgRange, anchoredFloor, isAnchoredSignal, type Classify, type Classification, type Hit } from "./write-isolation-rules.ts";
 
@@ -107,6 +107,8 @@ export function childProcessHits(source: string, masked: string, classify: Class
     const bodies = argvItems.map(([f, t]) => classify.resolveValue(argv!.expr.slice(f, t), argv!.origin.slice(f, t), argv!.at).origin).join(" ");
     const bodyCapable = name === "fork" || childBodyCapable(program, values[0]?.expr ?? "", args, bodies || values.slice(1).map((v) => v.origin).join(" "));
     let bodyVerdict: "readonly" | "writer" | "unknown" | undefined;
+    let writerRoot: "relative" | "anchored" | "unknown" = "unknown";
+    let writerBodyAnchored = false;
     const node = /^(?:.*[\\/])?(?:node|nodejs)(?:\.exe)?$/i.test(program ?? "") || values[0]?.expr.trim() === "process.execPath" || name === "fork";
     const shell = /^(?:.*[\\/])?(?:bash|sh|zsh|cmd|powershell|pwsh)(?:\.exe)?$/i.test(program ?? "") || /^(?:exec|execSync)$/.test(name);
     if (shell && /^(?:exec|execSync)$/.test(name)) {
@@ -120,7 +122,10 @@ export function childProcessHits(source: string, masked: string, classify: Class
       const evalAt = args.findIndex(a => /^(?:-e|-p|--eval|--print)(?:=|$)/.test(a ?? ""));
       const inline = evalAt < 0 ? undefined : args[evalAt]?.includes("=") ? args[evalAt]!.slice(args[evalAt]!.indexOf("=") + 1) : args[evalAt + 1];
       if (optionsUnknown) bodyVerdict = "unknown";
-      else if (evalAt >= 0) bodyVerdict = inline === undefined ? "unknown" : inspectBody(inline);
+      else if (evalAt >= 0) {
+        bodyVerdict = inline === undefined ? "unknown" : inspectBody(inline);
+        if (inline !== undefined && bodyVerdict === "writer") { writerRoot = writerRoots(inline); writerBodyAnchored = childBodyAnchored(inline); }
+      }
       else {
         const scriptAt = resolvedArgs.findIndex((v, i) => !(args[i]?.startsWith("-") ?? false));
         const value = name === "fork" ? values[0] : resolvedArgs[scriptAt];
@@ -143,6 +148,7 @@ export function childProcessHits(source: string, masked: string, classify: Class
           }
         }
         bodyVerdict = script === undefined ? "unknown" : inspectBody(script);
+        if (script !== undefined && bodyVerdict === "writer") { writerRoot = writerRoots(script); writerBodyAnchored = childBodyAnchored(script); }
       }
       if (bodyVerdict === "readonly") continue;
     }
@@ -182,7 +188,12 @@ export function childProcessHits(source: string, masked: string, classify: Class
       if (cwd !== "CLEAN") hits.push({ call: name, target: text.replace(/\s+/g, " ").trim(), classification: "UNKNOWN", approximation: true });
       continue;
     }
-    if (bodyVerdict === "writer" && cwd === "CLEAN" && !anchored && !childBodyAnchored(bodies)) continue;
+    if (node && bodyVerdict === "writer" && (writerRoot === "anchored" || writerBodyAnchored || childBodyAnchored(bodies))) anchored = true;
+    if (node && bodyVerdict === "writer" && writerRoot === "unknown" && !anchored && cwd === "CLEAN") {
+      hits.push({ call: name, target: text.replace(/\s+/g, " ").trim(), classification: "UNKNOWN", approximation: true });
+      continue;
+    }
+    if (bodyVerdict === "writer" && cwd === "CLEAN" && !anchored && (node ? writerRoot === "relative" : !childBodyAnchored(bodies))) continue;
     if (!destructive && !bodyCapable && cwd !== "ANCHORED") continue;
     if (bodyCapable && childBodyAnchored(text)) anchored = true;
     const classification = anchored || cwd === "ANCHORED" ? "ANCHORED" : cwd === "CLEAN" ? undefined : "UNKNOWN";

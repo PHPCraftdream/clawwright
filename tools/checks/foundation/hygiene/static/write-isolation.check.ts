@@ -379,6 +379,19 @@ for (const [name, source, expected] of [
   ["R3 computed isolated", `import * as fs from 'node:fs'; fs['writeFile'](join(tmpdir(),'notes'),'x');`, "CLEAN"],
   ["R3 Node isolated", `spawnSync(process.execPath,['-e',"require('node:fs').writeFileSync('notes','x')"],{cwd:tmpdir()});`, "CLEAN"],
   ["R3 absolute checkout writer", `spawnSync(process.execPath,['-e',"require('node:fs').writeFileSync('/checkout/notes','x')"],{cwd:tmpdir()});`, "ANCHORED"],
+  ["inline writer absolute POSIX path", `spawnSync(process.execPath,['-e',"require('node:fs').writeFileSync('/other/checkout/notes','x')"],{cwd:tmpdir()});`, "ANCHORED"],
+  ["inline writer absolute Windows path", `spawnSync(process.execPath,['-e',"require('node:fs').writeFileSync('C:/checkout/notes','x')"],{cwd:tmpdir()});`, "ANCHORED"],
+  ["inline writer retains anchored body signal", `spawnSync(process.execPath,['-e',"console.log(monorepoRoot); require('node:fs').writeFileSync('notes','x')"],{cwd:tmpdir()});`, "ANCHORED"],
+  ["inline writer mixed open absolute", `spawnSync(process.execPath,['-e',"require('node:fs').writeFileSync('notes','x'); require('node:fs').openSync('/checkout/notes','w')"],{cwd:tmpdir()});`, "ANCHORED"],
+  ["inline writer inherited method names", `spawnSync(process.execPath,['-e',"require('node:fs').writeFileSync('notes','x'); value.toString(); value.constructor()"],{cwd:tmpdir()});`, "UNKNOWN"],
+  ["inline writer mixed unproven write", `spawnSync(process.execPath,['-e',"require('node:fs').writeFileSync('notes','x'); evil.write(target)"],{cwd:tmpdir()});`, "UNKNOWN"],
+  ["inline writer mixed unproven readFile", `spawnSync(process.execPath,['-e',"require('node:fs').writeFileSync('notes','x'); readFile(target)"],{cwd:tmpdir()});`, "UNKNOWN"],
+  ["inline writer mixed eval", `spawnSync(process.execPath,['-e',"require('node:fs').writeFileSync('notes','x'); eval(payload)"],{cwd:tmpdir()});`, "UNKNOWN"],
+  ["inline writer mixed nested spawn", `spawnSync(process.execPath,['-e',"require('node:fs').writeFileSync('notes','x'); require('child_process').spawnSync('rm',['-rf','/checkout'])"],{cwd:tmpdir()});`, "ANCHORED"],
+  ["inline anchored writer mixed eval", `spawnSync(process.execPath,['-e',"require('node:fs').writeFileSync('/checkout/notes','x'); eval(payload)"],{cwd:tmpdir()});`, "ANCHORED"],
+  ["inline writer dynamic target", `spawnSync(process.execPath,['-e',"require('node:fs').writeFileSync(target,'x')"],{cwd:tmpdir()});`, "UNKNOWN"],
+  ["inline writer parent escape", `spawnSync(process.execPath,['-e',"require('node:fs').writeFileSync('../notes','x')"],{cwd:tmpdir()});`, "UNKNOWN"],
+  ["inline writer multi-target escape", `spawnSync(process.execPath,['-e',"require('node:fs').renameSync('notes','../notes')"],{cwd:tmpdir()});`, "UNKNOWN"],
   ["R3 prefix assertion", `import * as fs from 'node:fs'; (<any>fs.writeFile)(monorepoRoot,'x');`, "ANCHORED"],
   ["R3 exec shell writer", `execSync('echo LOST > notes',{cwd:monorepoRoot});`, "ANCHORED"],
   ["R3 exec unknown source", `execSync(command,{cwd:monorepoRoot});`, "UNKNOWN"],
@@ -435,6 +448,30 @@ for (const [name, body, expected] of [
   const path = resolve(repoRoot, "fixture-script.mjs");
   const snippet = `const script=resolve(monorepoRoot,'fixture-script.mjs'); spawnSync(process.execPath,['--experimental-strip-types',script],{cwd:monorepoRoot});`;
   check(`R3 script source: ${name}`, analyze(snippet, { root: repoRoot, file: resolve(repoRoot,"probe.ts"), readSource: p => p === path ? body : undefined }).writes.map(h => h.classification), expected);
+}
+for (const [name, body, expected] of [
+  ["relative", "require('node:fs').writeFileSync('notes','x');", []],
+  ["relative with anchored body signal", "console.log(monorepoRoot); require('node:fs').writeFileSync('notes','x');", ["ANCHORED"]],
+  ["absolute POSIX", "require('node:fs').writeFileSync('/checkout/notes','x');", ["ANCHORED"]],
+  ["absolute Windows", "require('node:fs').writeFileSync('C:/checkout/notes','x');", ["ANCHORED"]],
+  ["mixed open", "require('node:fs').writeFileSync('notes','x'); require('node:fs').openSync('/checkout/notes','w');", ["ANCHORED"]],
+  ["mixed inherited method names", "require('node:fs').writeFileSync('notes','x'); value.toString(); value.constructor();", ["UNKNOWN"]],
+  ["mixed unproven write", "require('node:fs').writeFileSync('notes','x'); evil.write(target);", ["UNKNOWN"]],
+  ["mixed unproven readFile", "require('node:fs').writeFileSync('notes','x'); readFile(target);", ["UNKNOWN"]],
+  ["mixed eval", "require('node:fs').writeFileSync('notes','x'); eval(payload);", ["UNKNOWN"]],
+  ["mixed nested spawn", "require('node:fs').writeFileSync('notes','x'); require('child_process').spawnSync('rm',['-rf','/checkout']);", ["ANCHORED"]],
+  ["anchored writer with unknown", "require('node:fs').writeFileSync('/checkout/notes','x'); externalWriter();", ["ANCHORED"]],
+  ["dynamic", "require('node:fs').writeFileSync(target,'x');", ["UNKNOWN"]],
+  ["parent escape", "require('node:fs').writeFileSync('../notes','x');", ["UNKNOWN"]],
+] as const) {
+  const path = resolve(repoRoot, "fixture-script.mjs");
+  const snippet = `spawnSync(process.execPath,['fixture-script.mjs'],{cwd:tmpdir()});`;
+  check(`R3 temp cwd script source: ${name}`, analyze(snippet, { root: repoRoot, file: resolve(repoRoot,"probe.ts"), readSource: p => p === path ? body : undefined }).writes.map(h => h.classification), expected);
+}
+{
+  const path = resolve(repoRoot, "fixture-script.mjs");
+  const snippet = `spawnSync(process.execPath,[resolve(monorepoRoot,'fixture-script.mjs')],{cwd:tmpdir()});`;
+  check("R3 temp cwd script path retains anchored signal", analyze(snippet, { root: repoRoot, file: resolve(repoRoot,"probe.ts"), readSource: p => p === path ? "require('node:fs').writeFileSync('notes','x');" : undefined }).writes.map(h => h.classification), ["ANCHORED"]);
 }
 for (const source of [
   "export type NativeTool = 'bash' | 'tar'; import { writeFile } from 'node:fs/promises';",

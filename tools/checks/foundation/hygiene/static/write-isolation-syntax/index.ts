@@ -310,5 +310,7 @@ export function childBodyCapable(program: string | undefined, programExpr: strin
 }
 
 export function childBodyAnchored(text: string): boolean {
-  return /\b(?:monorepoRoot|repoRoot|checksRoot)\b|process\.cwd\(|import\.meta|(?:[A-Za-z]:[\\/]|\/(?:home|srv|etc|workspace)\/)/.test(text);
+  // A literal absolute child path can escape even a temporary cwd. Do not assume
+  // /tmp (or any other absolute prefix) is outside the checkout.
+  return /\b(?:monorepoRoot|repoRoot|checksRoot)\b|process\.cwd\(|import\.meta|(?:[A-Za-z]:[\\/]|\/(?:home|srv|etc|workspace)\/)|["'`](?:\/(?!\/)|[A-Za-z]:[\\/]|\\\\)/.test(text);
 }

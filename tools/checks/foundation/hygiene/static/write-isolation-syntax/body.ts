@@ -6,6 +6,62 @@ import { analyzeCalleeSyntax } from "./index.ts";
 
 export type SourceContext = { root: string; file: string; readSource?: (path: string) => string | undefined };
 export type BodyVerdict = "readonly" | "writer" | "unknown";
+
+/** A temporary cwd only contains writes whose literal operands stay relative to it. */
+export function writerRoots(body: string): "relative" | "anchored" | "unknown" {
+  const normalized = analyzeCalleeSyntax(body).source;
+  const tokens = tokensOf(normalized);
+  const targets: Record<string, number[]> = {
+    writeFile: [0], appendFile: [0], createWriteStream: [0], unlink: [0], rm: [0], rmdir: [0],
+    truncate: [0], mkdir: [0], chmod: [0], chown: [0], utimes: [0], mkdtemp: [0],
+    rename: [0, 1], copyFile: [0, 1], cp: [1], symlink: [1], link: [1],
+  };
+  let result: "relative" | "anchored" | "unknown" = "relative";
+  for (let i = 0; i < tokens.length; i++) {
+    const name = tokens[i].text.replace(/Sync$/, "");
+    const indices = tokens[i].kind === "id" && Object.hasOwn(targets, name) ? targets[name] : undefined;
+    if (indices === undefined || tokens[i + 1]?.text !== "(") continue;
+    const args: typeof tokens[] = [[]];
+    let depth = 0;
+    let closed = false;
+    for (let j = i + 2; j < tokens.length; j++) {
+      const token = tokens[j];
+      if (token.kind === "p" && token.text === ")" && depth === 0) { closed = true; break; }
+      if (token.kind === "p" && token.text === "," && depth === 0) { args.push([]); continue; }
+      if (token.kind === "p" && ["(", "[", "{"].includes(token.text)) depth++;
+      else if (token.kind === "p" && [")", "]", "}"].includes(token.text)) depth--;
+      args[args.length - 1].push(token);
+    }
+    if (!closed) result = "unknown";
+    for (const index of indices) {
+      const arg = args[index];
+      if (arg?.length !== 1 || arg[0].kind !== "str") { result = "unknown"; continue; }
+      const value = arg[0].text;
+      const quote = normalized[arg[0].at];
+      let end = arg[0].at + 1;
+      while (end < normalized.length && normalized[end] !== quote) end += normalized[end] === "\\" ? 2 : 1;
+      const raw = normalized.slice(arg[0].at + 1, end);
+      if (raw.includes("\\")) { result = "unknown"; continue; }
+      if (quote === "`" && value.includes("${")) { result = "unknown"; continue; }
+      if (/^(?:[\\/]|[A-Za-z]:|file:)/i.test(value)) return "anchored";
+      if (/(?:^|[\\/])\.\.(?:[\\/]|$)/.test(value) || value.includes("\\")) result = "unknown";
+    }
+  }
+  // A recognized relative writer does not make other calls or capabilities safe.
+  // Only the fs require and recognized writer calls are covered here; method
+  // names alone do not prove that an arbitrary receiver is read-only.
+  const syntax = analyzeCalleeSyntax(body);
+  const unknownRequire = tokens.some((t, i) => t.text === "require" && tokens[i + 1]?.text === "(" &&
+    !(tokens[i - 1]?.text !== "." && tokens[i + 2]?.kind === "str" && /^(?:node:)?fs(?:\/promises)?$/.test(tokens[i + 2].text) && tokens[i + 3]?.text === ")"));
+  const provenWriter = (i: number): boolean => tokens[i - 1]?.text === "." && tokens[i - 2]?.text === ")" &&
+    tokens[i - 3]?.kind === "str" && /^(?:node:)?fs(?:\/promises)?$/.test(tokens[i - 3].text) &&
+    tokens[i - 4]?.text === "(" && tokens[i - 5]?.text === "require" && tokens[i - 6]?.text !== ".";
+  if (syntax.diagnostics.length || unknownRequire || tokens.some((t, i) =>
+    t.kind === "id" && (/^(?:eval|Function|import|spawn|spawnSync|exec|execSync|execFile|execFileSync|runProcess|open|openSync)$/.test(t.text) ||
+      (tokens[i + 1]?.text === "(" && t.text !== "require" &&
+        (!Object.hasOwn(targets, t.text.replace(/Sync$/, "")) || !provenWriter(i)))))) result = "unknown";
+  return result;
+}
 export function inspectBody(body: string): BodyVerdict {
   const syntax = analyzeCalleeSyntax(body);
   const tokens = tokensOf(syntax.source);
