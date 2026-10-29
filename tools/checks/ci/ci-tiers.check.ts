@@ -38,9 +38,12 @@ const UNNAMED = spaced("(unnamed", "step)");
 const FULL_GUARD = spaced("env.FULL_TIER", "==", "'true'");
 const FAST_GUARD = spaced("env.FULL_TIER", "!=", "'true'");
 const GROUP_EXPRESSION = spaced("ci-${{", "github.workflow", "}}-${{", "github.event_name", "}}-${{", "github.ref", "}}");
-const MERGE_BASE_COMMAND = spaced("check", "--related", "--base", '"$(git', "merge-base", "origin/main", 'HEAD)"');
+const BASH_BASE = 'base="$CHECK_BASE"';
+const BASH_RELATED = spaced("check", "--related", "--base", '"$base"');
+const BASH_FALLBACK = spaced('"$(git', "merge-base", "origin/main", 'HEAD)"');
 // Windows jobs keep a PowerShell step: under bash the MSYS mkdir leads PATH and breaks the instance lock.
 const WINDOWS_JOBS = new Set(["windows-checks", "windows-wsl"]);
+const WINDOWS_BASE = spaced("$base", "=", "$env:CHECK_BASE");
 const WINDOWS_MERGE_BASE = spaced("$base", "=", "git", "merge-base", "origin/main", "HEAD");
 const WINDOWS_RELATED = spaced("check", "--related", "--base", "$base");
 const FAST_STEP_NAME = "Fast tier — typecheck, lint, affected checks";
@@ -126,10 +129,9 @@ checkTrue(
   "workflow_dispatch declares a boolean `full` input defaulting to false",
   fullInput.type === "boolean" && fullInput.default === false,
 );
-checkTrue(
-  "schedule trigger present with a cron entry",
-  Array.isArray(on.schedule) && on.schedule.some((entry) => isRecord(entry) && asText(entry.cron) !== ""),
-);
+checkTrue("full verification has no automatic schedule", on.schedule === undefined);
+const baseInput = asRecord(asRecord(dispatch.inputs).base_ref);
+checkTrue("manual related base is optional text", baseInput.type === "string" && baseInput.default === "");
 
 // --- FULL_TIER expression, evaluated rather than string-compared ------------------------------
 
@@ -148,9 +150,12 @@ check(
 );
 const fullTierExpression = unwrapExpression(asText(env.FULL_TIER));
 checkTrue("FULL_TIER line carries an ${{ ... }} expression", fullTierExpression !== "");
-for (const part of ["pull_request", "schedule", "workflow_dispatch"]) {
-  checkTrue(`FULL_TIER expression mentions ${part}`, containsText(fullTierExpression, part));
-}
+checkTrue("FULL_TIER requires explicit manual dispatch", containsText(fullTierExpression, "workflow_dispatch"));
+check(
+  "related base prefers PR base, then previous push, then manual override",
+  unwrapExpression(asText(env.CHECK_BASE)),
+  spaced("github.event.pull_request.base.sha", "||", "github.event.before", "||", "inputs.base_ref"),
+);
 
 // Tokenizer for the tiny expression language below: operands, string literals and operators.
 // Anything else throws, so an unparseable workflow fails the check instead of passing silently.
@@ -256,14 +261,14 @@ function evaluateFullTier(expression: string, event: { eventName: string; ref: s
   return result;
 }
 
-// Cases: [event_name, ref, inputs.full, expected]. Fast tier on pushes (main included: its PR
-// already ran the full tier) and on workflow_dispatch without `full`; full tier for
-// pull_request, schedule and dispatch with full=true.
+// Only explicit manual full=true selects full verification.
 const FULL_TIER_CASES: readonly (readonly [string, string, boolean, boolean])[] = [
   ["push", "refs/heads/topic", false, false],
   ["push", "refs/heads/main", false, false],
-  ["pull_request", "refs/pull/1/merge", false, true],
-  ["schedule", "refs/heads/main", false, true],
+  ["pull_request", "refs/pull/1/merge", false, false],
+  ["pull_request", "refs/pull/1/merge", true, false],
+  ["push", "refs/heads/topic", true, false],
+  ["schedule", "refs/heads/main", false, false],
   ["workflow_dispatch", "refs/heads/main", false, false],
   ["workflow_dispatch", "refs/heads/topic", false, false],
   ["workflow_dispatch", "refs/heads/topic", true, true],
@@ -286,7 +291,7 @@ const concurrency = asRecord(record.concurrency);
 checkTrue("concurrency group pins workflow + ref", asText(concurrency.group) === GROUP_EXPRESSION);
 check("a newer run of the same event and ref cancels the older one", concurrency["cancel-in-progress"], true);
 const push = asRecord(on.push);
-check("push runs only for main (branches are checked through their pull request)", push.branches, ["main"]);
+check("push checks every feature branch", push.branches, ["**"]);
 
 // --- Per-job step classification ---------------------------------------------------------------
 
@@ -346,7 +351,7 @@ for (const job of EXPECTED_JOBS) {
   const checkout = findStep(steps, "Check out");
   checkTrue(`${job}: checkout is full-depth (fetch-depth: 0)`, asRecord(checkout?.with)["fetch-depth"] === 0);
 
-  // The fast step: explicit merge-base --base, all three commands, and bash on every host.
+  // The fast step validates an explicit base and uses the host's own shell.
   const licenseAudit = findStep(steps, "Fail-closed production license audit");
   checkTrue(`${job}: mandatory production license audit runs npm run license:audit`, containsText(asText(licenseAudit?.run), "npm run license:audit"));
   checkTrue(`${job}: mandatory production license audit is unguarded in both tiers`, licenseAudit !== undefined && licenseAudit.if === undefined);
@@ -360,11 +365,13 @@ for (const job of EXPECTED_JOBS) {
   checkTrue(`${job}: fast-tier step runs npm run typecheck`, containsText(fastRun, "npm run typecheck"));
   checkTrue(`${job}: fast-tier step runs npm run lint`, containsText(fastRun, "npm run lint"));
   checkTrue(
-    `${job}: fast-tier step passes an explicit merge-base as --base`,
+    `${job}: fast-tier step passes the event base with a merge-base fallback`,
     windows
-      ? containsText(fastRun, WINDOWS_MERGE_BASE) && containsText(fastRun, WINDOWS_RELATED)
-      : containsText(fastRun, MERGE_BASE_COMMAND),
+      ? containsText(fastRun, WINDOWS_BASE) && containsText(fastRun, WINDOWS_MERGE_BASE) && containsText(fastRun, WINDOWS_RELATED)
+      : containsText(fastRun, BASH_BASE) && containsText(fastRun, BASH_FALLBACK) && containsText(fastRun, BASH_RELATED),
   );
+
+  checkTrue(`${job}: related base must resolve to a commit`, containsText(fastRun, spaced("git", "rev-parse", "--verify")));
 
   const fullGuarded = steps.some((step) =>
     asText(step.if) === FULL_GUARD &&

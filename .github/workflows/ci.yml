@@ -1,12 +1,10 @@
 name: CI
 
 on:
-  # Branches are checked through their pull request (full tier); a push run on a branch
-  # with an open PR would only duplicate it. main gets the fast tier on push and the
-  # full tier nightly.
+  # Feature and integration revisions use related checks; full verification is explicit.
   push:
     branches:
-      - main
+      - "**"
   pull_request:
   workflow_dispatch:
     inputs:
@@ -14,19 +12,18 @@ on:
         description: "Run the full check suite instead of the fast tier"
         type: boolean
         default: false
-  schedule:
-    # Nightly full-suite gate; time chosen off the hour to dodge scheduler load.
-    - cron: "17 3 * * *"
+      base_ref:
+        description: "Optional related-check base for a manual feature run"
+        type: string
+        default: ''
 
-# The tier is expressed once here: every job's steps key off FULL_TIER.
+# Full verification is reserved for explicit end-of-sprint dispatches.
 env:
-  # A merge to main already passed the full tier in its pull request: main pushes run the
-  # fast tier, the nightly schedule runs the full tier on main.
-  FULL_TIER: ${{ github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full) }}
+  FULL_TIER: ${{ github.event_name == 'workflow_dispatch' && inputs.full }}
+  CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before || inputs.base_ref }}
 
 concurrency:
-  # One group per event and ref: a newer run supersedes an older one of the same kind, and a
-  # push never cancels the nightly run.
+  # Event-scoped groups keep feature pushes from cancelling manual sprint verification.
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
@@ -44,7 +41,7 @@ jobs:
         node: [24]
     steps:
       - name: Check out
-        # Full depth: the fast tier's --related needs the merge-base with origin/main.
+        # Full depth supports the event base and first-push/manual fallback.
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
@@ -64,13 +61,14 @@ jobs:
       - name: Fast tier — typecheck, lint, affected checks
         if: env.FULL_TIER != 'true'
         shell: bash
-        # --base takes a revision, not a branch policy: the merge-base with origin/main is
-        # computed here (checkout is fetch-depth: 0, so origin/main is present) and passed
-        # explicitly. check --related never computes a merge-base itself when --base is given.
+        # Use the event's exact base; only first-push/manual runs need merge-base fallback.
         run: |
           npm run typecheck
           npm run lint
-          node --experimental-strip-types tools/clawwright.ts check --related --base "$(git merge-base origin/main HEAD)"
+          base="$CHECK_BASE"
+          if [ -z "$base" ] || [[ "$base" =~ ^0+$ ]]; then base="$(git merge-base origin/main HEAD)"; fi
+          git rev-parse --verify "$base^{commit}" >/dev/null
+          node --experimental-strip-types tools/clawwright.ts check --related --base "$base"
 
       # ubuntu-latest ships openssh-client but not always a running sshd: install it if
       # missing, start it, and authorize a passphrase-less key for the `ssh-loopback`
@@ -185,7 +183,7 @@ jobs:
         node: [24]
     steps:
       - name: Check out
-        # Full depth: the fast tier's --related needs the merge-base with origin/main.
+        # Full depth supports the event base and first-push/manual fallback.
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
@@ -205,13 +203,14 @@ jobs:
       - name: Fast tier — typecheck, lint, affected checks
         if: env.FULL_TIER != 'true'
         shell: bash
-        # --base takes a revision, not a branch policy: the merge-base with origin/main is
-        # computed here (checkout is fetch-depth: 0, so origin/main is present) and passed
-        # explicitly. check --related never computes a merge-base itself when --base is given.
+        # Use the event's exact base; only first-push/manual runs need merge-base fallback.
         run: |
           npm run typecheck
           npm run lint
-          node --experimental-strip-types tools/clawwright.ts check --related --base "$(git merge-base origin/main HEAD)"
+          base="$CHECK_BASE"
+          if [ -z "$base" ] || [[ "$base" =~ ^0+$ ]]; then base="$(git merge-base origin/main HEAD)"; fi
+          git rev-parse --verify "$base^{commit}" >/dev/null
+          node --experimental-strip-types tools/clawwright.ts check --related --base "$base"
 
       # `setremotelogin` is the documented way to turn on sshd on GitHub's hosted macOS
       # runners without a GUI session; ASSUMPTION (unverified here — no Actions run available):
@@ -287,7 +286,7 @@ jobs:
         node: [24]
     steps:
       - name: Check out
-        # Full depth: the fast tier's --related needs the merge-base with origin/main.
+        # Full depth supports the event base and first-push/manual fallback.
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
@@ -308,15 +307,19 @@ jobs:
         if: env.FULL_TIER != 'true'
         # Windows keeps its default shell: a bash step puts MSYS coreutils first on PATH, and their
         # mkdir cannot apply modes to Windows paths (the instance lock records ownership with it).
-        # --base takes a revision, not a branch policy: the merge-base with origin/main is computed
-        # here (checkout is fetch-depth: 0, so origin/main is present) and passed explicitly.
+        # Use the event's exact base; only first-push/manual runs need merge-base fallback.
         shell: pwsh
         run: |
           npm run typecheck
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run lint
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $base = git merge-base origin/main HEAD
+          $base = $env:CHECK_BASE
+          if ([string]::IsNullOrWhiteSpace($base) -or $base -match '^0+$') {
+            $base = git merge-base origin/main HEAD
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          git rev-parse --verify "$base^{commit}" | Out-Null
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --experimental-strip-types tools/clawwright.ts check --related --base $base
           exit $LASTEXITCODE
@@ -394,7 +397,7 @@ jobs:
     continue-on-error: true
     steps:
       - name: Check out
-        # Full depth: the fast tier's --related needs the merge-base with origin/main.
+        # Full depth supports the event base and first-push/manual fallback.
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
@@ -415,15 +418,19 @@ jobs:
         if: env.FULL_TIER != 'true'
         # Windows keeps its default shell: a bash step puts MSYS coreutils first on PATH, and their
         # mkdir cannot apply modes to Windows paths (the instance lock records ownership with it).
-        # --base takes a revision, not a branch policy: the merge-base with origin/main is computed
-        # here (checkout is fetch-depth: 0, so origin/main is present) and passed explicitly.
+        # Use the event's exact base; only first-push/manual runs need merge-base fallback.
         shell: pwsh
         run: |
           npm run typecheck
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run lint
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $base = git merge-base origin/main HEAD
+          $base = $env:CHECK_BASE
+          if ([string]::IsNullOrWhiteSpace($base) -or $base -match '^0+$') {
+            $base = git merge-base origin/main HEAD
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          git rev-parse --verify "$base^{commit}" | Out-Null
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --experimental-strip-types tools/clawwright.ts check --related --base $base
           exit $LASTEXITCODE
@@ -464,7 +471,7 @@ jobs:
     # three disjoint round-robin shards that run in parallel. Full tier only: the job-level
     # condition repeats FULL_TIER because the env context is not available in jobs.<id>.if.
     name: "Negative controls (${{ matrix.shard }})"
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full) }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.full }}
     runs-on: windows-latest
     strategy:
       fail-fast: false
