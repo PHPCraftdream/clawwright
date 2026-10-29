@@ -137,7 +137,8 @@ check("recipe mirror path lives under the data dir's workspace mount", recipeMir
     } as unknown as Context;
     await syncRecipeFiles(ctx, "binary-recipe", recipeDir);
 
-    const mirror = recipeMirrorTargetDir(targetData, "binary-recipe");
+    const mirror = `${targetData}/workspace/mcp-binary-recipe`;
+    check("binary recipe mirror uses the independent expected path", recipeMirrorTargetDir(targetData, "binary-recipe"), mirror);
     const copied = await readBytes(resolve(mirror, "assets", "logo.bin"));
     check("recipe mirror preserves non-UTF-8 bytes and NULs", [...copied], [...binary]);
     check("recipe mirror preserves the source checksum", checksumOf(copied), checksumOf(binary));
@@ -160,7 +161,8 @@ check("recipe mirror path lives under the data dir's workspace mount", recipeMir
     await mkdir(recipeDir, { recursive: true });
     await writeFile(resolve(recipeDir, "assets"), binary);
     const ctx = { settings: { dataDir: targetData }, transport: new LocalTransport() } as unknown as Context;
-    const mirror = recipeMirrorTargetDir(targetData, "shape-recipe");
+    const mirror = `${targetData}/workspace/mcp-shape-recipe`;
+    check("shape recipe mirror uses the independent expected path", recipeMirrorTargetDir(targetData, "shape-recipe"), mirror);
 
     await syncRecipeFiles(ctx, "shape-recipe", recipeDir);
     await rm(resolve(recipeDir, "assets"));
@@ -208,7 +210,8 @@ check("recipe mirror path lives under the data dir's workspace mount", recipeMir
     const local = new LocalTransport();
     const incomplete = { ...local, async listFiles(): Promise<string[]> { return []; } } as unknown as typeof local;
     const ctx = { settings: { dataDir: targetData }, transport: incomplete } as unknown as Context;
-    const mirror = recipeMirrorTargetDir(targetData, "incomplete-recipe");
+    const mirror = `${targetData}/workspace/mcp-incomplete-recipe`;
+    check("incomplete recipe mirror uses the independent expected path", recipeMirrorTargetDir(targetData, "incomplete-recipe"), mirror);
     await mkdir(resolve(mirror, "assets"), { recursive: true });
     await writeFile(resolve(mirror, "assets", "unknown.txt"), "keep me");
     let failedShapeChange = false;

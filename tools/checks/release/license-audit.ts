@@ -85,7 +85,7 @@ export function audit(root: string): void {
     if (visited.has(path)) continue;
     visited.add(path);
     const entry = packages[path];
-    if (typeof entry.resolved !== "string" || !/^https:\/\//.test(entry.resolved) || typeof entry.integrity !== "string" || !/^sha(1|256|384|512)-/.test(entry.integrity)) {
+    if (typeof entry.resolved !== "string" || !entry.resolved.startsWith("https://") || typeof entry.integrity !== "string" || !/^sha(1|256|384|512)-/.test(entry.integrity)) {
       throw new Error(`Unsupported or incomplete resolved/integrity lock metadata: ${path}`);
     }
     if (entry.peerDependencies !== undefined && (!entry.peerDependencies || typeof entry.peerDependencies !== "object" || Array.isArray(entry.peerDependencies))) throw new Error(`Unsupported peerDependencies metadata: ${path}`);

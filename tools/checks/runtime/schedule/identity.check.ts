@@ -16,12 +16,14 @@ const backupInstall = (ctx: any, args: string[]) => openclawCommands.backup.run(
 const backupUninstall = (ctx: any, args: string[]) => openclawCommands.backup.run(ctx, ["uninstall", ...args]);
 
 const parent = await mkdtemp(join(tmpdir(), "clawwright-scheduler-identity-"));
-const roots = [join(parent, "team-a", "deployment"), join(parent, "team-b", "deployment")];
+const firstRoot = join(parent, "team-a", "deployment");
+const secondRoot = join(parent, "team-b", "deployment");
+const roots = [firstRoot, secondRoot];
 const manual = "MAILTO=operator@example.invalid\n\n0 3 * * * /usr/bin/manual-backup\n# manual scheduler note\n";
 let table = manual;
 const contexts: Context[] = [];
 try {
-  for (const [index, root] of roots.entries()) {
+  async function prepareRoot(root: string, index: number): Promise<void> {
     await mkdir(root, { recursive: true });
     await writeFile(join(root, "clawwright"), "");
     await writeFile(join(root, ".env"), `OC_COMPOSE_PROJECT=team-${index}\nOC_DATA_DIR=${join(root, "data")}\n`);
@@ -47,6 +49,8 @@ try {
       },
     } as unknown as Context);
   }
+  await prepareRoot(firstRoot, 0);
+  await prepareRoot(secondRoot, 1);
   await withOutputSink(() => {}, () => withScheduleRunner(
     async () => { throw new Error("POSIX scenario must not invoke host scheduler"); },
     async () => {

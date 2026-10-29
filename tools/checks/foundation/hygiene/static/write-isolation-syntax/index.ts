@@ -3,7 +3,7 @@ import { tokensOf } from "../../../../architecture/prose-held.ts";
 
 type Value = { name: string; derived?: boolean; bound?: string[]; unknown?: boolean; namespace?: boolean; promisify?: boolean };
 type Binding = { name: string; from: number; to: number; at: number; scope: number; value?: Value };
-const READS = new Set("readFile readFileSync readdir readdirSync stat statSync lstat lstatSync fstat fstatSync access accessSync existsSync realpath realpathSync readlink readlinkSync watch watchFile unwatchFile opendir opendirSync constants".split(" "));
+const READS = new Set("read readSync readv readvSync readFile readFileSync readdir readdirSync stat statSync lstat lstatSync fstat fstatSync access accessSync existsSync realpath realpathSync readlink readlinkSync watch watchFile unwatchFile opendir opendirSync constants".split(" "));
 const WRITES = new Set("writeFile appendFile mkdir mkdtemp rm rmdir unlink truncate createWriteStream utimes lutimes chmod lchmod chown lchown open cp copyFile symlink link rename".split(" "));
 
 export type SyntaxDiagnostic = { call: string; target: string; at: number; classification: "UNKNOWN"; approximation: true };
@@ -301,10 +301,7 @@ export function childBodyCapable(program: string | undefined, programExpr: strin
     if (args.length === 1 && /^(?:--version|-v|--help|-h)$/.test(args[0] ?? "")) return false;
     return true;
   }
-  if (shell && args.some(a => /^(?:-c|\/c|-command|-file|--command)$/i.test(a ?? ""))) {
-    if (/^\s*(?:echo|printf|Write-Output)\s+[^;&|<>]+\s*$/i.test(body)) return false;
-    return true;
-  }
+  if (shell && args.some(a => /^(?:-c|\/c|-command|-file|--command)$/i.test(a ?? ""))) return true;
   return node && /\b(?:writeFile|appendFile|createWriteStream|unlink|rm|rmdir|truncate|mkdir|rename|chmod|chown|copyFile|cp|symlink|link)(?:Sync)?\b/.test(body)
     || shell && /\b(?:Set-Content|Add-Content|Out-File|Remove-Item|New-Item|rm|del|rmdir|rd|tee|touch)\b|(?:^|[^>=])>{1,2}(?!&)/i.test(body);
 }

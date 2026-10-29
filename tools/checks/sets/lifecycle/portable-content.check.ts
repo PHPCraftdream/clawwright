@@ -14,7 +14,7 @@ import { EnvSyntaxError } from "#framework/core/env.ts";
 import { buildSet } from "#framework/commands/sets/set.ts";
 import { DESIRED_STATE_PATH } from "#framework/set/artifacts/model.ts";
 import { checksumOf, checksumOfFileMap } from "#framework/service/checksums.ts";
-import { ctx as buildCtx, createBuildDeployment, removeBuildDeployment } from "#checks/sets/artifact/set-build/fixture.ts";
+import { ctx as buildCtx, populateBuildDeployment, removeBuildDeployment } from "#checks/sets/artifact/set-build/fixture.ts";
 import { packArtifact } from "#checks/sets/pack.ts";
 import { withArtifactInspected } from "#framework/set/artifacts/install.ts";
 import { collectPortableContent, portableContent } from "#framework/set/content.ts";
@@ -27,7 +27,8 @@ const digest = (problems: readonly { code: string; detail: string }[]): string =
 const codesOf = (problems: readonly { code: string }[]): string[] => problems.map((entry) => entry.code).sort();
 
 {
-  const deployment = await createBuildDeployment();
+  const deployment = await mkdtemp(join(tmpdir(), "clawwright-set-build-check-"));
+  await populateBuildDeployment(deployment);
   try {
     // A recipe named `aux` — a Windows device name a read must still accept (I14) — beside
     // the fixture's demo recipe, carrying the same file classes.
@@ -151,7 +152,8 @@ const codesOf = (problems: readonly { code: string }[]): string[] => problems.ma
 // failing readFile/JSON.parse to capture the node-side message) — never from a #framework
 // symbol — and stays in a const so the harness sees an identifier, not a literal.
 {
-  const deployment = await createBuildDeployment();
+  const deployment = await mkdtemp(join(tmpdir(), "clawwright-set-build-check-"));
+  await populateBuildDeployment(deployment);
   try {
     const healthy = (await loadSet({ kind: "tree" }, { name: "demo-set", declaredImage: buildCtx.settings.image })).manifest;
     const invalidJson = '[{"path":"gateway.mode","value":"loc';
@@ -164,7 +166,8 @@ const codesOf = (problems: readonly { code: string }[]): string[] => problems.ma
     // reportInvalidDeclaration, so the loader reports instead of dying; the walk over the
     // recipes is unaffected.
     const treeCase = async (checkName: string, mutate: (deployment: string, label: string) => Promise<string>): Promise<void> => {
-      const caseDeployment = await createBuildDeployment();
+      const caseDeployment = await mkdtemp(join(tmpdir(), "clawwright-set-build-check-"));
+      await populateBuildDeployment(caseDeployment);
       try {
         const label = resolve(caseDeployment, "config", "desired-state.json");
         const tail = await mutate(caseDeployment, label);
@@ -217,7 +220,8 @@ const codesOf = (problems: readonly { code: string }[]): string[] => problems.ma
       return shapeTail;
     });
 
-    const refusalDeployment = await createBuildDeployment();
+    const refusalDeployment = await mkdtemp(join(tmpdir(), "clawwright-set-build-check-"));
+    await populateBuildDeployment(refusalDeployment);
     try {
       await rm(resolve(refusalDeployment, "recipes"), { recursive: true });
       await writeFile(resolve(refusalDeployment, "recipes"), "not a directory");
@@ -235,7 +239,8 @@ const codesOf = (problems: readonly { code: string }[]): string[] => problems.ma
     }
 
     const recipeRefusalCase = async (checkName: string, mutate: (dir: string) => Promise<void>, expectedRefusal: (dir: string) => Promise<string>): Promise<void> => {
-      const caseDeployment = await createBuildDeployment();
+      const caseDeployment = await mkdtemp(join(tmpdir(), "clawwright-set-build-check-"));
+      await populateBuildDeployment(caseDeployment);
       try {
         await mutate(caseDeployment);
         const expected = await expectedRefusal(caseDeployment);
@@ -314,7 +319,8 @@ const codesOf = (problems: readonly { code: string }[]): string[] => problems.ma
     // diagnostic's prose contains "acceptance.json", the old substring selection's trigger;
     // the historical acceptance-before-agent refusal order must hold anyway.
     {
-      const caseDeployment = await createBuildDeployment();
+      const caseDeployment = await mkdtemp(join(tmpdir(), "clawwright-set-build-check-"));
+      await populateBuildDeployment(caseDeployment);
       try {
         await rm(resolve(caseDeployment, "recipes"), { recursive: true });
         await mkdir(resolve(caseDeployment, "recipes", "demo"), { recursive: true });
@@ -497,7 +503,8 @@ const codesOf = (problems: readonly { code: string }[]): string[] => problems.ma
 // memoizes into `cache`). The readFile seam counts physical reads so a check can prove the
 // memoization — here over a real fixture tree and a real packed artifact's unpacked staging.
 {
-  const deployment = await createBuildDeployment();
+  const deployment = await mkdtemp(join(tmpdir(), "clawwright-set-build-check-"));
+  await populateBuildDeployment(deployment);
   try {
     const readOnceViaSeam = async (
       checkPrefix: string,
@@ -548,7 +555,8 @@ const codesOf = (problems: readonly { code: string }[]): string[] => problems.ma
 // A malformed secrets.template.env must refuse the set load with the structured
 // EnvSyntaxError (file + 1-based line), never be swallowed by the absent-template path.
 {
-  const source = await createBuildDeployment();
+  const source = await mkdtemp(join(tmpdir(), "clawwright-set-build-check-"));
+  await populateBuildDeployment(source);
   const deployment = await mkdtemp(join(tmpdir(), "clawwright-env-template-"));
   await cp(source, deployment, { recursive: true });
   useDeployment(deployment);

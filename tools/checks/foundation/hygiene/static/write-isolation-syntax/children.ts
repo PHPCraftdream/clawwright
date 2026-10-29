@@ -1,4 +1,4 @@
-import { inspectBody, writerRoots, readScript, sourcePath, type SourceContext } from "./body.ts";
+import { inspectBody, writerRoots, type SourceContext } from "./body.ts";
 import { childBodyCapable, childBodyAnchored } from "./index.ts";
 import { extractArgRange, anchoredFloor, isAnchoredSignal, type Classify, type Classification, type Hit } from "./write-isolation-rules.ts";
 
@@ -6,6 +6,18 @@ const reHits = (pattern: RegExp, text: string): boolean => pattern.exec(text) !=
 
 const DESTRUCTIVE = /\bgit\b.*\bclean\b|\bgit\b.*\bcheckout\b.*\s--(?:\s|$)|\bgit\b.*\breset\b.*--hard\b|(?:^|[\s;&|])(?:rm|del|rmdir|rd|Remove-Item)(?:\s|$)/i;
 const LITERAL = /(["'`])((?:\\.|(?!\1)[^\\])*)\1/g;
+
+/** A deliberately small shell grammar: literal arguments only, no expansion or redirection. */
+function shellReadOnly(body: string): boolean {
+  return /^[ \t]*(?:echo|printf)[ \t]+[A-Za-z0-9_.,:%+/=-]+(?:[ \t]+[A-Za-z0-9_.,:%+/=-]+)*[ \t]*$/.test(body) && !/[\r\n]/.test(body);
+}
+
+// Only complete, literal POSIX forms: the absolute destination may escape the
+// isolated cwd; this is not a claim that its spelling identifies the checkout.
+function shellAbsoluteTouch(body: string): boolean {
+  const path = String.raw`\/[A-Za-z0-9_./-]+`;
+  return new RegExp(`^[ \\t]*(?:touch[ \\t]+${path}|echo[ \\t]+\\$\\(touch[ \\t]+${path}\\))[ \\t]*$`).test(body);
+}
 
 /** Ordinary strings and interpolation-free templates are fixed child-process words. */
 function childWord(origin: string): string | undefined {
@@ -65,20 +77,7 @@ function destructiveOperands(command: string): string[] {
 /** Child processes running a destructive command (git clean/checkout --/reset --hard,
  * rm/del/rmdir/Remove-Item) with a checkout-anchored cwd or path argument. An absent cwd
  * inherits the checkout; an unresolved cwd is enforced, not disclosed. */
-function expandSourcePath(expr: string, origin: string, at: number, classify: Classify, depth = 0): string {
-  if (depth > 12) return origin;
-  const value = classify.resolveValue(expr, origin, at);
-  if (value.origin !== origin) return expandSourcePath(value.expr, value.origin, value.at, classify, depth + 1);
-  const call = /^(?:(?:path|nodePath)\.)?(?:resolve|join|dirname|fileURLToPath)\s*\(/.exec(expr.trim());
-  if (call === null) return origin;
-  const lead = expr.length - expr.trimStart().length;
-  const ranges = listItems(expr, lead + call[0].length - 1);
-  let out = origin;
-  for (const [f,t] of ranges.reverse()) out = out.slice(0,f) + expandSourcePath(expr.slice(f,t),origin.slice(f,t),at,classify,depth+1) + out.slice(t);
-  return out;
-}
-
-export function childProcessHits(source: string, masked: string, classify: Classify, calls: ReadonlyArray<{ name: string; at: number; open: number }>, context?: SourceContext): Hit[] {
+export function childProcessHits(source: string, masked: string, classify: Classify, calls: ReadonlyArray<{ name: string; at: number; open: number }>, _context?: SourceContext): Hit[] {
   const hits: Hit[] = [];
   for (const { name, at, open } of calls) {
     const items = listItems(masked, open);
@@ -109,53 +108,61 @@ export function childProcessHits(source: string, masked: string, classify: Class
     let bodyVerdict: "readonly" | "writer" | "unknown" | undefined;
     let writerRoot: "relative" | "anchored" | "unknown" = "unknown";
     let writerBodyAnchored = false;
+    let shellBodyAnchored = false;
+    let scriptArgument = -1;
     const node = /^(?:.*[\\/])?(?:node|nodejs)(?:\.exe)?$/i.test(program ?? "") || values[0]?.expr.trim() === "process.execPath" || name === "fork";
     const shell = /^(?:.*[\\/])?(?:bash|sh|zsh|cmd|powershell|pwsh)(?:\.exe)?$/i.test(program ?? "") || /^(?:exec|execSync)$/.test(name);
     if (shell && /^(?:exec|execSync)$/.test(name)) {
-      const words = program?.trim().split(/\s+/) ?? [];
-      const readOnly = ["echo", "printf"].includes(words[0]) && words.length > 1 && !/[;&|<>]/.test(program ?? "");
+      const readOnly = program !== undefined && shellReadOnly(program);
       bodyVerdict = program === undefined ? "unknown" : /\b(?:Set-Content|Add-Content|Out-File|Remove-Item|New-Item|rm|del|rmdir|rd|tee|touch|mv|cp)\b|(?:^|[^>=])>{1,2}(?!&)/i.test(program) ? "writer" : readOnly ? "readonly" : "unknown";
     }
     if (bodyVerdict === "readonly") continue;
     if (node && bodyCapable) {
-      const optionsUnknown = args.some(a => /^(?:-r|--require|--import|--input-type)(?:=|$)/.test(a ?? ""));
-      const evalAt = args.findIndex(a => /^(?:-e|-p|--eval|--print)(?:=|$)/.test(a ?? ""));
-      const inline = evalAt < 0 ? undefined : args[evalAt]?.includes("=") ? args[evalAt]!.slice(args[evalAt]!.indexOf("=") + 1) : args[evalAt + 1];
-      if (optionsUnknown) bodyVerdict = "unknown";
-      else if (evalAt >= 0) {
-        bodyVerdict = inline === undefined ? "unknown" : inspectBody(inline);
-        if (inline !== undefined && bodyVerdict === "writer") { writerRoot = writerRoots(inline); writerBodyAnchored = childBodyAnchored(inline); }
-      }
-      else {
-        const scriptAt = resolvedArgs.findIndex((v, i) => !(args[i]?.startsWith("-") ?? false));
-        const value = name === "fork" ? values[0] : resolvedArgs[scriptAt];
-        let script: string | undefined;
-        if (value !== undefined && context !== undefined) {
-          const expanded = expandSourcePath(value.expr, value.origin, value.at, classify);
-          const path = sourcePath(expanded, context);
-          script = context.readSource === undefined ? readScript(path) : path === undefined ? undefined : context.readSource(path);
-        }
-        if (script === undefined && value !== undefined) {
-          for (const write of masked.slice(0, at).matchAll(/\bwriteFile(?:Sync)?\s*\(/g)) {
-            const writeOpen = write.index + write[0].length - 1;
-            const path = extractArgRange(masked, writeOpen, 0);
-            const body = extractArgRange(masked, writeOpen, 1);
-            if (!path || !body) continue;
-            const pathValue = classify.resolveValue(masked.slice(...path), source.slice(...path), write.index);
-            if (pathValue.origin.trim() !== value.origin.trim()) continue;
-            const bodyValue = classify.resolveValue(masked.slice(...body), source.slice(...body), write.index);
-            script = childWord(bodyValue.origin);
+      // fork's first argument is already the module, never a Node option. For
+      // spawn, only recognize eval in a proven option prefix: unknown options
+      // might consume the following word, and -- or a script ends the prefix.
+      let inline: string | undefined;
+      let hasEval = false;
+      let evalEnd = -1;
+      if (name !== "fork") {
+        for (let i = 0; i < args.length; i++) {
+          const arg = args[i];
+          if (arg === undefined || arg === "--" || !arg.startsWith("-")) break;
+          if (arg === "--experimental-strip-types") continue;
+          if (/^(?:-e|-p|--eval|--print)$/.test(arg)) {
+            hasEval = true;
+            inline = args[i + 1];
+            evalEnd = i + 2;
+          } else if (/^(?:--eval|--print)=/.test(arg)) {
+            hasEval = true;
+            inline = arg.slice(arg.indexOf("=") + 1);
+            evalEnd = i + 1;
           }
+          break;
         }
-        bodyVerdict = script === undefined ? "unknown" : inspectBody(script);
-        if (script !== undefined && bodyVerdict === "writer") { writerRoot = writerRoots(script); writerBodyAnchored = childBodyAnchored(script); }
+      }
+      if (hasEval) {
+        // Node can process options after eval. Apart from a separator, allow
+        // only the complete, literal --help suffix; other options may preload code.
+        const trailing = args.slice(evalEnd);
+        const safeTrailing = trailing.length === 0 || trailing[0] === "--" || (trailing.length === 1 && trailing[0] === "--help");
+        bodyVerdict = inline === undefined || !safeTrailing ? "unknown" : inspectBody(inline);
+        if (inline !== undefined && bodyVerdict === "writer") { writerRoot = writerRoots(inline); writerBodyAnchored = childBodyAnchored(inline); }
+      } else {
+        // A source file can change before the child reads it, including through
+        // unknown calls or another process. Its current contents prove nothing.
+        bodyVerdict = "unknown";
       }
       if (bodyVerdict === "readonly") continue;
     }
     if (shell && bodyCapable && !/^(?:exec|execSync)$/.test(name)) {
-      const commandAt = args.findIndex(a => /^(?:-c|\/c|-command|--command)$/i.test(a ?? ""));
-      const body = args[commandAt + 1];
-      bodyVerdict = body === undefined ? "unknown" : /\b(?:Set-Content|Add-Content|Out-File|Remove-Item|New-Item|rm|del|rmdir|rd|tee|touch|mv|cp)\b|(?:^|[^>=])>{1,2}(?!&)/i.test(body) ? "writer" : "unknown";
+      // Do not interpret an argument as a command after a script, dynamic
+      // word, or unmodeled option. Only the first option is proven here.
+      const commandAt = /^(?:-c|\/c|-command|--command)$/i.test(args[0] ?? "") ? 0 : -1;
+      const body = commandAt < 0 ? undefined : args[commandAt + 1];
+      shellBodyAnchored = body !== undefined && /^(?:.*[\\/])?(?:bash|sh|zsh)(?:\.exe)?$/i.test(program ?? "") && shellAbsoluteTouch(body);
+      bodyVerdict = body === undefined ? "unknown" : /\b(?:Set-Content|Add-Content|Out-File|Remove-Item|New-Item|rm|del|rmdir|rd|tee|touch|mv|cp)\b|(?:^|[^>=])>{1,2}(?!&)/i.test(body) ? "writer" : shellReadOnly(body) && /^(?:.*[\\/])?(?:bash|sh|zsh)(?:\.exe)?$/i.test(program ?? "") ? "readonly" : "unknown";
+      if (bodyVerdict === "readonly") continue;
     }
     if (!destructive && !bodyCapable && bodyVerdict === undefined && !(unresolved && capable)) continue;
     let cwd: Classification | "UNBOUND" = "ANCHORED";
@@ -185,15 +192,23 @@ export function childProcessHits(source: string, masked: string, classify: Class
       if (bodyVerdict === undefined || !node) for (const [f, t] of parts) if (!reHits(/^(["'`])\s*\1$/, value.expr.slice(f, t).trim()) && localVerdict(f, t) === "ANCHORED") anchored = true;
     }
     if (bodyVerdict === "unknown" && !destructive) {
-      if (cwd !== "CLEAN") hits.push({ call: name, target: text.replace(/\s+/g, " ").trim(), classification: "UNKNOWN", approximation: true });
+      hits.push({ call: name, target: text.replace(/\s+/g, " ").trim(), classification: "UNKNOWN", approximation: true });
       continue;
     }
-    if (node && bodyVerdict === "writer" && (writerRoot === "anchored" || writerBodyAnchored || childBodyAnchored(bodies))) anchored = true;
+    // A literal script filename identifies code, not a write target. Other
+    // arguments may still contain paths used by that code.
+    const writerArguments = scriptArgument >= 0 && childWord(resolvedArgs[scriptArgument]?.origin ?? "") !== undefined ? resolvedArgs.filter((_, i) => i !== scriptArgument).map(v => v.origin).join(" ") : bodies;
+    if (node && bodyVerdict === "writer" && (writerRoot === "anchored" || writerBodyAnchored || childBodyAnchored(writerArguments))) anchored = true;
     if (node && bodyVerdict === "writer" && writerRoot === "unknown" && !anchored && cwd === "CLEAN") {
       hits.push({ call: name, target: text.replace(/\s+/g, " ").trim(), classification: "UNKNOWN", approximation: true });
       continue;
     }
-    if (bodyVerdict === "writer" && cwd === "CLEAN" && !anchored && (node ? writerRoot === "relative" : !childBodyAnchored(bodies))) continue;
+    if (shell && bodyVerdict === "writer" && shellBodyAnchored) anchored = true;
+    if (shell && bodyVerdict === "writer" && cwd === "CLEAN" && !anchored) {
+      hits.push({ call: name, target: text.replace(/\s+/g, " ").trim(), classification: "UNKNOWN", approximation: true });
+      continue;
+    }
+    if (bodyVerdict === "writer" && cwd === "CLEAN" && !anchored && node && writerRoot === "relative") continue;
     if (!destructive && !bodyCapable && cwd !== "ANCHORED") continue;
     if (bodyCapable && childBodyAnchored(text)) anchored = true;
     const classification = anchored || cwd === "ANCHORED" ? "ANCHORED" : cwd === "CLEAN" ? undefined : "UNKNOWN";
