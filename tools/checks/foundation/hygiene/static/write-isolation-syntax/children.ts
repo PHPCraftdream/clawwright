@@ -9,7 +9,7 @@ const LITERAL = /(["'`])((?:\\.|(?!\1)[^\\])*)\1/g;
 
 /** A deliberately small shell grammar: literal arguments only, no expansion or redirection. */
 function shellReadOnly(body: string): boolean {
-  return /^[ \t]*(?:echo|printf)[ \t]+[A-Za-z0-9_.,:%+\/=-]+(?:[ \t]+[A-Za-z0-9_.,:%+\/=-]+)*[ \t]*$/.test(body) && !/[\r\n]/.test(body);
+  return /^[ \t]*(?:echo|printf)[ \t]+[A-Za-z0-9_.,:%+/=-]+(?:[ \t]+[A-Za-z0-9_.,:%+/=-]+)*[ \t]*$/.test(body) && !/[\r\n]/.test(body);
 }
 
 // Only complete, literal POSIX forms: the absolute destination may escape the
