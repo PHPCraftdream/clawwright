@@ -29,8 +29,9 @@ const bridge = fileURLToPath(new URL("../../integration/mcp/progress/stdio-bridg
     await assert.rejects(() => guarded.remove(sentinel), /FIXTURE_OUTSIDE_ROOT/);
     await assert.rejects(() => guarded.writeFile(sentinel, "changed"), /FIXTURE_OUTSIDE_ROOT/);
     assert.equal(await readFile(sentinel, "utf8"), "unchanged");
-    await assert.rejects(() => guarded.mkdirp(join(outside, "new")), /FIXTURE_OUTSIDE_ROOT/);
-    await assert.rejects(() => stat(join(outside!, "new")), { code: "ENOENT" });
+    const outsideNew = join(outside, "new");
+    await assert.rejects(() => guarded.mkdirp(outsideNew), /FIXTURE_OUTSIDE_ROOT/);
+    await assert.rejects(() => stat(outsideNew), { code: "ENOENT" });
     await requires("symlink", "fixture transport refuses symlink mutations", async () => {
       await mkdir(join(root, "real-dir"));
       await writeFile(join(root, "real-dir", "sentinel"), "unchanged");
@@ -107,7 +108,20 @@ else if (args[0] === 'exec' || args.includes('run')) {
       await assert.rejects(() => stat(join(outside!, "shim-new")), { code: "ENOENT" });
     });
     // Exercise the real sweep through the same isolated transport and generated mkdir shim.
-    const settings = { dataDir: join(root, "sweep-data"), env: { TOKEN: "fixture-token" } } as Settings;
+    const settings: Settings = {
+      dataDir: join(root, "sweep-data"),
+      env: { TOKEN: "fixture-token" },
+      backupDir: join(root, "backups"),
+      snapshotDir: join(root, "snapshots"),
+      bindAddress: "127.0.0.1",
+      gatewayPort: "18789",
+      serviceUrl: "http://127.0.0.1:18789",
+      image: "example.invalid/fixture:unused",
+      location: "local",
+      wslDistro: "",
+      sshHost: "",
+      remotePath: root,
+    };
     const locks = join(root, "sweep-data-locks");
     const stale = join(locks, "compose-deaddead");
     const foreign = join(locks, "compose-f0e1cafe");
@@ -137,7 +151,7 @@ else if (args[0] === 'exec' || args.includes('run')) {
     await assert.rejects(() => stat(activeDirectory), { code: "ENOENT" });
     assert.equal(await readFile(join(foreign, "compose.env"), "utf8"), "foreign");
     await requires("symlink", "stale sweep refuses a discovered directory replaced by an escaping symlink", async () => {
-      const sweepSettings = { dataDir: join(root, "link-sweep-data"), env: { TOKEN: "fixture-token" } } as Settings;
+      const sweepSettings: Settings = { ...settings, dataDir: join(root, "link-sweep-data") };
       const linkLocks = join(root, "link-sweep-data-locks");
       const candidate = join(linkLocks, "compose-abcd1234");
       const displaced = join(root, "displaced-stale");
