@@ -37,6 +37,12 @@ export const DIGEST = `ghcr.io/openclaw/openclaw@sha256:${"3".repeat(64)}`;
 /** Writes the example deployment and selects it. Pair with removeBuildDeployment(). */
 export async function createBuildDeployment(): Promise<string> {
   const deployment = await mkdtemp(join(tmpdir(), "clawwright-set-build-check-"));
+  await populateBuildDeployment(deployment);
+  return deployment;
+}
+
+/** Populate and select a caller-owned temporary deployment. */
+export async function populateBuildDeployment(deployment: string): Promise<void> {
   await mkdir(resolve(deployment, "config"), { recursive: true });
   await mkdir(resolve(deployment, "recipes", "demo", "agent"), { recursive: true });
   await mkdir(resolve(deployment, "recipes", "demo", "data"), { recursive: true });
@@ -89,7 +95,6 @@ export async function createBuildDeployment(): Promise<string> {
   await writeFile(resolve(deployment, "recipes", "plain", "compose.yml"), "services: {}\n");
 
   useDeployment(deployment);
-  return deployment;
 }
 
 export async function removeBuildDeployment(deployment: string): Promise<void> {
