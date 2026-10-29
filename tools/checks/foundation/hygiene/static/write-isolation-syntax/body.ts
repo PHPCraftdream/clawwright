@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tokensOf } from "../../../../architecture/prose-held.ts";
 import { analyzeCalleeSyntax } from "./index.ts";
@@ -70,8 +70,19 @@ export function inspectBody(body: string): BodyVerdict {
   if (tokens.some((token, i) => token.kind === "id" && writers.has(token.text.replace(/Sync$/, "")) && tokens[i + 1]?.text === "(")) return "writer";
   if (syntax.diagnostics.length > 0) return "unknown";
   if (/\b(?:eval|Function|require|import|spawn|spawnSync|exec|execSync|execFile|execFileSync|runProcess|open|openSync)\b/.test(code)) return "unknown";
-  const calls = [...code.matchAll(/([\w$]+)\s*\(/g)].map(m => m[1]);
-  return calls.every(name => /^(?:log|error|write|exit|readFile|readFileSync|readdir|readdirSync|stat|statSync|lstat|lstatSync|access|accessSync|existsSync|realpath|realpathSync|resolve|join|dirname|fileURLToPath|JSON|parse|stringify|String|Number|repeat|toString)$/.test(name)) ? "readonly" : "unknown";
+  // Method names are not effect proofs: arbitrary receivers can implement log,
+  // readFile, write, etc., and imports may execute code before the entrypoint.
+  // Accept only a closed sequence of literal-output/exit statements; everything
+  // else, including module loading and dynamically constructed calls, is unknown.
+  const literal = String.raw`(?:'(?:[^'\\\r\n]|\\['\\])*'|"(?:[^"\\\r\n]|\\["\\])*"|[0-9]+)`;
+  const statement = new RegExp(String.raw`^\s*(?:console\.(?:log|error)|process\.exit|process\.(?:stdout|stderr)\.write)\s*\(\s*(?:${literal}(?:\s*,\s*${literal})*)?\s*\)\s*;?`);
+  let remaining = syntax.source;
+  while (remaining.trim() !== "") {
+    const match = statement.exec(remaining);
+    if (!match || match[0].trim() === "") return "unknown";
+    remaining = remaining.slice(match[0].length);
+  }
+  return "readonly";
 }
 export function sourcePath(origin: string, context: SourceContext): string | undefined {
   origin = origin.trim();
@@ -99,8 +110,8 @@ export function sourcePath(origin: string, context: SourceContext): string | und
   const base=sourcePath(parts[0],context); if(!base)return undefined;
   if(call[1]==="dirname")return dirname(base);
   if(call[1]==="fileURLToPath")return base;
-  const tail=parts.slice(1).map(p=>/^(["'`])([^"'`]*?)\1$/.exec(p.trim())?.[2]);
-  return tail.every((p):p is string=>p!==undefined) ? resolve(base,...tail) : undefined;
+  const tail=parts.slice(1).map(p=>/^("|'|`)([^"'`]*?)\1$/.exec(p.trim())?.[2]);
+  return tail.every((p):p is string=>p!==undefined && !p.includes("\\") && !p.includes("${")) ? (call[1] === "join" ? join(base,...tail) : resolve(base,...tail)) : undefined;
 }
 export function readScript(path: string | undefined): string | undefined {
   if(path===undefined)return undefined;

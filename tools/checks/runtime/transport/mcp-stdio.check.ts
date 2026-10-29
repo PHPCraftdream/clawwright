@@ -2,52 +2,67 @@
 // Docker is replaced by an executable shim, never by a ready-made ExecResult.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile, rm, symlink, readFile, stat, rename, lstat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DockerRuntime } from "#framework/runtime/docker/runtime-docker.ts";
-import { LocalTransport, type ExecOptions } from "#framework/runtime/transport/transport.ts";
-import { mcpServe } from "#framework/commands/management/configuration/credentials/mcp.ts";
-import { useDeployment } from "#framework/runtime/deployment.ts";
-import { monorepoRoot, type Settings } from "#framework/core/env.ts";
-import { withOutputSink } from "#framework/core/io/output.ts";
+import { ShimTransport } from "#checks/integration/mcp/progress/shim-transport.ts";
+import { check, finish, requires, typeAssert } from "#checks/kit/harness.ts";
+import { fixtureMutationTarget } from "#checks/integration/mcp/progress/fixture-mutation.ts";
+import { runProcess } from "#checks/kit/spawn.ts";
+import { ComposeOperations } from "#framework/runtime/docker/compose-operations.ts";
+import { type Settings } from "#framework/core/env.ts";
+import { machineName, platformProbes } from "#framework/runtime/lock/process-identity.ts";
 import type { PathBridge } from "#framework/core/paths.ts";
-import { check, finish, typeAssert } from "#checks/kit/harness.ts";
 
-const self = fileURLToPath(import.meta.url);
-const mode = process.argv[2];
-if (mode === "--bridge") {
-  const [shim, root, branch] = process.argv.slice(3);
-  useDeployment(resolve(monorepoRoot, "apps", "example app"));
-  class ShimTransport extends LocalTransport {
-    override exec(command: string, args: string[], options: ExecOptions = {}) {
-      return super.exec(process.execPath, [shim, branch, command, ...args], options);
-    }
-  }
-  const transport = new ShimTransport();
-  const settings = {
-    env: {}, dataDir: join(root, "data"), serviceUrl: "http://shim",
-  } as Settings;
-  const paths = { toTarget: async (path: string) => path } as PathBridge;
-  const runtime = new DockerRuntime(transport, settings, paths, { service: "gateway" });
-  // A progress sink must not intercept protocol bytes or merge stderr into stdout.
-  await withOutputSink(() => { throw new Error("protocol reached progress sink"); }, async () => {
-    if (branch === "finite") {
-      const result = await transport.exec("finite", [], { input: "" });
-      assert.deepEqual(result, { code: 0, stdout: "finite-eof", stderr: "" });
-    } else {
-      await mcpServe({ runtime, settings, transport, paths }, []);
-    }
-  });
-} else {
+const bridge = fileURLToPath(new URL("../../integration/mcp/progress/stdio-bridge.ts", import.meta.url));
   const root = await mkdtemp(join(tmpdir(), "clawwright-mcp-stdio-"));
   const shim = join(root, "docker-shim.mjs");
-  await writeFile(shim, `
-import { mkdirSync } from 'node:fs';
+  let outside: string | undefined;
+  try {
+    outside = await mkdtemp(join(tmpdir(), "clawwright-mcp-outside-"));
+    const sentinel = join(outside, "sentinel");
+    await writeFile(join(outside, "sentinel"), "unchanged");
+    await assert.rejects(() => fixtureMutationTarget(root, sentinel), /outside root/);
+    // Exercise the same overrides used by the bridge, including the cleanup operation.
+    const guarded = new ShimTransport(root, shim, "guard");
+    await assert.rejects(() => guarded.remove(sentinel), /outside root/);
+    await assert.rejects(() => guarded.writeFile(sentinel, "changed"), /outside root/);
+    assert.equal(await readFile(sentinel, "utf8"), "unchanged");
+    await assert.rejects(() => guarded.mkdirp(join(outside, "new")), /outside root/);
+    await requires("symlink", "fixture transport refuses symlink mutations", async () => {
+      await mkdir(join(root, "real-dir"));
+      await writeFile(join(root, "real-dir", "sentinel"), "unchanged");
+      await symlink(join(root, "real-dir"), join(root, "alias"), process.platform === "win32" ? "junction" : "dir");
+      await symlink(outside!, join(root, "escape"), process.platform === "win32" ? "junction" : "dir");
+      await symlink(join(outside!, "missing"), join(root, "dangling"), "file");
+      for (const path of [join(root, "escape", "sentinel"), join(root, "escape", "new"), join(root, "alias", "sentinel"), join(root, "alias", "new"), join(root, "dangling")]) {
+        await assert.rejects(() => guarded.remove(path), /symlink/);
+        await assert.rejects(() => guarded.mkdirp(path), /symlink/);
+        await assert.rejects(() => guarded.writeFile(path, "changed"), /symlink/);
+      }
+      assert.equal(await readFile(join(root, "real-dir", "sentinel"), "utf8"), "unchanged");
+      assert.equal(await readFile(sentinel, "utf8"), "unchanged");
+    });
+    await writeFile(shim, `
+import { lstatSync, mkdirSync, realpathSync } from 'node:fs';
+import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
-const [branch, command, ...args] = process.argv.slice(2);
-if (command === 'mkdir') mkdirSync(args.at(-1), { recursive: true, mode: 0o700 });
+const [root, branch, command, ...args] = process.argv.slice(2);
+function fixtureTarget(path) {
+  const base = realpathSync(root);
+  const target = resolve(base, relative(resolve(root), resolve(path)));
+  const inside = p => { const r = relative(base, p); return r !== '' && r !== '..' && !r.startsWith('../') && !r.startsWith('..\\\\') && !isAbsolute(r); };
+  if (!inside(target)) throw new Error('fixture mkdir outside root');
+  let parent = target;
+  while (parent !== base) {
+    try { const info = lstatSync(parent); if (info.isSymbolicLink()) throw new Error('fixture mkdir through symlink'); const actual = realpathSync(parent); if (actual !== base && !inside(actual)) throw new Error('fixture mkdir through outside parent'); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    parent = dirname(parent);
+  }
+  return target;
+}
+if (command === 'mkdir') mkdirSync(fixtureTarget(args.at(-1)), { recursive: true, mode: 0o700 });
 else if (command === 'finite') {
   process.stdin.resume(); process.stdin.on('end', () => process.stdout.write('finite-eof'));
 } else if (command === 'curl') process.stdout.write('200');
@@ -66,10 +81,116 @@ else if (args[0] === 'exec' || args.includes('run')) {
   });
 } else process.exit(23);
 `);
-  try {
+    const invokeShim = (target: string) => runProcess(process.execPath, [shim, root, "guard", "mkdir", target], { cwd: root, timeoutMs: 60000 });
+    const refused = await invokeShim(join(outside, "shim-new"));
+    if (refused.error !== undefined) throw refused.error;
+    assert.notEqual(refused.code, 0);
+    assert.match(refused.stderr, /fixture mkdir outside root/);
+    await assert.rejects(() => stat(join(outside!, "shim-new")), { code: "ENOENT" });
+    assert.equal(await readFile(sentinel, "utf8"), "unchanged");
+    const inside = join(root, "shim-positive", "nested");
+    const accepted = await invokeShim(inside);
+    if (accepted.error !== undefined) throw accepted.error;
+    assert.equal(accepted.code, 0, accepted.stderr);
+    assert.equal((await stat(inside)).isDirectory(), true);
+    await requires("symlink", "stdio shim refuses symlink ancestor", async () => {
+      const alias = await invokeShim(join(root, "alias", "shim-new"));
+      if (alias.error !== undefined) throw alias.error;
+      assert.notEqual(alias.code, 0);
+      assert.match(alias.stderr, /fixture mkdir through symlink/);
+      await assert.rejects(() => stat(join(root, "real-dir", "shim-new")), { code: "ENOENT" });
+      const escaped = await invokeShim(join(root, "escape", "shim-new"));
+      if (escaped.error !== undefined) throw escaped.error;
+      assert.notEqual(escaped.code, 0);
+      assert.match(escaped.stderr, /fixture mkdir through symlink/);
+      await assert.rejects(() => stat(join(outside!, "shim-new")), { code: "ENOENT" });
+    });
+    // Exercise the real sweep through the same isolated transport and generated mkdir shim.
+    const settings = { dataDir: join(root, "sweep-data"), env: { TOKEN: "fixture-token" } } as Settings;
+    const locks = join(root, "sweep-data-locks");
+    const stale = join(locks, "compose-deaddead");
+    const foreign = join(locks, "compose-f0e1cafe");
+    await mkdir(stale, { recursive: true });
+    await mkdir(foreign);
+    await writeFile(join(stale, "owner.json"), JSON.stringify({ pid: process.pid, machine: machineName(), startedAt: "1970-01-01T00:00:00.000Z" }));
+    await writeFile(join(stale, "compose.env"), "stale");
+    await writeFile(join(foreign, "owner.json"), JSON.stringify({ pid: process.pid, machine: `${machineName()}-elsewhere` }));
+    await writeFile(join(foreign, "compose.env"), "foreign");
+    const paths = { toTarget: async (path: string) => path } as PathBridge;
+    const compose = new ComposeOperations(guarded, () => settings, () => {}, paths, "gateway", "100", undefined);
+    let activeDirectory = "";
+    const originalStartedAt = platformProbes.processStartedAt;
+    try {
+      // A live PID with a different recorded start time is provably a reused PID.
+      platformProbes.processStartedAt = async () => "2020-01-01T00:00:00.000Z";
+      await compose.withEnvFile(async (path) => {
+        activeDirectory = join(path, "..");
+        await assert.rejects(() => stat(stale), { code: "ENOENT" });
+        assert.equal(await readFile(join(foreign, "compose.env"), "utf8"), "foreign");
+        assert.match(await readFile(path, "utf8"), /fixture-token/);
+      });
+    } finally {
+      platformProbes.processStartedAt = originalStartedAt;
+    }
+    assert.notEqual(activeDirectory, "");
+    await assert.rejects(() => stat(activeDirectory), { code: "ENOENT" });
+    assert.equal(await readFile(join(foreign, "compose.env"), "utf8"), "foreign");
+    await requires("symlink", "stale sweep refuses a discovered directory replaced by an escaping symlink", async () => {
+      const sweepSettings = { dataDir: join(root, "link-sweep-data"), env: { TOKEN: "fixture-token" } } as Settings;
+      const linkLocks = join(root, "link-sweep-data-locks");
+      const candidate = join(linkLocks, "compose-abcd1234");
+      const displaced = join(root, "displaced-stale");
+      const owner = JSON.stringify({ pid: process.pid, machine: machineName(), startedAt: "1970-01-01T00:00:00.000Z" });
+      await mkdir(candidate, { recursive: true });
+      await writeFile(join(candidate, "owner.json"), owner);
+      await writeFile(join(outside!, "owner.json"), owner);
+      let swapped = false;
+      let refusedRemoval = false;
+      class SwapTransport extends ShimTransport {
+        override async readFile(path: string): Promise<string> {
+          if (path === `${linkLocks}/compose-abcd1234/owner.json`) {
+            // listFiles only returns files, not symlink directories. Swap after discovery,
+            // before the real sweep reads the owner and attempts its best-effort removal.
+            await rename(candidate, displaced);
+            await symlink(outside!, candidate, process.platform === "win32" ? "junction" : "dir");
+            swapped = true;
+          }
+          return super.readFile(path);
+        }
+        override async remove(path: string): Promise<void> {
+          if (path === `${linkLocks}/compose-abcd1234`) {
+            try {
+              await super.remove(path);
+            } catch (error) {
+              assert.match((error as Error).message, /symlink/);
+              refusedRemoval = true;
+              throw error;
+            }
+            assert.fail("sweep removed the escaping symlink");
+          }
+          return super.remove(path);
+        }
+      }
+      const linkCompose = new ComposeOperations(new SwapTransport(root, shim, "guard"), () => sweepSettings, () => {}, paths, "gateway", "100", undefined);
+      const previousProbe = platformProbes.processStartedAt;
+      try {
+        platformProbes.processStartedAt = async () => "2020-01-01T00:00:00.000Z";
+        await linkCompose.withEnvFile(async (path) => {
+          assert.equal(swapped, true);
+          assert.equal(refusedRemoval, true);
+          assert.match(await readFile(path, "utf8"), /fixture-token/);
+        });
+      } finally {
+        platformProbes.processStartedAt = previousProbe;
+      }
+      assert.equal((await lstat(candidate)).isSymbolicLink(), true);
+      assert.equal(await readFile(join(outside!, "owner.json"), "utf8"), owner);
+      assert.equal(await readFile(sentinel, "utf8"), "unchanged");
+      assert.equal(await readFile(join(displaced, "owner.json"), "utf8"), owner);
+    });
     for (const branch of ["helper", "fallback"]) {
       for (const ending of ["client-eof", "child-close"]) {
-        const child = spawn(process.execPath, ["--experimental-strip-types", self, "--bridge", shim, root, branch], {
+        const child = spawn(process.execPath, ["--experimental-strip-types", bridge, shim, root, branch], {
           cwd: root, stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, OC_DEBUG: "0" },
         });
         const chunks: Buffer[] = [];
@@ -122,7 +243,7 @@ else if (args[0] === 'exec' || args.includes('run')) {
       }
     }
     // An open client pipe must not prevent finite explicit input from closing promptly.
-    const finite = spawn(process.execPath, ["--experimental-strip-types", self, "--bridge", shim, root, "finite"], { cwd: root, stdio: ["pipe", "pipe", "pipe"] });
+    const finite = spawn(process.execPath, ["--experimental-strip-types", bridge, shim, root, "finite"], { cwd: root, stdio: ["pipe", "pipe", "pipe"] });
     let finiteStderr = "";
     finite.stderr.on("data", chunk => { finiteStderr += chunk; });
     const deadline = setTimeout(() => finite.kill(), 60000);
@@ -137,7 +258,10 @@ else if (args[0] === 'exec' || args.includes('run')) {
       clearTimeout(deadline); finite.kill(); finite.stdin.destroy();
     }
   } finally {
-    await rm(root, { recursive: true, force: true });
+    try {
+      await rm(root, { recursive: true, force: true });
+    } finally {
+      if (outside !== undefined) await rm(outside, { recursive: true, force: true });
+    }
   }
   finish("MCP stdio");
-}

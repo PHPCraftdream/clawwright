@@ -301,10 +301,7 @@ export function childBodyCapable(program: string | undefined, programExpr: strin
     if (args.length === 1 && /^(?:--version|-v|--help|-h)$/.test(args[0] ?? "")) return false;
     return true;
   }
-  if (shell && args.some(a => /^(?:-c|\/c|-command|-file|--command)$/i.test(a ?? ""))) {
-    if (/^\s*(?:echo|printf|Write-Output)\s+[^;&|<>]+\s*$/i.test(body)) return false;
-    return true;
-  }
+  if (shell && args.some(a => /^(?:-c|\/c|-command|-file|--command)$/i.test(a ?? ""))) return true;
   return node && /\b(?:writeFile|appendFile|createWriteStream|unlink|rm|rmdir|truncate|mkdir|rename|chmod|chown|copyFile|cp|symlink|link)(?:Sync)?\b/.test(body)
     || shell && /\b(?:Set-Content|Add-Content|Out-File|Remove-Item|New-Item|rm|del|rmdir|rd|tee|touch)\b|(?:^|[^>=])>{1,2}(?!&)/i.test(body);
 }
