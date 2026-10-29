@@ -3,7 +3,7 @@ import { tokensOf } from "../../../../architecture/prose-held.ts";
 
 type Value = { name: string; derived?: boolean; bound?: string[]; unknown?: boolean; namespace?: boolean; promisify?: boolean };
 type Binding = { name: string; from: number; to: number; at: number; scope: number; value?: Value };
-const READS = new Set("readFile readFileSync readdir readdirSync stat statSync lstat lstatSync fstat fstatSync access accessSync existsSync realpath realpathSync readlink readlinkSync watch watchFile unwatchFile opendir opendirSync constants".split(" "));
+const READS = new Set("read readSync readv readvSync readFile readFileSync readdir readdirSync stat statSync lstat lstatSync fstat fstatSync access accessSync existsSync realpath realpathSync readlink readlinkSync watch watchFile unwatchFile opendir opendirSync constants".split(" "));
 const WRITES = new Set("writeFile appendFile mkdir mkdtemp rm rmdir unlink truncate createWriteStream utimes lutimes chmod lchmod chown lchown open cp copyFile symlink link rename".split(" "));
 
 export type SyntaxDiagnostic = { call: string; target: string; at: number; classification: "UNKNOWN"; approximation: true };

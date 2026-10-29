@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, writeFile, rm, symlink, readFile, stat, rename, lstat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ShimTransport } from "#checks/integration/mcp/progress/shim-transport.ts";
 import { check, finish, requires, typeAssert } from "#checks/kit/harness.ts";
@@ -23,23 +23,24 @@ const bridge = fileURLToPath(new URL("../../integration/mcp/progress/stdio-bridg
     outside = await mkdtemp(join(tmpdir(), "clawwright-mcp-outside-"));
     const sentinel = join(outside, "sentinel");
     await writeFile(join(outside, "sentinel"), "unchanged");
-    await assert.rejects(() => fixtureMutationTarget(root, sentinel), /outside root/);
+    await assert.rejects(() => fixtureMutationTarget(root, sentinel), /FIXTURE_OUTSIDE_ROOT/);
     // Exercise the same overrides used by the bridge, including the cleanup operation.
     const guarded = new ShimTransport(root, shim, "guard");
-    await assert.rejects(() => guarded.remove(sentinel), /outside root/);
-    await assert.rejects(() => guarded.writeFile(sentinel, "changed"), /outside root/);
+    await assert.rejects(() => guarded.remove(sentinel), /FIXTURE_OUTSIDE_ROOT/);
+    await assert.rejects(() => guarded.writeFile(sentinel, "changed"), /FIXTURE_OUTSIDE_ROOT/);
     assert.equal(await readFile(sentinel, "utf8"), "unchanged");
-    await assert.rejects(() => guarded.mkdirp(join(outside, "new")), /outside root/);
+    await assert.rejects(() => guarded.mkdirp(join(outside, "new")), /FIXTURE_OUTSIDE_ROOT/);
+    await assert.rejects(() => stat(join(outside!, "new")), { code: "ENOENT" });
     await requires("symlink", "fixture transport refuses symlink mutations", async () => {
       await mkdir(join(root, "real-dir"));
       await writeFile(join(root, "real-dir", "sentinel"), "unchanged");
-      await symlink(join(root, "real-dir"), join(root, "alias"), process.platform === "win32" ? "junction" : "dir");
-      await symlink(outside!, join(root, "escape"), process.platform === "win32" ? "junction" : "dir");
+      await symlink(join(root, "real-dir"), join(root, "alias"), "junction");
+      await symlink(outside!, join(root, "escape"), "junction");
       await symlink(join(outside!, "missing"), join(root, "dangling"), "file");
       for (const path of [join(root, "escape", "sentinel"), join(root, "escape", "new"), join(root, "alias", "sentinel"), join(root, "alias", "new"), join(root, "dangling")]) {
-        await assert.rejects(() => guarded.remove(path), /symlink/);
-        await assert.rejects(() => guarded.mkdirp(path), /symlink/);
-        await assert.rejects(() => guarded.writeFile(path, "changed"), /symlink/);
+        await assert.rejects(() => guarded.remove(path), /\bFIXTURE_(?:OUTSIDE_)?SYMLINK\b/);
+        await assert.rejects(() => guarded.mkdirp(path), /\bFIXTURE_(?:OUTSIDE_)?SYMLINK\b/);
+        await assert.rejects(() => guarded.writeFile(path, "changed"), /\bFIXTURE_(?:OUTSIDE_)?SYMLINK\b/);
       }
       assert.equal(await readFile(join(root, "real-dir", "sentinel"), "utf8"), "unchanged");
       assert.equal(await readFile(sentinel, "utf8"), "unchanged");
@@ -53,10 +54,10 @@ function fixtureTarget(path) {
   const base = realpathSync(root);
   const target = resolve(base, relative(resolve(root), resolve(path)));
   const inside = p => { const r = relative(base, p); return r !== '' && r !== '..' && !r.startsWith('../') && !r.startsWith('..\\\\') && !isAbsolute(r); };
-  if (!inside(target)) throw new Error('fixture mkdir outside root');
+  if (!inside(target)) throw new Error('FIXTURE_OUTSIDE_ROOT');
   let parent = target;
   while (parent !== base) {
-    try { const info = lstatSync(parent); if (info.isSymbolicLink()) throw new Error('fixture mkdir through symlink'); const actual = realpathSync(parent); if (actual !== base && !inside(actual)) throw new Error('fixture mkdir through outside parent'); }
+    try { const info = lstatSync(parent); if (info.isSymbolicLink()) throw new Error('FIXTURE_SYMLINK'); const actual = realpathSync(parent); if (actual !== base && !inside(actual)) throw new Error('FIXTURE_OUTSIDE_SYMLINK'); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
     parent = dirname(parent);
   }
@@ -85,7 +86,7 @@ else if (args[0] === 'exec' || args.includes('run')) {
     const refused = await invokeShim(join(outside, "shim-new"));
     if (refused.error !== undefined) throw refused.error;
     assert.notEqual(refused.code, 0);
-    assert.match(refused.stderr, /fixture mkdir outside root/);
+    assert.match(refused.stderr, /FIXTURE_OUTSIDE_ROOT/);
     await assert.rejects(() => stat(join(outside!, "shim-new")), { code: "ENOENT" });
     assert.equal(await readFile(sentinel, "utf8"), "unchanged");
     const inside = join(root, "shim-positive", "nested");
@@ -97,12 +98,12 @@ else if (args[0] === 'exec' || args.includes('run')) {
       const alias = await invokeShim(join(root, "alias", "shim-new"));
       if (alias.error !== undefined) throw alias.error;
       assert.notEqual(alias.code, 0);
-      assert.match(alias.stderr, /fixture mkdir through symlink/);
+      assert.match(alias.stderr, /\bFIXTURE_(?:OUTSIDE_)?SYMLINK\b/);
       await assert.rejects(() => stat(join(root, "real-dir", "shim-new")), { code: "ENOENT" });
       const escaped = await invokeShim(join(root, "escape", "shim-new"));
       if (escaped.error !== undefined) throw escaped.error;
       assert.notEqual(escaped.code, 0);
-      assert.match(escaped.stderr, /fixture mkdir through symlink/);
+      assert.match(escaped.stderr, /\bFIXTURE_(?:OUTSIDE_)?SYMLINK\b/);
       await assert.rejects(() => stat(join(outside!, "shim-new")), { code: "ENOENT" });
     });
     // Exercise the real sweep through the same isolated transport and generated mkdir shim.
@@ -148,25 +149,25 @@ else if (args[0] === 'exec' || args.includes('run')) {
       let refusedRemoval = false;
       class SwapTransport extends ShimTransport {
         override async readFile(path: string): Promise<string> {
-          if (path === `${linkLocks}/compose-abcd1234/owner.json`) {
+          if (resolve(path) === join(candidate, "owner.json")) {
             // listFiles only returns files, not symlink directories. Swap after discovery,
             // before the real sweep reads the owner and attempts its best-effort removal.
             await rename(candidate, displaced);
-            await symlink(outside!, candidate, process.platform === "win32" ? "junction" : "dir");
+            await symlink(outside!, candidate, "junction");
             swapped = true;
           }
           return super.readFile(path);
         }
         override async remove(path: string): Promise<void> {
-          if (path === `${linkLocks}/compose-abcd1234`) {
+          if (resolve(path) === candidate) {
             try {
               await super.remove(path);
             } catch (error) {
-              assert.match((error as Error).message, /symlink/);
+              assert.match((error as Error).message, /\bFIXTURE_(?:OUTSIDE_)?SYMLINK\b/);
               refusedRemoval = true;
               throw error;
             }
-            assert.fail("sweep removed the escaping symlink");
+            assert.fail("FIXTURE_SWEEP_REMOVED_LINK");
           }
           return super.remove(path);
         }

@@ -390,9 +390,14 @@ for (const [name, source, expected] of [
   ["unknown shell body in temporary cwd", `spawnSync('sh',['-c',payload],{cwd:tmpdir()});`, "UNKNOWN"],
   ["literal shell read only", `spawnSync('sh',['-c','printf hello'],{cwd:tmpdir()});`, "CLEAN"],
   ["shell substitution is not read only", `spawnSync('sh',['-c','echo $(touch /workspace/file)'],{cwd:tmpdir()});`, "ANCHORED"],
+  ["absolute touch without substitution", `spawnSync('sh',['-c','touch /elsewhere/file'],{cwd:tmpdir()});`, "ANCHORED"],
+  ["dynamic absolute touch stays unknown", `spawnSync('sh',['-c','touch /workspace/$TARGET'],{cwd:tmpdir()});`, "UNKNOWN"],
+  ["quoted touch text is not an absolute writer proof", `spawnSync('sh',['-c',"echo 'touch /workspace/file'"],{cwd:tmpdir()});`, "UNKNOWN"],
   ["unknown shell substitution", `spawnSync('sh',['-c','echo $(external)'],{cwd:tmpdir()});`, "UNKNOWN"],
   ["shell dynamic writer target", `spawnSync('sh',['-c','touch $TARGET'],{cwd:tmpdir()});`, "UNKNOWN"],
   ["quoted shell words stay conservative", `spawnSync('sh',['-c',"echo 'safe'"],{cwd:tmpdir()});`, "UNKNOWN"],
+  ["quoted shell substitution remains unknown", `spawnSync('sh',['-c',"echo '$(external)'"],{cwd:tmpdir()});`, "UNKNOWN"],
+  ["double quoted shell substitution remains unknown", `spawnSync('sh',['-c','echo "$(external)"'],{cwd:tmpdir()});`, "UNKNOWN"],
   ["shell backtick substitution stays unknown", `spawnSync('sh',['-c','echo \`external\`'],{cwd:tmpdir()});`, "UNKNOWN"],
   ["shell variable printf", `spawnSync('bash',['-c','printf -v result value'],{cwd:tmpdir()});`, "CLEAN"],
   ["R3 Node isolated", `spawnSync(process.execPath,['-e',"require('node:fs').writeFileSync('notes','x')"],{cwd:tmpdir()});`, "CLEAN"],
@@ -574,17 +579,45 @@ for (const [name, source] of [
 for (const [name, args, expected] of [
   ["eval separator help", `['-e',"require('node:fs').writeFileSync('notes','x')",'--','--help']`, "ANCHORED"],
   ["attached eval", `['--eval=require(\\'node:fs\\').writeFileSync(\\'notes\\',\\'x\\')','--help']`, "ANCHORED"],
+  ["attached eval help then preload", `['--eval=require(\\'node:fs\\').writeFileSync(\\'notes\\',\\'x\\')','--help','--require','preload.cjs']`, "UNKNOWN"],
+  ["attached eval help then dynamic", `['--eval=require(\\'node:fs\\').writeFileSync(\\'notes\\',\\'x\\')','--help',option]`, "UNKNOWN"],
   ["attached print", `['--print=require(\\'node:fs\\').unlinkSync(\\'notes\\')']`, "ANCHORED"],
+  ["eval then require", `['-e',"console.log('read')",'--require','preload.cjs']`, "UNKNOWN"],
+  ["eval then attached import", `['--eval=console.log(1)','--import=preload.mjs']`, "UNKNOWN"],
+  ["eval then dynamic option", `['-e',"console.log('read')",option]`, "UNKNOWN"],
+  ["eval separator read", `['-e',"console.log('read')",'--','--require','preload.cjs']`, "CLEAN"],
   ["preload", `['--require','missing.cjs','-e',"console.log('read')"]`, "UNKNOWN"],
   ["attached preload", `['--require=missing.cjs','-e',"console.log('read')"]`, "UNKNOWN"],
   ["import preload", `['--import=missing.mjs','--help']`, "UNKNOWN"],
   ["input type", `['--input-type=module','-e',"console.log('read')"]`, "UNKNOWN"],
   ["script help", `['missing.mjs','--help']`, "UNKNOWN"],
+  ["script before eval", `['missing.mjs','-e',"console.log('read')"]`, "UNKNOWN"],
+  ["separator before eval", `['--','-e',"console.log('read')"]`, "UNKNOWN"],
+  ["unknown option operand before eval", `['--loader','-e',"console.log('read')"]`, "UNKNOWN"],
+  ["dynamic prefix before eval", `[option,'-e',"console.log('read')"]`, "UNKNOWN"],
+  ["spread prefix before eval", `[...options,'-e',"console.log('read')"]`, "UNKNOWN"],
+  ["strip types before eval", `['--experimental-strip-types','-e',"console.log('read')"]`, "CLEAN"],
   ["version", `['--version']`, "CLEAN"],
   ["v", `['-v']`, "CLEAN"],
   ["help", `['--help']`, "CLEAN"],
   ["h", `['-h']`, "CLEAN"],
 ] as const) check(`R3 Node argv: ${name}`, analyze(`spawnSync('node',${args},{cwd:monorepoRoot});`).writes.map(h => h.classification), expected === "CLEAN" ? [] : [expected]);
+
+for (const [name, args] of [
+  ["script", `['script.sh','-c','echo safe']`],
+  ["dynamic", `[option,'-c','echo safe']`],
+  ["unknown option", `['--unknown','-c','echo safe']`],
+  ["separator", `['--','-c','echo safe']`],
+] as const) check(`R3 shell argv: ${name} before command`, analyze(`spawnSync('sh',${args},{cwd:tmpdir()});`).writes.map(h => h.classification), ["UNKNOWN"]);
+
+for (const source of [
+  `fork('writer.mjs',['-e',"console.log('read')"],{cwd:tmpdir()});`,
+  `fork('writer.mjs',['--eval=console.log(1)'],{cwd:tmpdir()});`,
+]) check("R3 Node argv: fork arguments are not Node options", analyze(source).writes.map(h => h.classification), ["UNKNOWN"]);
+for (const name of ["read", "readSync", "readv", "readvSync"]) {
+  check(`R3 fs descriptor read: ${name}`, analyze(`import * as fs from 'node:fs'; fs.${name}(fd, buffer, 0, 1, 0);`).writes, []);
+}
+check("R3 fs descriptor write remains unknown", analyze(`import * as fs from 'node:fs'; fs.writeSync(fd, buffer, 0, 1);`).writes.map(h => h.classification), ["UNKNOWN"]);
 
 for (const [name, source] of [
   ["shadow fs escape", "const other={}; const fs=other; import {writeFile} from 'node:fs'; external(writeFile);"],

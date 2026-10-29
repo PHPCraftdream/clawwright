@@ -29,9 +29,9 @@ if (argv[0] === "--fixture-guard-probe") {
   const outside = argv[1]!;
   const transport = new LocalTransport();
   const sentinel = join(outside, "sentinel");
-  await assert.rejects(() => transport.mkdirp(join(outside, "new")), /fixture mutation outside root/);
-  await assert.rejects(() => transport.writeFile(sentinel, "changed"), /fixture mutation outside root/);
-  await assert.rejects(() => transport.remove(sentinel), /fixture mutation outside root/);
+  await assert.rejects(() => transport.mkdirp(join(outside, "new")), { code: "FIXTURE_OUTSIDE_ROOT" });
+  await assert.rejects(() => transport.writeFile(sentinel, "changed"), { code: "FIXTURE_OUTSIDE_ROOT" });
+  await assert.rejects(() => transport.remove(sentinel), { code: "FIXTURE_OUTSIDE_ROOT" });
   await assert.rejects(() => stat(join(outside, "new")), { code: "ENOENT" });
   assert.equal(await readFile(sentinel, "utf8"), "unchanged");
   const inside = join(root, "guard-positive");
@@ -40,7 +40,7 @@ if (argv[0] === "--fixture-guard-probe") {
   assert.equal(await readFile(join(inside, "file"), "utf8"), "inside");
   await transport.remove(inside);
   await assert.rejects(() => stat(inside), { code: "ENOENT" });
-  process.stdout.write("fixture guard probe passed\n");
+  process.stdout.write("FIXTURE_GUARD_OK\n");
 } else {
   await main({ name: "literal-options", description: "Controlled argument consumer", commands: openclawCommands, service: { name: "gateway" } }, argv);
 }

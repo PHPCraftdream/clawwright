@@ -25,10 +25,10 @@ function fixtureTarget(path) {
   const base = realpathSync(root);
   const target = resolve(base, relative(resolve(root), resolve(path)));
   const inside = p => { const r = relative(base, p); return r !== '' && r !== '..' && !r.startsWith('../') && !r.startsWith('..\\\\') && !isAbsolute(r); };
-  if (!inside(target)) throw new Error('fixture mkdir outside root');
+  if (!inside(target)) throw new Error('FIXTURE_OUTSIDE_ROOT');
   let parent = target;
   while (parent !== base) {
-    try { const info = lstatSync(parent); if (info.isSymbolicLink()) throw new Error('fixture mkdir through symlink'); const actual = realpathSync(parent); if (actual !== base && !inside(actual)) throw new Error('fixture mkdir outside root'); }
+    try { const info = lstatSync(parent); if (info.isSymbolicLink()) throw new Error('FIXTURE_SYMLINK'); const actual = realpathSync(parent); if (actual !== base && !inside(actual)) throw new Error('FIXTURE_OUTSIDE_ROOT'); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
     parent = dirname(parent);
   }
@@ -79,7 +79,7 @@ else if (args[0] === 'compose' && args.includes('logs')) {
     const result = await invoke(join(guardOutside, "new"));
     if (result.error !== undefined) throw result.error;
     assert.notEqual(result.code, 0);
-    assert.match(result.stderr, /fixture mkdir outside root/);
+    assert.match(result.stderr, /FIXTURE_OUTSIDE_ROOT/);
     await assert.rejects(() => stat(join(guardOutside!, "new")), { code: "ENOENT" });
     assert.equal(await readFile(sentinel, "utf8"), "unchanged");
     const positive = join(guardRoot, "shim-positive");
@@ -89,17 +89,17 @@ else if (args[0] === 'compose' && args.includes('logs')) {
     assert.equal((await stat(positive)).isDirectory(), true);
     await requires("symlink", "option shim refuses symlink ancestors", async () => {
       await mkdir(join(guardRoot, "real-dir"));
-      await symlink(join(guardRoot, "real-dir"), join(guardRoot, "alias"), process.platform === "win32" ? "junction" : "dir");
+      await symlink(join(guardRoot, "real-dir"), join(guardRoot, "alias"), "junction");
       const refused = await invoke(join(guardRoot, "alias", "new"));
       if (refused.error !== undefined) throw refused.error;
       assert.notEqual(refused.code, 0);
-      assert.match(refused.stderr, /fixture mkdir through symlink/);
+      assert.match(refused.stderr, /FIXTURE_SYMLINK/);
       await assert.rejects(() => stat(join(guardRoot, "real-dir", "new")), { code: "ENOENT" });
     });
     const overrides = await runProcess(process.execPath, ["--experimental-strip-types", dispatch, guardRoot, shim, "--fixture-guard-probe", guardOutside], { cwd: guardRoot, timeoutMs: 60000 });
     if (overrides.error !== undefined) throw overrides.error;
     assert.equal(overrides.code, 0, overrides.stderr);
-    assert.equal(overrides.stdout, "fixture guard probe passed\n");
+    assert.equal(overrides.stdout, "FIXTURE_GUARD_OK\n");
   } finally {
     try { await rm(guardRoot, { recursive: true, force: true }); }
     finally { if (guardOutside !== undefined) await rm(guardOutside, { recursive: true, force: true }); }

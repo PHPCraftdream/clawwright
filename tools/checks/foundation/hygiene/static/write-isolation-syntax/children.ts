@@ -12,6 +12,13 @@ function shellReadOnly(body: string): boolean {
   return /^[ \t]*(?:echo|printf)[ \t]+[A-Za-z0-9_.,:%+\/=-]+(?:[ \t]+[A-Za-z0-9_.,:%+\/=-]+)*[ \t]*$/.test(body) && !/[\r\n]/.test(body);
 }
 
+// Only complete, literal POSIX forms: the absolute destination may escape the
+// isolated cwd; this is not a claim that its spelling identifies the checkout.
+function shellAbsoluteTouch(body: string): boolean {
+  const path = String.raw`\/[A-Za-z0-9_./-]+`;
+  return new RegExp(`^[ \\t]*(?:touch[ \\t]+${path}|echo[ \\t]+\\$\\(touch[ \\t]+${path}\\))[ \\t]*$`).test(body);
+}
+
 /** Ordinary strings and interpolation-free templates are fixed child-process words. */
 function childWord(origin: string): string | undefined {
   const text = origin.trim();
@@ -101,6 +108,7 @@ export function childProcessHits(source: string, masked: string, classify: Class
     let bodyVerdict: "readonly" | "writer" | "unknown" | undefined;
     let writerRoot: "relative" | "anchored" | "unknown" = "unknown";
     let writerBodyAnchored = false;
+    let shellBodyAnchored = false;
     let scriptArgument = -1;
     const node = /^(?:.*[\\/])?(?:node|nodejs)(?:\.exe)?$/i.test(program ?? "") || values[0]?.expr.trim() === "process.execPath" || name === "fork";
     const shell = /^(?:.*[\\/])?(?:bash|sh|zsh|cmd|powershell|pwsh)(?:\.exe)?$/i.test(program ?? "") || /^(?:exec|execSync)$/.test(name);
@@ -110,17 +118,37 @@ export function childProcessHits(source: string, masked: string, classify: Class
     }
     if (bodyVerdict === "readonly") continue;
     if (node && bodyCapable) {
-      const optionsUnknown = args.some(a => /^(?:-r|--require|--import|--input-type)(?:=|$)/.test(a ?? ""));
-      const evalAt = args.findIndex(a => /^(?:-e|-p|--eval|--print)(?:=|$)/.test(a ?? ""));
-      const inline = evalAt < 0 ? undefined : args[evalAt]?.includes("=") ? args[evalAt]!.slice(args[evalAt]!.indexOf("=") + 1) : args[evalAt + 1];
-      if (optionsUnknown) bodyVerdict = "unknown";
-      else if (evalAt >= 0) {
-        bodyVerdict = inline === undefined ? "unknown" : inspectBody(inline);
-        if (inline !== undefined && bodyVerdict === "writer") { writerRoot = writerRoots(inline); writerBodyAnchored = childBodyAnchored(inline); }
+      // fork's first argument is already the module, never a Node option. For
+      // spawn, only recognize eval in a proven option prefix: unknown options
+      // might consume the following word, and -- or a script ends the prefix.
+      let inline: string | undefined;
+      let hasEval = false;
+      let evalEnd = -1;
+      if (name !== "fork") {
+        for (let i = 0; i < args.length; i++) {
+          const arg = args[i];
+          if (arg === undefined || arg === "--" || !arg.startsWith("-")) break;
+          if (arg === "--experimental-strip-types") continue;
+          if (/^(?:-e|-p|--eval|--print)$/.test(arg)) {
+            hasEval = true;
+            inline = args[i + 1];
+            evalEnd = i + 2;
+          } else if (/^(?:--eval|--print)=/.test(arg)) {
+            hasEval = true;
+            inline = arg.slice(arg.indexOf("=") + 1);
+            evalEnd = i + 1;
+          }
+          break;
+        }
       }
-      else {
-        const scriptAt = resolvedArgs.findIndex((v, i) => !(args[i]?.startsWith("-") ?? false));
-        scriptArgument = name === "fork" ? -1 : scriptAt;
+      if (hasEval) {
+        // Node can process options after eval. Apart from a separator, allow
+        // only the complete, literal --help suffix; other options may preload code.
+        const trailing = args.slice(evalEnd);
+        const safeTrailing = trailing.length === 0 || trailing[0] === "--" || (trailing.length === 1 && trailing[0] === "--help");
+        bodyVerdict = inline === undefined || !safeTrailing ? "unknown" : inspectBody(inline);
+        if (inline !== undefined && bodyVerdict === "writer") { writerRoot = writerRoots(inline); writerBodyAnchored = childBodyAnchored(inline); }
+      } else {
         // A source file can change before the child reads it, including through
         // unknown calls or another process. Its current contents prove nothing.
         bodyVerdict = "unknown";
@@ -128,8 +156,11 @@ export function childProcessHits(source: string, masked: string, classify: Class
       if (bodyVerdict === "readonly") continue;
     }
     if (shell && bodyCapable && !/^(?:exec|execSync)$/.test(name)) {
-      const commandAt = args.findIndex(a => /^(?:-c|\/c|-command|--command)$/i.test(a ?? ""));
-      const body = args[commandAt + 1];
+      // Do not interpret an argument as a command after a script, dynamic
+      // word, or unmodeled option. Only the first option is proven here.
+      const commandAt = /^(?:-c|\/c|-command|--command)$/i.test(args[0] ?? "") ? 0 : -1;
+      const body = commandAt < 0 ? undefined : args[commandAt + 1];
+      shellBodyAnchored = body !== undefined && /^(?:.*[\\/])?(?:bash|sh|zsh)(?:\.exe)?$/i.test(program ?? "") && shellAbsoluteTouch(body);
       bodyVerdict = body === undefined ? "unknown" : /\b(?:Set-Content|Add-Content|Out-File|Remove-Item|New-Item|rm|del|rmdir|rd|tee|touch|mv|cp)\b|(?:^|[^>=])>{1,2}(?!&)/i.test(body) ? "writer" : shellReadOnly(body) && /^(?:.*[\\/])?(?:bash|sh|zsh)(?:\.exe)?$/i.test(program ?? "") ? "readonly" : "unknown";
       if (bodyVerdict === "readonly") continue;
     }
@@ -172,6 +203,7 @@ export function childProcessHits(source: string, masked: string, classify: Class
       hits.push({ call: name, target: text.replace(/\s+/g, " ").trim(), classification: "UNKNOWN", approximation: true });
       continue;
     }
+    if (shell && bodyVerdict === "writer" && shellBodyAnchored) anchored = true;
     if (shell && bodyVerdict === "writer" && cwd === "CLEAN" && !anchored) {
       hits.push({ call: name, target: text.replace(/\s+/g, " ").trim(), classification: "UNKNOWN", approximation: true });
       continue;
