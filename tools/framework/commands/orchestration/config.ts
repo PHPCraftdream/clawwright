@@ -13,6 +13,7 @@ import { readLiveConfigOrThrow, valueAt } from "./inspect/helpers.ts";
 import { desiredStateShapeError } from "#src/set/ownership/validate.ts";
 import { configPathParts } from "#src/core/values/config/config-selectors.ts";
 import { desiredConfig } from "#src/core/values/config/desired-config.ts";
+import { refuseUnenrolledSSJackReferences } from "#src/core/values/ssjack-secret-refs.ts";
 import { readDeclaredConfig, readDeclaredConfigStrict, writeDeclaredConfig } from "#src/set/ownership/declared-config.ts";
 import { conflictingDeclaredPath, declaredOwnershipConflictDetail, filterOwnedDeclarations, recipePathOwners, refuseDeclaredOwnedPaths } from "#src/set/ownership/recipe-paths.ts";
 import type { RecipePathOwner } from "#src/set/ownership/recipe-paths.ts";
@@ -171,6 +172,7 @@ async function writeDesiredState(ctx: Context, dryRun: boolean, restartAdvice = 
   catch (error) { die(`${desiredStateFile()} is not valid JSON: ${(error as Error).message}`); }
   const shapeError = desiredStateShapeError(entries);
   if (shapeError !== undefined) die(`${desiredStateFile()}: ${shapeError}`);
+  refuseUnenrolledSSJackReferences(entries);
   for (const entry of entries) configPathParts(entry.path);
 
   let owners: readonly RecipePathOwner[];

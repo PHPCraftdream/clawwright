@@ -11,6 +11,7 @@ import JSON5 from "json5";
 import type { Context } from "../core/context.ts";
 import type { AppSecret } from "../core/app.ts";
 import { parseEnv } from "../core/env.ts";
+import { refuseUnenrolledSSJackReferences } from "../core/values/ssjack-secret-refs.ts";
 import { sudoForRead } from "../runtime/files/datadir.ts";
 
 /** Where a variable is expected to be defined. */
@@ -159,6 +160,7 @@ export function providerApiKeyExplicit(config: unknown, providerId: string): boo
   const node = config as { models?: { providers?: Record<string, unknown> } };
   const provider = node.models?.providers?.[providerId];
   if (provider === null || typeof provider !== "object" || Array.isArray(provider)) return false;
+  refuseUnenrolledSSJackReferences(provider);
   return "apiKey" in provider;
 }
 
@@ -188,6 +190,7 @@ export function providerIsLocalEndpoint(config: unknown, providerId: string): bo
  *  over the live one: a SecretRef just added to desired-state.json is a real requirement
  *  before it has ever been applied. */
 export function requirementsFromConfig(config: unknown): SecretRequirement[] {
+  refuseUnenrolledSSJackReferences(config);
   const result: SecretRequirement[] = [];
 
   // Explicit references. The gateway token is supplied by compose from the repository
@@ -290,6 +293,7 @@ async function applicationRequirements(ctx: Context): Promise<AppSecret[]> {
 
 /** Resolve requirements for a supplied configuration and this application's live hook. */
 export async function requirementsForConfig(ctx: Context, config: unknown): Promise<SecretRequirement[]> {
+  refuseUnenrolledSSJackReferences(config);
   const application = await applicationRequirements(ctx);
   return withApplicationRequirements(requirementsFromConfig(config), application);
 }
