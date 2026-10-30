@@ -150,7 +150,7 @@ check(
 );
 const fullTierExpression = unwrapExpression(asText(env.FULL_TIER));
 checkTrue("FULL_TIER line carries an ${{ ... }} expression", fullTierExpression !== "");
-checkTrue("FULL_TIER requires explicit manual dispatch", containsText(fullTierExpression, "workflow_dispatch"));
+checkTrue("FULL_TIER retains explicit manual dispatch", containsText(fullTierExpression, "workflow_dispatch"));
 check(
   "related base prefers PR base, then previous push, then manual override",
   unwrapExpression(asText(env.CHECK_BASE)),
@@ -183,7 +183,7 @@ function tokenize(expression: string): Token[] {
       i += name[0].length;
       continue;
     }
-    const op = rest.match(/^(\|\||&&|==|!=|\(|\))/);
+    const op = rest.match(/^(\|\||&&|==|!=|\(|\)|,)/);
     if (op !== null) {
       tokens.push({ kind: "op", op: op[1] });
       i += op[1].length;
@@ -196,9 +196,8 @@ function tokenize(expression: string): Token[] {
 
 const KNOWN_OPERANDS = new Set(["github.event_name", "github.ref", "inputs.full"]);
 
-/** Evaluates the FULL_TIER expression against a case. Only (), ||, &&, ==/!= between the three
- *  known operands and single-quoted literals are supported; anything else throws. */
-function evaluateFullTier(expression: string, event: { eventName: string; ref: string; full: boolean }): boolean {
+/** Evaluates the closed tier expression, including GitHub's case-insensitive contains(). */
+function evaluateFullTier(expression: string, event: { eventName: string; ref: string; full: boolean; message?: string }): boolean {
   const tokens = tokenize(expression);
   let pos = 0;
   const peekOp = () => (tokens[pos]?.kind === "op" ? (tokens[pos] as { kind: "op"; op: string }).op : undefined);
@@ -215,6 +214,18 @@ function evaluateFullTier(expression: string, event: { eventName: string; ref: s
       const value = parseOr();
       takeOp(")");
       return value;
+    }
+    if (token.kind === "operand" && token.name === "contains") {
+      takeOp("(");
+      const source = tokens[pos++];
+      if (source === undefined || source.kind !== "operand" || source.name !== "github.event.head_commit.message") {
+        throw new Error("unsupported contains source");
+      }
+      takeOp(",");
+      const needle = tokens[pos++];
+      if (needle === undefined || needle.kind !== "string") throw new Error("contains requires a literal token");
+      takeOp(")");
+      return (event.message ?? "").toLowerCase().includes(needle.value.toLowerCase());
     }
     if (token.kind !== "operand" || !KNOWN_OPERANDS.has(token.name)) {
       throw new Error(`unsupported operand ${JSON.stringify(token)}`);
@@ -261,7 +272,7 @@ function evaluateFullTier(expression: string, event: { eventName: string; ref: s
   return result;
 }
 
-// Only explicit manual full=true selects full verification.
+// Unmarked events stay scoped; explicit full commits are checked separately below.
 const FULL_TIER_CASES: readonly (readonly [string, string, boolean, boolean])[] = [
   ["push", "refs/heads/topic", false, false],
   ["push", "refs/heads/main", false, false],
@@ -285,10 +296,25 @@ check(
   FULL_TIER_CASES,
 );
 
+for (const [eventName, message, expected] of [
+  ["push", "[ci:full]", true],
+  ["push", "[ci:FULL]", true],
+  ["push", spaced("finish", "[ci:full]"), true],
+  ["push", "[ci:fuller]", false],
+  ["push", "feature", false],
+  ["pull_request", "[ci:full]", false],
+  ["workflow_dispatch", "[ci:full]", false],
+] as const) {
+  check(`full marker: ${eventName}/${message}`, evaluateFullTier(fullTierExpression, {
+    eventName, message, ref: "refs/heads/topic", full: false,
+  }), expected);
+}
+
 // --- Concurrency ------------------------------------------------------------------------------
 
 const concurrency = asRecord(record.concurrency);
-checkTrue("concurrency group pins workflow + ref", asText(concurrency.group) === GROUP_EXPRESSION);
+checkTrue("concurrency group pins workflow, event, ref and tier", asText(concurrency.group) ===
+  spaced(GROUP_EXPRESSION + "-${{", fullTierExpression, "&&", "'full'", "||", "'scoped'", "}}"));
 check("a newer run of the same event and ref cancels the older one", concurrency["cancel-in-progress"], true);
 const push = asRecord(on.push);
 check("push checks every feature branch", push.branches, ["**"]);

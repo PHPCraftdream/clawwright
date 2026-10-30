@@ -17,14 +17,14 @@ on:
         type: string
         default: ''
 
-# Full verification is reserved for explicit end-of-sprint dispatches.
+# Full verification requires an explicit sprint commit marker or manual dispatch.
 env:
-  FULL_TIER: ${{ github.event_name == 'workflow_dispatch' && inputs.full }}
+  FULL_TIER: ${{ ((github.event_name == 'workflow_dispatch' && inputs.full) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ci:full]'))) }}
   CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before || inputs.base_ref }}
 
 concurrency:
-  # Event-scoped groups keep feature pushes from cancelling manual sprint verification.
-  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  # Separate event/tier groups prevent scoped pushes from cancelling full verification.
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}-${{ ((github.event_name == 'workflow_dispatch' && inputs.full) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ci:full]'))) && 'full' || 'scoped' }}
   cancel-in-progress: true
 
 permissions:
@@ -471,7 +471,7 @@ jobs:
     # three disjoint round-robin shards that run in parallel. Full tier only: the job-level
     # condition repeats FULL_TIER because the env context is not available in jobs.<id>.if.
     name: "Negative controls (${{ matrix.shard }})"
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.full }}
+    if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.full) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ci:full]'))) }}
     runs-on: windows-latest
     strategy:
       fail-fast: false

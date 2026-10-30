@@ -50,17 +50,24 @@ with `origin/main`. Full-depth checkout and commit validation are mandatory. Unk
 unresolvable revisions fail instead of silently skipping checks. Pull-request checks cover
 the complete integration delta, while push checks cover the new feature delta.
 
-The full suite runs only on an explicit `workflow_dispatch` with `full=true`, at the end
-of a sprint or before release. There is no nightly full run and a green feature run does
-not establish full readiness. The full tier still includes SSH/Docker/WSL capability
-provisioning, controls shards, package/system-install checks and candidate artifacts;
-publishing retains its separate full verification. Do not remove required branch checks
-or treat scoped results as proof that the full suite passed.
+At sprint completion, put `[ci:full]` in the pushed HEAD commit message, in its subject
+or body, to request the full tier instead of scoped checks. GitHub's `contains` comparison
+is case-insensitive; use the lowercase spelling consistently. For example, add a separate
+paragraph with `git commit -m "feat: complete the sprint" -m "[ci:full]"`. Do not mention
+the token incidentally in an ordinary feature commit. Only push events evaluate this
+commit token; PR checks stay diff-scoped. Branch names alone never select full verification.
 
-A newer run of the same event and ref cancels the older one; a push cannot cancel manual
-sprint verification. Each job prints `check --timings` at the end, including failures.
-Use `gh workflow run ci.yml --ref <branch> -f full=true` for the completed sprint, then
-`gh run watch <run-id> --exit-status`. Do not dispatch full runs for each feature.
+Manual full verification remains available through **Actions -> CI -> Run workflow**,
+selecting the branch and `full=true`, or `gh workflow run ci.yml --ref <branch> -f full=true`.
+Watch its result with background `gh run watch <run-id> --exit-status`. There is no nightly
+full run and a green feature run does not establish full readiness. Full still includes
+SSH/Docker/WSL capability provisioning, controls shards, package/system-install checks and
+candidate artifacts; publishing retains its separate full verification. Do not remove
+required branch checks or treat scoped results as proof that the full suite passed.
+
+Newer runs cancel older runs only within the same event, ref and tier. Ordinary scoped
+pushes cannot cancel marked or manual full verification. Each job prints `check --timings`
+at the end, including failures. Do not request full runs for each feature.
 
 ## Writing a check
 
