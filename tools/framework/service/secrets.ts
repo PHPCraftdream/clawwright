@@ -11,7 +11,7 @@ import JSON5 from "json5";
 import type { Context } from "../core/context.ts";
 import type { AppSecret } from "../core/app.ts";
 import { parseEnv } from "../core/env.ts";
-import { refuseUnenrolledSSJackReferences } from "../core/values/ssjack-secret-refs.ts";
+import { refuseUnenrolledSSJackReferences } from "../core/values/config/ssjack-secret-refs.ts";
 import { sudoForRead } from "../runtime/files/datadir.ts";
 
 /** Where a variable is expected to be defined. */

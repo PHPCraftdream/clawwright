@@ -13,7 +13,7 @@ import { readLiveConfigOrThrow, valueAt } from "./inspect/helpers.ts";
 import { desiredStateShapeError } from "#src/set/ownership/validate.ts";
 import { configPathParts } from "#src/core/values/config/config-selectors.ts";
 import { desiredConfig } from "#src/core/values/config/desired-config.ts";
-import { refuseUnenrolledSSJackReferences } from "#src/core/values/ssjack-secret-refs.ts";
+import { refuseUnenrolledSSJackReferences } from "#src/core/values/config/ssjack-secret-refs.ts";
 import { readDeclaredConfig, readDeclaredConfigStrict, writeDeclaredConfig } from "#src/set/ownership/declared-config.ts";
 import { conflictingDeclaredPath, declaredOwnershipConflictDetail, filterOwnedDeclarations, recipePathOwners, refuseDeclaredOwnedPaths } from "#src/set/ownership/recipe-paths.ts";
 import type { RecipePathOwner } from "#src/set/ownership/recipe-paths.ts";

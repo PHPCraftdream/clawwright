@@ -5,7 +5,7 @@ import { check, checkTrue, finish } from "#checks/kit/harness.ts";
 import { orchestrationCommands } from "#framework/commands/interface/groups/openclawCommands.orchestration.ts";
 import { clearDeployment, useDeployment } from "#framework/runtime/deployment.ts";
 import { withOutputSink } from "#framework/core/io/output.ts";
-import { INVALID_SSJACK_REFERENCE, SSJACK_DELIVERY_UNAVAILABLE } from "#framework/core/values/ssjack-secret-refs.ts";
+import { INVALID_SSJACK_REFERENCE, SSJACK_DELIVERY_UNAVAILABLE } from "#framework/core/values/config/ssjack-secret-refs.ts";
 import type { Context } from "#framework/core/context.ts";
 
 const deployment = await mkdtemp(join(tmpdir(), "clawwright-ssjack-preflight-"));

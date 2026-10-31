@@ -238,7 +238,7 @@ interface AllowEntry {
 const ALLOW: readonly AllowEntry[] = [
   {
     file: "tools/framework/service/secrets.ts",
-    line: 97,
+    line: 98,
     reason:
       "noProviderConfigured is a best-effort diagnostic feeding smoke's hint; an unreadable config answers false (documented on the function) rather than aborting a report that has its own failure path",
   },
@@ -316,7 +316,7 @@ const ALLOW: readonly AllowEntry[] = [
   },
   {
     file: "tools/framework/service/secrets.ts",
-    line: 312,
+    line: 316,
     reason:
       "readTargetSecrets: the catch retries the read through the sudo prefix (sudoForRead); when the retry succeeds the operator sees normal secret statuses and the first failure is discarded with no trace - only when no prefix exists does the original error rethrow. Lost here: any sign of the first failed read on the success path",
   },

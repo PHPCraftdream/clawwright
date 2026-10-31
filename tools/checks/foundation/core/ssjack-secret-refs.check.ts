@@ -2,7 +2,7 @@ import { check, checkTrue, finish } from "#checks/kit/harness.ts";
 import {
   collectSSJackReferences, parseSSJackPlaceholder, refuseUnenrolledSSJackReferences,
   INVALID_SSJACK_REFERENCE, SSJACK_DELIVERY_UNAVAILABLE, SSJACK_REFERENCE_FORMAT,
-} from "#framework/core/values/ssjack-secret-refs.ts";
+} from "#framework/core/values/config/ssjack-secret-refs.ts";
 import { providerApiKeyExplicit, requirementsForConfig, requirementsFromConfig } from "#framework/service/secrets.ts";
 import type { Context } from "#framework/core/context.ts";
 
