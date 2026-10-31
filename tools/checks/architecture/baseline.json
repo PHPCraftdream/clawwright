@@ -1065,7 +1065,7 @@
       "tools/checks/foundation/core/deployment-names.check.ts": 6,
       "tools/checks/foundation/core/env.check.ts": 10,
       "tools/checks/foundation/core/paths.check.ts": 1,
-      "tools/checks/foundation/core/requirements.check.ts": 8,
+      "tools/checks/foundation/core/credentials/requirements.check.ts": 8,
       "tools/checks/foundation/hygiene/check-linux.check.ts": 5,
       "tools/checks/foundation/hygiene/docs-private-content.check.ts": 5,
       "tools/checks/foundation/hygiene/readme-quickstart.check.ts": 2,
