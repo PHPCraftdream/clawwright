@@ -32,7 +32,7 @@ static gid_t runtime_gid;
 extern char **environ;
 
 static int exit_checkpoint = 111;
-static void die(void) { _exit(exit_checkpoint); }
+static void die(void) { int saved = errno; dprintf(2, "task245-init: checkpoint=%d errno=%d\n", exit_checkpoint, saved); _exit(exit_checkpoint); }
 
 static int parse_id(const char *s, unsigned long *out) {
     char *end = NULL;
