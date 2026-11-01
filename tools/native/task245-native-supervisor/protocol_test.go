@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -162,6 +163,55 @@ func TestParseServiceProof245(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestKeeperInheritedPipes(t *testing.T) {
+	if os.Getenv("TASK245_PIPE_HELPER") == "1" { os.Exit(keeperPipeHelper245()) }
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	input, writer, err := os.Pipe()
+	if err != nil { t.Fatal("input pipe") }
+	defer input.Close(); defer writer.Close()
+	reader, output, err := os.Pipe()
+	if err != nil { t.Fatal("output pipe") }
+	defer reader.Close(); defer output.Close()
+	if reader.SetReadDeadline(time.Now().Add(8*time.Second)) != nil { t.Fatal("parent deadline") }
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestKeeperInheritedPipes$")
+	cmd.Env = []string{"TASK245_PIPE_HELPER=1"}
+	cmd.Stdin, cmd.Stdout = input, output
+	if cmd.Start() != nil { t.Fatal("pipe helper start") }
+	defer func() { if cmd.ProcessState == nil { _ = cmd.Process.Kill(); _ = cmd.Wait() } }()
+	input.Close(); output.Close()
+	var record [8]byte
+	if _, err = io.ReadFull(reader, record[:]); err != nil || string(record[:]) != "KREADY01" { t.Fatal("pollable pipe readiness") }
+	if _, err = writer.Write([]byte("KINPUT01")); err != nil { t.Fatal("pipe input") }
+	writer.Close()
+	if _, err = io.ReadFull(reader, record[:]); err != nil || string(record[:]) != "KACK0001" { t.Fatal("pipe acknowledgement") }
+	if n, err := reader.Read(record[:1]); n != 0 || err != io.EOF { t.Fatal("pipe output EOF") }
+	if cmd.Wait() != nil { t.Fatal("pipe helper exit") }
+}
+
+func keeperPipeHelper245() int {
+	if os.Stdin.SetReadDeadline(time.Now().Add(time.Second)) == nil || os.Stdout.SetWriteDeadline(time.Now().Add(time.Second)) == nil { return 10 }
+	in, err := pollableKeeperPipe(0)
+	if err != nil { return 11 }
+	defer in.Close()
+	out, err := pollableKeeperPipe(1)
+	if err != nil { return 12 }
+	defer out.Close()
+	for i, f := range []*os.File{in, out} {
+		var original, duplicate syscall.Stat_t
+		if syscall.Fstat(i, &original) != nil || syscall.Fstat(int(f.Fd()), &duplicate) != nil || original.Dev != duplicate.Dev || original.Ino != duplicate.Ino { return 13 }
+	}
+	if in.SetReadDeadline(time.Now().Add(30*time.Millisecond)) != nil || out.SetWriteDeadline(time.Now().Add(5*time.Second)) != nil { return 14 }
+	var b [8]byte
+	if n, err := in.Read(b[:]); n != 0 || !errors.Is(err, os.ErrDeadlineExceeded) { return 15 }
+	if in.SetReadDeadline(time.Now().Add(5*time.Second)) != nil { return 16 }
+	if _, err := out.Write([]byte("KREADY01")); err != nil { return 17 }
+	if _, err := io.ReadFull(in, b[:]); err != nil || string(b[:]) != "KINPUT01" { return 18 }
+	if n, err := in.Read(b[:1]); n != 0 || err != io.EOF { return 19 }
+	if _, err := out.Write([]byte("KACK0001")); err != nil { return 20 }
+	return 0
 }
 
 func TestParseKeeperConfigRejectsDuplicateKeys(t *testing.T) {

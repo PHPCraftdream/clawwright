@@ -29,7 +29,20 @@ func openKeeper() (*keeperSession, error) {
 	start, err := procStart(p); if err != nil { return bad() }
 	var input syscall.Stat_t; if syscall.Fstat(0,&input)!=nil { return bad() }
 	if !reciprocalPipe(0,p,false) || !reciprocalPipe(1,p,true) || !sealedSelfFD3() { return bad() }
-	return &keeperSession{in:os.Stdin,out:os.Stdout,parent:p,parentStart:start,keeperHash:cfg.KeeperSHA256,inputDev:uint64(input.Dev),inputIno:input.Ino},nil
+	in, err := pollableKeeperPipe(0); if err != nil { return bad() }
+	out, err := pollableKeeperPipe(1); if err != nil { in.Close(); return bad() }
+	return &keeperSession{in:in,out:out,parent:p,parentStart:start,keeperHash:cfg.KeeperSHA256,inputDev:uint64(input.Dev),inputIno:input.Ino},nil
+}
+
+func pollableKeeperPipe(fd int) (*os.File, error) {
+	var st syscall.Stat_t
+	if fd < 0 || fd > 1 || syscall.Fstat(fd, &st) != nil || st.Mode&syscall.S_IFMT != syscall.S_IFIFO { return nil, errKeeper }
+	copyFD, _, errno := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), syscall.F_DUPFD_CLOEXEC, 3)
+	if errno != 0 { return nil, errKeeper }
+	if syscall.SetNonblock(int(copyFD), true) != nil { syscall.Close(int(copyFD)); return nil, errKeeper }
+	f := os.NewFile(copyFD, "keeper-pipe")
+	if f == nil { syscall.Close(int(copyFD)); return nil, errKeeper }
+	return f, nil
 }
 
 func trustedKeeperConfig() (keeperConfig,error) {
