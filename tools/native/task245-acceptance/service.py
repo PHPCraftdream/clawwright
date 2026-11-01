@@ -25,7 +25,7 @@ def report_lab_checkpoints(proc):
     print('task245-profile: checkpoints=' + (codes or 'absent'), file=sys.stderr)
     os.set_blocking(proc.stderr.fileno(), False)
     raw = proc.stderr.read(4096) or b''
-    allowed = {'task245-broker: stage=' + str(code) for code in range(1, 6)}
+    allowed = {'task245-broker: stage=' + str(code) for code in range(1, 6)} | {'task245-broker: child=' + str(code) for code in range(256)}
     for line in raw.decode('ascii', 'ignore').splitlines():
         if line in allowed:
             print('task245-profile: ' + line, file=sys.stderr)

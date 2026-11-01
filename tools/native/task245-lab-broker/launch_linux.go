@@ -46,7 +46,7 @@ func launchNative(fd int, pid int, c brokerConfig) error {
 	cmd:=exec.CommandContext(ctx,"/proc/self/fd/7",itoa(int(c.RuntimeUID)),itoa(int(c.RuntimeGID)));cmd.Env=[]string{};cmd.Dir="/";cmd.ExtraFiles=[]*os.File{sealed,inner,root,meta,init};cmd.SysProcAttr=&syscall.SysProcAttr{Pdeathsig:syscall.SIGKILL}
 	if e=cmd.Start();e!=nil{inner.Close();return bad()};inner.Close()
 	rights:=syscall.UnixRights(int(outerFD.Fd()));n,e:=syscall.SendmsgN(fd,[]byte("OCLABFD1"),rights,nil,0);if e!=nil||n!=8{_ = cmd.Process.Kill();_,_=cmd.Process.Wait();return bad()};outerFD.Close()
-	done:=make(chan error,1);go func(){done<-cmd.Wait()}(); eof:=make(chan error,1);go func(){var b [1]byte;for{n,x:=syscall.Read(fd,b[:]);if x==syscall.EINTR{continue};if x!=nil{eof<-x;return};if n==0{eof<-nil;return};eof<-brokerErr;return}}()
+	done:=make(chan error,1);go func(){err:=cmd.Wait();code:=0;if err!=nil{code=255;if exited,ok:=err.(*exec.ExitError);ok&&exited.ExitCode()>=0{code=exited.ExitCode()}};_,_=os.Stderr.WriteString("task245-broker: child="+strconv.Itoa(code)+"\n");done<-err}(); eof:=make(chan error,1);go func(){var b [1]byte;for{n,x:=syscall.Read(fd,b[:]);if x==syscall.EINTR{continue};if x!=nil{eof<-x;return};if n==0{eof<-nil;return};eof<-brokerErr;return}}()
 	select { case e=<-done: if e!=nil{return bad()};return nil;case e=<-eof: _ = cmd.Process.Kill();select{case w:=<-done:if w!=nil{return bad()};return e;case <-ctx.Done():return bad()};case <-ctx.Done():_ = cmd.Process.Kill();<-done;return bad() }
 }
 

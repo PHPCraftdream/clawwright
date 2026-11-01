@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+var domainExit245 = 80
 var errSupervisor = errors.New("native supervisor rejected")
 var errUnexpectedWriter245 = errors.New("unexpected writer custody")
 
@@ -21,6 +22,7 @@ func main() {
 		err = run()
 	}
 	if err != nil {
+		if len(os.Args) == 2 && os.Args[1] == "--task245-domain-worker" { os.Exit(domainExit245) }
 		os.Exit(1)
 	}
 }

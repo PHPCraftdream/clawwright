@@ -31,7 +31,8 @@ static uid_t runtime_uid;
 static gid_t runtime_gid;
 extern char **environ;
 
-static void die(void) { _exit(111); }
+static int exit_checkpoint = 111;
+static void die(void) { _exit(exit_checkpoint); }
 
 static int parse_id(const char *s, unsigned long *out) {
     char *end = NULL;
@@ -89,12 +90,15 @@ static int parent_guard(pid_t expected) {
 static void worker(int nullfd) {
     char *const av[] = {(char *)"native-supervisor", (char *)"--task245-domain-worker", NULL};
     char *const ev[] = {NULL};
+    exit_checkpoint = 121;
     if (parent_guard(1) < 0 || getpid() != 2 || nullfd < 0 ||
         getuid() != runtime_uid || geteuid() != runtime_uid || getgid() != runtime_gid ||
         getegid() != runtime_gid || getgroups(0, NULL) != 0 ||
         dup2(nullfd, 0) < 0 || dup2(nullfd, 1) < 0 || dup2(nullfd, 2) < 0) die();
     if (nullfd > 2) close(nullfd);
+    exit_checkpoint = 122;
     if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) < 0 || prctl(PR_SET_DUMPABLE, 0) < 0) die();
+    exit_checkpoint = 123;
     execveat(IMAGE_FD, "", av, ev, AT_EMPTY_PATH);
     die();
 }
@@ -105,6 +109,7 @@ static int wait_child(pid_t child) {
     do { r = waitpid(child, &status, 0); } while (r < 0 && errno == EINTR);
     if (r != child) return 111;
     if (WIFEXITED(status)) return WEXITSTATUS(status);
+    if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);
     return 111;
 }
 
@@ -112,21 +117,28 @@ int main(int argc, char **argv) {
     unsigned long u, g;
     pid_t original_parent, init, child;
     int nullfd;
+    exit_checkpoint = 112;
     if (argc != 3 || !argv || !environ || environ[0] != NULL || getuid() != 0 || geteuid() != 0 ||
         parse_id(argv[1], &u) < 0 || parse_id(argv[2], &g) < 0 || verify_fds() < 0) die();
     runtime_uid = (uid_t)u;
     runtime_gid = (gid_t)g;
+    exit_checkpoint = 113;
     original_parent = getppid();
     if (original_parent <= 0 || parent_guard(original_parent) < 0) die();
+    exit_checkpoint = 114;
     nullfd = open("/dev/null", O_RDWR | O_CLOEXEC);
     if (nullfd < 0 || unshare(CLONE_NEWNS | CLONE_NEWNET | CLONE_NEWPID) < 0 ||
         mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL) < 0) die();
+    exit_checkpoint = 115;
     init = fork();
     if (init < 0) die();
     if (init == 0) {
+        exit_checkpoint = 116;
         if (parent_guard(0) < 0 || fchdir(ROOT_FD) < 0 || chroot(".") < 0 || chdir("/") < 0) die();
         close(ROOT_FD);
+        exit_checkpoint = 117;
         if (mount("proc", "/proc", "proc", MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, "hidepid=0") < 0) die();
+        exit_checkpoint = 118;
         char run_options[128];
         if (snprintf(run_options, sizeof run_options, "mode=0700,size=1m,uid=%lu,gid=%lu",
                      (unsigned long)runtime_uid, (unsigned long)runtime_gid) < 0 ||
@@ -134,9 +146,11 @@ int main(int argc, char **argv) {
         /* Make PID 1 the runtime UID before forking: same-UID worker checks can
          * stat PID 1 namespaces without hidepid=2 or CAP_SYS_PTRACE, and the
          * worker's parent-death signal cannot be invalidated by a later drop. */
+        exit_checkpoint = 119;
         if (setgroups(0, NULL) < 0 || setresgid(runtime_gid, runtime_gid, runtime_gid) < 0 ||
             setresuid(runtime_uid, runtime_uid, runtime_uid) < 0 ||
             prctl(PR_SET_DUMPABLE, 1) < 0 || parent_guard(0) < 0) die();
+        exit_checkpoint = 120;
         child = fork();
         if (child < 0) die();
         if (child == 0) worker(nullfd);

@@ -14,28 +14,35 @@ var errDomainWorker = errors.New("domain worker authentication rejected")
 // domainWorkerMain authenticates the C bootstrap's inherited descriptors and
 // the worker's placement in the private namespace before accepting any protocol.
 func domainWorkerMain() error {
+	domainExit245 = 81
 	if len(os.Args) != 2 || os.Args[1] != "--task245-domain-worker" || len(os.Environ()) != 0 || os.Geteuid() == 0 || os.Getpid() != 2 || os.Getppid() != 1 {
 		return errDomainWorker
 	}
+	domainExit245 = 82
 	var image, sock, metadata syscall.Stat_t
 	if syscall.Fstat(3, &image) != nil || image.Mode&syscall.S_IFMT != syscall.S_IFREG || image.Size <= 0 || image.Uid != 0 || image.Mode&0022 != 0 {
 		return errDomainWorker
 	}
+	domainExit245 = 83
 	seals, _, errno := syscall.Syscall(syscall.SYS_FCNTL, 3, 1034, 0)
 	if errno != 0 || seals&0xf != 0xf {
 		return errDomainWorker
 	}
+	domainExit245 = 84
 	if syscall.Fstat(4, &sock) != nil || sock.Mode&syscall.S_IFMT != syscall.S_IFSOCK || syscall.Fstat(6, &metadata) != nil || metadata.Mode&syscall.S_IFMT != syscall.S_IFREG || metadata.Uid != 0 || metadata.Size <= 0 || metadata.Size > 16384 {
 		return errDomainWorker
 	}
+	domainExit245 = 85
 	metaSeals, _, errno := syscall.Syscall(syscall.SYS_FCNTL, 6, 1034, 0)
 	if errno != 0 || metaSeals&0xf != 0xf {
 		return errDomainWorker
 	}
+	domainExit245 = 86
 	var pid, mnt, netns syscall.Stat_t
 	if syscall.Stat("/proc/self/ns/pid", &pid) != nil || syscall.Stat("/proc/1/ns/pid", &mnt) != nil || pid.Ino != mnt.Ino || syscall.Stat("/proc/self/ns/mnt", &mnt) != nil || syscall.Stat("/proc/1/ns/mnt", &netns) != nil || mnt.Ino != netns.Ino {
 		return errDomainWorker
 	}
+	domainExit245 = 87
 	b, err := os.ReadFile("/proc/self/mountinfo")
 	if err != nil || len(b) == 0 || len(b) > 4<<20 || !hasExpectedPrivateMounts(string(b)) {
 		return errDomainWorker

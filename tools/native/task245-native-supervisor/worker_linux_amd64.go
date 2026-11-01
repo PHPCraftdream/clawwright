@@ -26,26 +26,41 @@ import (
 func runConnectedWorker() error {
  bad:=func()error{return errDomainWorker}
  if len(os.Args)!=2||os.Args[1]!="--task245-domain-worker"||len(os.Environ())!=0||os.Geteuid()==0||os.Getpid()!=2||os.Getppid()!=1{return bad()}
+ domainExit245 = 90
  var img,meta syscall.Stat_t
  if syscall.Fstat(3,&img)!=nil||img.Mode&syscall.S_IFMT!=syscall.S_IFREG||img.Uid!=0||img.Mode&0022!=0||img.Mode&0555!=0555||syscall.Fstat(6,&meta)!=nil||meta.Mode&syscall.S_IFMT!=syscall.S_IFREG||meta.Uid!=0||meta.Mode&0022!=0||meta.Size<2||meta.Size>65536{return bad()}
  for _,fd:=range []uintptr{3,6}{s,_,e:=syscall.Syscall(syscall.SYS_FCNTL,fd,1034,0);if e!=0||s&15!=15{return bad()}}
+ domainExit245 = 91
  mf:=os.NewFile(6,"launch-metadata");defer mf.Close();b,e:=io.ReadAll(io.LimitReader(mf,65537));if e!=nil||int64(len(b))!=meta.Size||duplicateJSON(b)!=nil{return bad()}
+ domainExit245 = 92
  var c launchConfig;d:=json.NewDecoder(strings.NewReader(string(b)));d.DisallowUnknownFields();if d.Decode(&c)!=nil||d.Decode(new(any))!=io.EOF{return bad()}
+ domainExit245 = 93
  var imageExe syscall.Stat_t; if syscall.Stat("/proc/self/exe",&imageExe)!=nil||img.Dev!=imageExe.Dev||img.Ino!=imageExe.Ino{return bad()}
+ domainExit245 = 94
  var pidns,mntns,netns syscall.Stat_t
  if syscall.Stat("/proc/self/ns/pid",&pidns)!=nil||syscall.Stat("/proc/self/ns/mnt",&mntns)!=nil||syscall.Stat("/proc/self/ns/net",&netns)!=nil{return bad()}
+ domainExit245 = 95
  if c.RuntimeUID==0||uint32(os.Getuid())!=c.RuntimeUID||uint32(os.Getgid())!=c.RuntimeGID||c.OuterPIDNS==0||c.OuterMNTNS==0||c.OuterNETNS==0||pidns.Ino==c.OuterPIDNS||mntns.Ino==c.OuterMNTNS||netns.Ino==c.OuterNETNS{return bad()}
+ domainExit245 = 96
  if !workerMountsOK()||!rootCodeMountedReadOnly(c)||!hashFD3(img,c.SupervisorSHA256){return bad()}
+ domainExit245 = 97
  if e=syscall.SetNonblock(4,true);e!=nil{return bad()};typ,te:=syscall.GetsockoptInt(4,syscall.SOL_SOCKET,syscall.SO_TYPE);if te!=nil||typ!=syscall.SOCK_SEQPACKET{return bad()};sa,se:=syscall.Getsockname(4);peer,pe:=syscall.Getpeername(4);if se!=nil||pe!=nil||sa==nil||peer==nil{return bad()};_,saOK:=sa.(*syscall.SockaddrUnix);_,peerOK:=peer.(*syscall.SockaddrUnix);if !saOK||!peerOK{return bad()};broker,be:=syscall.GetsockoptUcred(4,syscall.SOL_SOCKET,syscall.SO_PEERCRED);if be!=nil||broker==nil||broker.Uid!=0{return bad()}
+ domainExit245 = 98
  control:=os.NewFile(4,"outer-control");if control==nil{return bad()};defer control.Close();ctx,cancel:=context.WithTimeout(context.Background(),30*time.Second);defer cancel();if dl,ok:=ctx.Deadline();!ok||control.SetDeadline(dl)!=nil{return bad()}
+ domainExit245 = 99
  var header [64]byte;var packet [65]byte;n,e:=control.Read(packet[:]);if e!=nil||n!=64{return bad()};copy(header[:],packet[:64]);if string(header[:8])!="SSINK001"||binary.BigEndian.Uint64(header[56:64])==0||binary.BigEndian.Uint64(header[56:64])>16384{return bad()};nonceZero:=true;for _,v:=range header[8:24]{if v!=0{nonceZero=false}};bindingZero:=true;for _,v:=range header[24:56]{if v!=0{bindingZero=false}};if nonceZero||bindingZero{return bad()}
+ domainExit245 = 100
  if c.SocketPath!="/run/clawwright-native.sock"{return bad()};_ = os.Remove(c.SocketPath);addr:=&net.UnixAddr{Name:c.SocketPath,Net:"unix"};l,e:=net.ListenUnix("unix",addr);if e!=nil{return bad()};defer l.Close();defer os.Remove(c.SocketPath);if l.SetDeadline(time.Now().Add(30*time.Second))!=nil{return bad()}
  wc:=workerConfig{Node:c.Node,Stub:c.Stub,Provider:c.Provider,ConfigPath:c.ConfigPath,SocketPath:c.SocketPath,CaptureEvidence:c.CaptureEvidence,GatewayArgv:c.GatewayArgv,BrokerArgv:c.BrokerArgv,NodeSHA256:c.NodeSHA256,StubSHA256:c.StubSHA256,ProviderSHA256:c.ProviderSHA256,Target:c.Target,Revision:c.Revision,Purpose:c.Purpose,LabScenario:c.LabScenario,registry:&execRegistry245{roles:map[int]string{}}}
+ domainExit245 = 101
  tracker,gatewayPID,e:=startGateway(ctx,wc);if e!=nil{return bad()};defer tracker.Close()
+ domainExit245 = 102
  var conn *net.UnixConn
  for {if ctx.Err()!=nil{return bad()};if l.SetDeadline(time.Now().Add(100*time.Millisecond))!=nil{return bad()};conn,e=l.AcceptUnix();if e==nil{break};if ne,ok:=e.(net.Error);!ok||!ne.Timeout(){return bad()};if c.LabScenario=="unexpected-exec"&&wc.registry.wasRejectedExec(){if sendLabRefusal(control,header,"BADEXEC1")!=nil{return bad()};return bad()}}
+ domainExit245 = 103
  defer conn.Close();raw,e:=conn.SyscallConn();if e!=nil{return bad()};var cred *syscall.Ucred;var ce error;if raw.Control(func(fd uintptr){cred,ce=syscall.GetsockoptUcred(int(fd),syscall.SOL_SOCKET,syscall.SO_PEERCRED)})!=nil||ce!=nil||cred==nil||cred.Uid!=uint32(os.Getuid())||cred.Pid<=0||int(cred.Pid)==gatewayPID||!wc.registry.isProvider(int(cred.Pid)){return bad()}
  // Guardian identity is intentionally checked against the connected peer; tracker custody validates its traced process tree.
+ domainExit245 = 104
  result:=serveAdmitted(ctx,control,conn,tracker,gatewayPID,int(cred.Pid),wc.registry.brokerIDs(),header,c.Target,c.Revision,c.Purpose,c.CaptureEvidence); if c.LabScenario=="wrong-holder"&&errors.Is(result,errUnexpectedWriter245){ if x:=sendLabRefusal(control,header,"BADWRITE");x!=nil{return x} }; return result
 }
 func sendLabRefusal(control *os.File,header [64]byte,code string)error{if control==nil||string(header[:8])!="SSINK001"||binary.BigEndian.Uint64(header[56:])==0||binary.BigEndian.Uint64(header[56:])>16384||(code!="BADWRITE"&&code!="BADEXEC1"){return errDomainWorker};packet:=make([]byte,64);copy(packet,"OCLABNO1");copy(packet[8:56],header[8:56]);copy(packet[56:],code);n,e:=control.Write(packet);if e!=nil||n!=len(packet){return errDomainWorker};return nil}
