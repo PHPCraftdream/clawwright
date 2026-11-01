@@ -127,17 +127,21 @@ int main(int argc, char **argv) {
     if (original_parent <= 0 || parent_guard(original_parent) < 0) die();
     exit_checkpoint = 114;
     nullfd = open("/dev/null", O_RDWR | O_CLOEXEC);
-    if (nullfd < 0 || unshare(CLONE_NEWNS | CLONE_NEWNET | CLONE_NEWPID) < 0 ||
+    if (nullfd < 0) die();
+    exit_checkpoint = 116;
+    if (fchdir(ROOT_FD) < 0 || chroot(".") < 0 || chdir("/") < 0) die();
+    close(ROOT_FD);
+    exit_checkpoint = 114;
+    if (unshare(CLONE_NEWNS | CLONE_NEWNET | CLONE_NEWPID) < 0 ||
         mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL) < 0) die();
     exit_checkpoint = 115;
     init = fork();
     if (init < 0) die();
     if (init == 0) {
         exit_checkpoint = 116;
-        if (parent_guard(0) < 0 || fchdir(ROOT_FD) < 0 || chroot(".") < 0 || chdir("/") < 0) die();
-        close(ROOT_FD);
+        if (parent_guard(0) < 0) die();
         exit_checkpoint = 117;
-        if (mount("proc", "/proc", "proc", MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, NULL) < 0) die();
+        if (mount("proc", "/proc", "proc", MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, "hidepid=0") < 0) die();
         exit_checkpoint = 118;
         char run_options[128];
         if (snprintf(run_options, sizeof run_options, "mode=0700,size=1m,uid=%lu,gid=%lu",
@@ -162,7 +166,6 @@ int main(int argc, char **argv) {
     }
     close(IMAGE_FD);
     close(CONTROL_FD);
-    close(ROOT_FD);
     close(META_FD);
     close(nullfd);
     return wait_child(init);
