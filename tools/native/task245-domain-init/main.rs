@@ -1,5 +1,5 @@
 // Linux amd64-only, dependency-free port of init.c.
-// Reference: ../task245-domain-init/init.c; launch contract: ../task245-lab-broker/launch_linux.go.
+// Historical reference: init.c at Git baseline 8eadbd4; caller contract: ../task245-lab-broker/launch_linux.go.
 // Diagnostics report the checkpoint and the most recent raw syscall errno.
 
 #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]

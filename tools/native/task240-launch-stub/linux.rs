@@ -113,7 +113,7 @@ const fn deny(nr: u32, action: u32) -> [Filter; 2] {
     [jump(BPF_JMP_JEQ_K, nr, 0, 1), stmt(BPF_RET_K, action)]
 }
 
-/// Construct the exact classic-BPF program used by `stub.c`.
+/// Construct the selected-ABI classic-BPF launch policy preserved from baseline 8eadbd4.
 fn filter() -> [Filter; 45] {
     let mut f = [stmt(BPF_RET_K, 0); 45];
     let mut i = 0;

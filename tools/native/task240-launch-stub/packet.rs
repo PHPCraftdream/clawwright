@@ -1,6 +1,6 @@
 //! Safe, allocation-free parser for the OCARGV01 launch packet.
 //!
-//! The wire format mirrors `stub.c`: magic, big-endian argc, length-prefixed
+//! Historical contract: `stub.c` at Git baseline 8eadbd4; magic, big-endian argc, length-prefixed
 //! argv, big-endian envc, then length-prefixed environment entries.
 
 pub const MAX_PACKET: usize = 4096;
