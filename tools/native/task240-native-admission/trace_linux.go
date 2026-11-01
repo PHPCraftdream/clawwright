@@ -48,7 +48,8 @@ type taskIdentity struct { TID, TGID int; StartTicks, ExecGeneration uint64 }
 type traceTask struct { id taskIdentity; stopped, exiting bool; pending syscall.Signal; recvEntry bool; recvMatch bool; recvFD int }
 type traceCommand struct { action uint8; ctx context.Context; snap *traceSnapshot; tid, fd int; reply chan traceReply }
 type traceReply struct { snap *traceSnapshot; err error }
-type TraceTracker struct { commands chan traceCommand; done chan struct{}; cancel context.CancelFunc; root int; once sync.Once }
+type traceWait func(int, *syscall.WaitStatus, int, *syscall.Rusage) (int, error)
+type TraceTracker struct { commands chan traceCommand; done chan struct{}; cancel context.CancelFunc; root int; once sync.Once; wait traceWait }
 type traceSnapshot struct { owner *TraceTracker; generation uint64; tasks []taskIdentity }
 
 func readProcBound(path string, max int64) ([]byte,error) { f,e:=os.Open(path); if e!=nil{return nil,e}; defer f.Close(); b,e:=io.ReadAll(io.LimitReader(f,max+1)); if e!=nil||int64(len(b))>max{return nil,errTrace}; return b,nil }
@@ -57,7 +58,9 @@ func namespaceInode(path string)(uint64,error){ i,e:=os.Stat(path);if e!=nil{ret
 func checkClosedTasks(tasks map[int]*traceTask,root int)error{ own,e:=namespaceInode("/proc/self/ns/pid");if e!=nil{return errTrace}; p,e:=namespaceInode("/proc/"+strconv.Itoa(os.Getppid())+"/ns/pid");if e!=nil||p!=own{return errTrace}; tracked:=map[int]bool{};for tid,t:=range tasks{if t==nil||t.id.TID!=tid{return errTrace};tracked[t.id.TGID]=true;id,x:=procIdentity(tid);if x!=nil||id.TGID!=t.id.TGID||id.StartTicks!=t.id.StartTicks{return errTrace};n,x:=namespaceInode("/proc/"+strconv.Itoa(tid)+"/ns/pid");if x!=nil||n!=own{return errTrace}};r,e:=procIdentity(root);if e!=nil||!tracked[r.TGID]{return errTrace}; entries,e:=os.ReadDir("/proc");if e!=nil||len(entries)>maxTraceTasks{return errTrace}; self,parent:=os.Getpid(),os.Getppid();for _,v:=range entries{if !v.IsDir(){continue};pid,x:=strconv.Atoi(v.Name());if x!=nil||pid<=0{continue};id,x:=procIdentity(pid);if x!=nil{return errTrace};if id.TGID!=self&&id.TGID!=parent&&!tracked[id.TGID]{return errTrace}};return nil }
 func ptrace(req,tid int,data uintptr,addrlen ...uintptr)(uintptr,error){var a uintptr;if len(addrlen)>0{a=addrlen[0]};r,_,e:=syscall.RawSyscall6(syscall.SYS_PTRACE,uintptr(req),uintptr(tid),a,data,0,0);if e!=0{return r,e};return r,nil}
 
-func NewTraceTracker(ctx context.Context,root int)(*TraceTracker,error){if ctx==nil||root<=0{return nil,errTrace};if _,ok:=ctx.Deadline();!ok||ctx.Err()!=nil{return nil,errTrace};c,cancel:=context.WithCancel(ctx);t:=&TraceTracker{commands:make(chan traceCommand),done:make(chan struct{}),cancel:cancel,root:root};ready:=make(chan error,1);go t.loop(c,ready);select{case e:=<-ready:if e!=nil{cancel();return nil,e};return t,nil;case <-c.Done():cancel();return nil,errTrace}}
+func NewTraceTracker(ctx context.Context,root int)(*TraceTracker,error){ return newTraceTracker(ctx,root,syscall.Wait4) }
+// The private wait seam lets kernel tests reorder real stops, never authorize delivery.
+func newTraceTracker(ctx context.Context,root int,wait traceWait)(*TraceTracker,error){if ctx==nil||root<=0||wait==nil{return nil,errTrace};if _,ok:=ctx.Deadline();!ok||ctx.Err()!=nil{return nil,errTrace};c,cancel:=context.WithCancel(ctx);t:=&TraceTracker{commands:make(chan traceCommand),done:make(chan struct{}),cancel:cancel,root:root,wait:wait};ready:=make(chan error,1);go t.loop(c,ready);select{case e:=<-ready:if e!=nil{cancel();return nil,e};return t,nil;case <-c.Done():cancel();return nil,errTrace}}
 func(t *TraceTracker)loop(ctx context.Context,ready chan<- error){
 	runtime.LockOSThread();defer close(t.done)
 	rootID,e:=procIdentity(t.root); ents,x:=os.ReadDir("/proc/"+strconv.Itoa(t.root)+"/task");if e!=nil||x!=nil||len(ents)!=1||ents[0].Name()!=strconv.Itoa(t.root)||rootID.TID!=rootID.TGID{ready<-errTrace;return}
@@ -72,7 +75,7 @@ func(t *TraceTracker)loop(ctx context.Context,ready chan<- error){
 	drain := func() error {
 		for {
 			var ws syscall.WaitStatus
-			pid, e := syscall.Wait4(-1, &ws, waitWall|syscall.WNOHANG, nil)
+			pid, e := t.wait(-1, &ws, waitWall|syscall.WNOHANG, nil)
 			if e == syscall.EINTR { continue }; if e != nil { return errTrace }; if pid == 0 { return nil }
 			task := owned[pid]
 			if ws.Exited() || ws.Signaled() {

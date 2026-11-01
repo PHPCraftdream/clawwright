@@ -38,4 +38,4 @@ jobs:
           set -euo pipefail
           sudo env -i PATH="$PATH" HOME="$RUNNER_TEMP/native-check-home" \
             GOTOOLCHAIN=local CGO_ENABLED=0 TASK240_STUB=/usr/local/bin/native-launch-stub \
-            go test -count=1 -timeout=90s tools/native/task240-native-admission/*.go
+            go test -v -count=2 -timeout=90s tools/native/task240-native-admission/*.go

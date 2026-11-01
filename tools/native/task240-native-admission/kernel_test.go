@@ -15,9 +15,11 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 // TestUnixDiagKernelPair exercises SOCK_DIAG against kernel-created sockets;
@@ -92,6 +94,21 @@ func TestAdmissionKernelHelper(t *testing.T) {
 	if _, _, e := syscall.RawSyscall(0x40000000|syscall.SYS_GETPID, 0, 0, 0); e != syscall.EPERM { t.Fatalf("x32 getpid errno=%v, want EPERM", e) }
 	selfPID, _, e := syscall.RawSyscall(syscall.SYS_GETPID, 0, 0, 0)
 	if e != 0 || selfPID != uintptr(os.Getpid()) { t.Fatalf("allowed getpid=%d errno=%v, want %d", selfPID, e, os.Getpid()) }
+	rawGateR, rawGateW, err := os.Pipe()
+	if err != nil { t.Fatal(err) }
+	defer rawGateW.Close()
+	var rawByte [1]byte
+	rawFD := rawGateR.Fd()
+	rawPID, _, rawErr := syscall.RawSyscall(syscall.SYS_FORK, 0, 0, 0)
+	if rawErr != 0 { t.Fatalf("raw fork: %v", rawErr) }
+	if rawPID == 0 {
+		// The raw child must not enter the Go runtime before exit.
+		for { _, _, e := syscall.RawSyscall(syscall.SYS_READ, rawFD, uintptr(unsafe.Pointer(&rawByte[0])), 1); if e != syscall.EINTR { break } }
+		_, _, _ = syscall.RawSyscall(syscall.SYS_EXIT, 0, 0, 0)
+		for {}
+	}
+	if err := rawGateR.Close(); err != nil { t.Fatal(err) }
+	if _, err := fmt.Fprintf(os.Stdout, "RAW %d\n", rawPID); err != nil { t.Fatal(err) }
 	childGateR, childGateW, err := os.Pipe()
 	if err != nil { t.Fatal(err) }
 	defer childGateW.Close()
@@ -122,6 +139,29 @@ func TestAdmissionKernelHelper(t *testing.T) {
 	for { n, err := syscall.Read(0, command[:]); if err == syscall.EINTR { continue }; if err != nil { t.Fatal(err) }; if n != 1 { t.Fatalf("helper final read %d bytes, want one", n) }; break }
 }
 
+// Reorder only real kernel stops, preserving their exact status and identity.
+func childFirstWait(count *atomic.Int32) traceWait {
+	var queuedPID int
+	var queuedStatus syscall.WaitStatus
+	seen := map[int]bool{}
+	return func(pid int, status *syscall.WaitStatus, options int, usage *syscall.Rusage) (int, error) {
+		if queuedPID != 0 { n := queuedPID; queuedPID = 0; *status = queuedStatus; return n, nil }
+		n, err := syscall.Wait4(pid, status, options, usage)
+		if err != nil || n <= 0 || !status.Stopped() { return n, err }
+		seen[n] = true
+		event := int(uint32(*status) >> 16)
+		if event != 1 && event != 2 && event != 3 { return n, nil }
+		var child uintptr
+		if _, err := ptrace(ptraceGetEventMsg, n, uintptr(unsafe.Pointer(&child))); err != nil { return 0, err }
+		if seen[int(child)] { count.Add(1); return n, nil }
+		queuedPID, queuedStatus = n, *status
+		for { n, err = syscall.Wait4(int(child), status, waitWall, nil); if err != syscall.EINTR { break } }
+		if err != nil || n != int(child) || !status.Stopped() { return 0, errTrace }
+		seen[n] = true; count.Add(1)
+		return n, nil
+	}
+}
+
 func TestTraceKernelBarrier(t *testing.T) {
 	for _, receivingFD := range []int{0, 1} {
 		t.Run(fmt.Sprintf("recv-fd-%d", receivingFD), func(t *testing.T) {
@@ -150,7 +190,8 @@ func TestTraceKernelBarrier(t *testing.T) {
 	unixConn, ok := parent.(*net.UnixConn); if !ok { t.Fatalf("control connection is %T, want UnixConn", parent) }; defer unixConn.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second); defer cancel()
 	deadline, _ := ctx.Deadline(); if err:=unixConn.SetDeadline(deadline); err!=nil {t.Fatal(err)}
-	tracker, err := NewTraceTracker(ctx, cmd.Process.Pid); if err != nil { _ = cmd.Process.Kill(); t.Fatalf("seize trusted stub: %v", err) }; defer tracker.Close()
+	var childFirst atomic.Int32
+	tracker, err := newTraceTracker(ctx, cmd.Process.Pid, childFirstWait(&childFirst)); if err != nil { _ = cmd.Process.Kill(); t.Fatalf("seize trusted stub: %v", err) }; defer tracker.Close()
 	packet := []byte("OCARGV01"); var word [4]byte
 	put := func(s string) { binary.BigEndian.PutUint32(word[:], uint32(len(s))); packet = append(packet, word[:]...); packet = append(packet, s...) }
 	binary.BigEndian.PutUint32(word[:], 4); packet = append(packet, word[:]...); put(image); put(admissionHelperArg); put("--"); put("OCARGV01-helper")
@@ -162,21 +203,23 @@ func TestTraceKernelBarrier(t *testing.T) {
 	if n,err:=gateW.Write([]byte{0xa5}); err!=nil||n!=1 { t.Fatalf("write gate byte %d: %v",n,err) }; if err:=gateW.Close(); err!=nil {t.Fatal(err)}
 	if err:=tracker.Release(snap1); err!=nil { t.Fatal(err) }; if err:=tracker.Release(snap1); err==nil { t.Fatal("accepted stale barrier snapshot") }
 	reader:=bufio.NewReader(unixConn)
-	var helperTID, spawned, childPID, childTID int
+	var helperTID, spawned, childPID, childTID, rawChild int
 	seen := map[string]bool{}
-	for len(seen) < 3 {
+	for len(seen) < 4 {
 		line, err := reader.ReadString('\n'); if err != nil { t.Fatal(err) }
 		fields := strings.Fields(line); if len(fields) == 0 { t.Fatal("empty record") }
 		kind := fields[0]; want := 2; if kind == "CHILD" { want = 3 }
-		if kind != "CHILD" && kind != "LIVE" && kind != "SPAWN" { t.Fatalf("unknown record %q", line) }
+		if kind != "CHILD" && kind != "LIVE" && kind != "SPAWN" && kind != "RAW" { t.Fatalf("unknown record %q", line) }
 		if len(fields) != want || seen[kind] { t.Fatalf("invalid record %q", line) }
 		a, e := strconv.Atoi(fields[1]); if e != nil || a <= 0 { t.Fatal("invalid identity") }
-		switch kind { case "LIVE": helperTID = a; case "SPAWN": spawned = a; case "CHILD": childPID = a; childTID, e = strconv.Atoi(fields[2]); if e != nil || childTID <= 0 { t.Fatal("invalid child tid") } }
+		switch kind { case "RAW": rawChild = a; case "LIVE": helperTID = a; case "SPAWN": spawned = a; case "CHILD": childPID = a; childTID, e = strconv.Atoi(fields[2]); if e != nil || childTID <= 0 { t.Fatal("invalid child tid") } }
 		seen[kind] = true
 	}
 	if spawned != childPID || childPID == cmd.Process.Pid { t.Fatal("descendant mismatch") }
 	snap2, err := tracker.Freeze(ctx); if err != nil { t.Fatal(err) }
-	if !hasTask(snap2, cmd.Process.Pid, 1) || !hasTask(snap2, helperTID, 1) || !hasTask(snap2, childTID, 3) || !hasTask(snap2, childPID, 3) { t.Fatalf("missing executed tasks: %+v", snap2.tasks) }
+	if childFirst.Load() == 0 { t.Fatal("child stop was never delivered before its parent event") }
+		if !hasTask(snap2, rawChild, 1) { t.Fatal("raw SYS_fork child absent from stopped task set") }
+		if !hasTask(snap2, cmd.Process.Pid, 1) || !hasTask(snap2, helperTID, 1) || !hasTask(snap2, childTID, 3) || !hasTask(snap2, childPID, 3) { t.Fatalf("missing executed tasks: %+v", snap2.tasks) }
 	groups := map[int]bool{}; for _, task := range snap2.tasks { groups[task.TGID] = true; _, state, e := readTaskStatus(task.TID); id, x := procIdentity(task.TID); if e != nil || x != nil || state != 't' || id.StartTicks != task.StartTicks || id.TGID != task.TGID { t.Fatal("task identity or stop mismatch") } }
 	seenTIDs := map[int]bool{}; for group := range groups { entries, e := os.ReadDir(fmt.Sprintf("/proc/%d/task", group)); if e != nil { t.Fatal(e) }; for _, entry := range entries { tid, e := strconv.Atoi(entry.Name()); if e != nil { t.Fatal(e) }; seenTIDs[tid] = true } }; if len(seenTIDs) != len(snap2.tasks) { t.Fatal("task set mismatch") }; for _, task := range snap2.tasks { if !seenTIDs[task.TID] { t.Fatal("missing task") } }
 	if old, e := tracker.AdvanceTransfer(ctx, snap2, -1, 0); e == nil || old != snap2 { t.Fatal("invalid request changed barrier") }
