@@ -25,10 +25,14 @@ func openKeeper() (*keeperSession, error) {
 	bad := func() (*keeperSession,error) { return nil,errKeeper }
 	if os.Geteuid() <= 0 { return bad() }
 	cfg, err := trustedKeeperConfig(); if err != nil { return bad() }
+	labCheckpoint245(11)
 	p := os.Getppid(); if p <= 1 || verifyParent(p,cfg.KeeperSHA256) != nil || !sameParentIdentity(p) { return bad() }
+	labCheckpoint245(12)
 	start, err := procStart(p); if err != nil { return bad() }
 	var input syscall.Stat_t; if syscall.Fstat(0,&input)!=nil { return bad() }
+	labCheckpoint245(13)
 	if !reciprocalPipe(0,p,false) || !reciprocalPipe(1,p,true) || !sealedSelfFD3() { return bad() }
+	labCheckpoint245(14)
 	in, err := pollableKeeperPipe(0); if err != nil { return bad() }
 	out, err := pollableKeeperPipe(1); if err != nil { in.Close(); return bad() }
 	return &keeperSession{in:in,out:out,parent:p,parentStart:start,keeperHash:cfg.KeeperSHA256,inputDev:uint64(input.Dev),inputIno:input.Ino},nil

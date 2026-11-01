@@ -4,6 +4,31 @@ import hashlib
 import os
 import pathlib
 import stat
+import sys
+
+
+def report_lab_checkpoints(proc):
+    codes = None
+    fd = -1
+    try:
+        fd = os.open('/var/lib/ssjack/synthetic/native-checkpoints', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+        info = os.fstat(fd)
+        if stat.S_ISREG(info.st_mode) and info.st_uid == 65534 and info.st_nlink == 1 and stat.S_IMODE(info.st_mode) == 0o600 and 0 < info.st_size <= 128:
+            raw = os.read(fd, 129)
+            if len(raw) <= 128 and all(1 <= code <= 32 for code in raw):
+                codes = '-'.join(str(code) for code in raw[-48:])
+    except OSError:
+        pass
+    finally:
+        if fd >= 0:
+            os.close(fd)
+    print('task245-profile: checkpoints=' + (codes or 'absent'), file=sys.stderr)
+    os.set_blocking(proc.stderr.fileno(), False)
+    raw = proc.stderr.read(4096) or b''
+    allowed = {'task245-broker: stage=' + str(code) for code in range(1, 6)}
+    for line in raw.decode('ascii', 'ignore').splitlines():
+        if line in allowed:
+            print('task245-profile: ' + line, file=sys.stderr)
 
 
 _ROOT = pathlib.Path("/")

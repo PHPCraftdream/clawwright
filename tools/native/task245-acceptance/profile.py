@@ -11,14 +11,13 @@ import signal
 import subprocess
 import sys
 import time
-from service import attest_service, remove_attestation; from service_test import check_services
+from service import attest_service, remove_attestation, report_lab_checkpoints; from service_test import check_services
 
 LAB = Path('/lab')
 ROOT = Path('/lab/native-root')
 CONFIG = Path('/etc/clawwright')
 UID = GID = 65534
 MS_BIND, MS_REMOUNT, MS_RDONLY = 4096, 32, 1
-
 def need(ok, why):
     if not ok:
         raise RuntimeError(why)
@@ -225,7 +224,7 @@ def main():
     os.chown(LAB / 'isolation-ok', 0, 0)
     os.chmod(LAB / 'isolation-ok', 0o444)
     check_services()
-    proc = subprocess.Popen([str(broker), '--disposable-lab'], env={}, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen([str(broker), '--disposable-lab'], env={}, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     metadata_proc = None
     try:
         need(proc.poll() is None, 'lab broker failed to start')
@@ -248,6 +247,7 @@ def main():
         env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'GITHUB_SHA': os.environ['GITHUB_SHA'], 'GITHUB_RUN_ID': os.environ['GITHUB_RUN_ID']}
         result = subprocess.run([str(LAB / 'conductor')], env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=600)
         if result.returncode != 0 or result.stderr:
+            report_lab_checkpoints(proc)
             if metadata_proc is not None and metadata_proc.poll() is not None:
                 for line in metadata_proc.stderr.read(256).decode('ascii', 'ignore').splitlines():
                     if re.fullmatch(r'metadata-daemon: stage=[0-6] auth=[0-4] errno=[0-9]{1,4}', line): print('task245-profile: ' + line, file=sys.stderr)
