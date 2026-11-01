@@ -77,7 +77,7 @@ static int test_close(int fd) {
     }
     return (int)syscall(SYS_close, fd);
 }
-static void must(int ok) { if (!ok) { perror("metadata regression assertion"); exit(1); } }
+#define must(ok) do { if (!(ok)) { fprintf(stderr,"metadata-test: line=%d errno=%d\n",__LINE__,errno); exit(1); } } while (0)
 static void create_file(const char *name, const void *data, size_t n) {
     int fd = openat(rootdir, name, O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC, 0600);
     must(fd >= 0 && write(fd, data, n) == (ssize_t)n);
@@ -235,7 +235,7 @@ static void notifier_case(void) {
         int l=task245_metadata_filter();must(l>=0);
         char data[CMSG_SPACE(sizeof(int))]={0};char magic[8]="LISTENER";struct iovec iov={.iov_base=magic,.iov_len=8};struct msghdr m={.msg_iov=&iov,.msg_iovlen=1,.msg_control=data,.msg_controllen=sizeof data};
         struct cmsghdr*c=CMSG_FIRSTHDR(&m);c->cmsg_level=SOL_SOCKET;c->cmsg_type=SCM_RIGHTS;c->cmsg_len=CMSG_LEN(sizeof(int));memcpy(CMSG_DATA(c),&l,sizeof l);must(sendmsg(sv[1],&m,0)==8);close(l);close(sv[1]);
-        landlock();seccomp(); int rc=notifier_checks(1,0); if(rc)_exit(30+rc);
+        landlock();seccomp(); int rc=notifier_checks(1,0); if(rc){dprintf(2,"metadata-test: check=%d\n",rc);_exit(30+rc);}
         pid_t g=fork();must(g>=0);if(!g){int r=notifier_checks(0,0);_exit(r?70+r:0);}must(waitpid(g,&status,0)==g&&WIFEXITED(status)&&!WEXITSTATUS(status));
         char *av[]={"/lab/bin/metadata-child","--notifier-exec",NULL};if(dup3(ctl[1],STDOUT_FILENO,0)!=STDOUT_FILENO)_exit(127);execve(av[0],av,environ);_exit(127);
     }

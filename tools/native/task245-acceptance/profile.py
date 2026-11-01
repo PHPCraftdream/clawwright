@@ -127,12 +127,20 @@ def main():
         shutil.copyfile(LAB / 'ssjack', product_keeper)
         os.chmod(product_keeper, 0o755)
         scenario_file = LAB / 'scenario'
+        denied_state = Path('/var/lib/ssjack/synthetic/state.json')
+        need(not denied_state.parent.exists(), 'notifier denied-state fixture must be fresh')
+        denied_state.parent.mkdir(parents=True, mode=0o700)
+        os.chown(denied_state.parent, UID, GID)
+        denied_state.write_text('{}'); os.chown(denied_state, UID, GID); os.chmod(denied_state, 0o600)
         try:
             shutil.copyfile(LAB / 'metadata-regression', LAB / 'harness')
             shutil.copyfile(LAB / 'metadata-regression', LAB / 'ssjack')
             os.chmod(LAB / 'harness', 0o755)
             os.chmod(LAB / 'ssjack', 0o755)
             inactive = subprocess.run(['/lab/harness', '--notifier-inactive'], env={'GITHUB_ACTIONS': 'true'}, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=20)
+            for line in inactive.stderr.splitlines():
+                if re.fullmatch(r'metadata-test: [a-z0-9_= -]{1,80}', line):
+                    print('task245-profile: ' + line, file=sys.stderr)
             need(inactive.returncode == 0, 'metadata notifier inactive regression returned nonzero')
             need(inactive.stdout == 'metadata notifier inactive: PASS' + chr(10), 'metadata notifier inactive regression output mismatch')
             need(inactive.stderr == '', 'metadata notifier inactive regression wrote stderr')
@@ -141,6 +149,9 @@ def main():
             os.chown(scenario_file, 0, 0)
             os.chmod(scenario_file, 0o444)
             regression = subprocess.run(['/lab/ssjack', '--notifier'], env={'GITHUB_ACTIONS': 'true'}, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=40)
+            for line in regression.stderr.splitlines():
+                if re.fullmatch(r'metadata-test: [a-z0-9_= -]{1,80}', line):
+                    print('task245-profile: ' + line, file=sys.stderr)
             need(regression.returncode == 0, 'metadata notifier regression returned nonzero')
             need(regression.stdout == 'metadata notifier regression: PASS' + chr(10), 'metadata notifier regression output mismatch')
             need(regression.stderr == '', 'metadata notifier regression wrote stderr')
@@ -157,6 +168,8 @@ def main():
                     scenario_file.unlink()
                 if product_keeper.exists():
                     product_keeper.unlink()
+                denied_state.unlink()
+                denied_state.parent.rmdir()
     bind_ro(LAB / 'ssjack')
     ROOT.mkdir()
     for d in ('usr/bin', 'usr/libexec', 'etc/clawwright', 'proc', 'run'):
