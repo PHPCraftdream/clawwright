@@ -41,6 +41,13 @@ def bind_ro(p):
     mount(MS_BIND)
     mount(MS_BIND | MS_REMOUNT | MS_RDONLY)
 
+def unbind(p):
+    import ctypes
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.umount2.argtypes = [ctypes.c_char_p, ctypes.c_int]
+    if libc.umount2(os.fsencode(p), 0):
+        raise OSError(ctypes.get_errno(), 'umount2 failed', str(p))
+
 def confinement_mode():
     need(sys.platform == 'linux' and os.geteuid() == 0, 'Linux root required')
     need(os.environ.get('GITHUB_ACTIONS') == 'true', 'GITHUB_ACTIONS=true required')
@@ -112,14 +119,16 @@ def main():
     selected = os.environ.get('OPENCLAW_IMAGE') or 'ghcr.io/openclaw/openclaw:extended-stable'
     (LAB / 'disposable-profile').write_text('task245 synthetic lab\n')
     os.chmod(LAB / 'disposable-profile', 0o444)
-    (LAB / 'bin/native-metadata').chmod(0o555)
-    bind_ro(LAB / 'bin')
     if not scenario:
         control_digest = digest(LAB / 'control-profile')
         keeper_digest = digest(LAB / 'ssjack')
         product_keeper = LAB / 'ssjack-product'
+        harness_keeper = LAB / 'harness-product-backup'
         need(not product_keeper.exists(), 'ssjack-product fixture already exists')
+        need(not harness_keeper.exists(), 'harness product backup fixture already exists')
         shutil.copyfile(LAB / 'ssjack', product_keeper)
+        shutil.copyfile(LAB / 'bin/harness', harness_keeper)
+        product_harness_digest = digest(harness_keeper)
         os.chmod(product_keeper, 0o755)
         scenario_file = LAB / 'scenario'
         denied_state = Path('/var/lib/ssjack/synthetic/state.json')
@@ -127,11 +136,26 @@ def main():
         denied_state.parent.mkdir(parents=True, mode=0o700)
         os.chown(denied_state.parent, UID, GID)
         denied_state.write_text('{}'); os.chown(denied_state, UID, GID); os.chmod(denied_state, 0o600)
+        receipt = denied_state.parent / 'consumer-receipt'
+        fault = denied_state.parent / 'native-fault-reached'
+        for fixture, content in ((receipt, bytes([0x5a]) * 48), (fault, b'cancel')):
+            fixture.write_bytes(content)
+            os.chown(fixture, UID, GID)
+            os.chmod(fixture, 0o600)
+        bin_bound = False
         try:
+            shutil.copyfile(LAB / 'metadata-regression', LAB / 'bin/harness')
             shutil.copyfile(LAB / 'metadata-regression', LAB / 'harness')
             shutil.copyfile(LAB / 'metadata-regression', LAB / 'ssjack')
+            os.chmod(LAB / 'bin/harness', 0o755)
             os.chmod(LAB / 'harness', 0o755)
             os.chmod(LAB / 'ssjack', 0o755)
+            need(not scenario_file.exists(), 'notifier scenario must be fresh')
+            scenario_file.write_text('cancel')
+            os.chown(scenario_file, 0, 0)
+            os.chmod(scenario_file, 0o444)
+            bind_ro(LAB / 'bin')
+            bin_bound = True
             inactive = subprocess.run(['/lab/harness', '--notifier-inactive'], env={'GITHUB_ACTIONS': 'true'}, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=20)
             for line in inactive.stderr.splitlines():
                 if re.fullmatch(r'metadata-test: [a-z0-9_= -]{1,80}', line):
@@ -139,10 +163,6 @@ def main():
             need(inactive.returncode == 0, 'metadata notifier inactive regression returned nonzero')
             need(inactive.stdout == 'metadata notifier inactive: PASS' + chr(10), 'metadata notifier inactive regression output mismatch')
             need(inactive.stderr == '', 'metadata notifier inactive regression wrote stderr')
-            need(not scenario_file.exists(), 'notifier scenario must be fresh')
-            scenario_file.write_text('cancel')
-            os.chown(scenario_file, 0, 0)
-            os.chmod(scenario_file, 0o444)
             regression = subprocess.run(['/lab/ssjack', '--notifier'], env={'GITHUB_ACTIONS': 'true'}, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=40)
             for line in regression.stderr.splitlines():
                 if re.fullmatch(r'metadata-test: [a-z0-9_= -]{1,80}', line):
@@ -152,19 +172,31 @@ def main():
             need(regression.stderr == '', 'metadata notifier regression wrote stderr')
         finally:
             try:
+                if bin_bound:
+                    unbind(LAB / 'bin')
                 shutil.copyfile(product_keeper, LAB / 'ssjack')
                 shutil.copyfile(LAB / 'control-profile', LAB / 'harness')
+                shutil.copyfile(harness_keeper, LAB / 'bin/harness')
                 os.chmod(LAB / 'ssjack', 0o755)
                 os.chmod(LAB / 'harness', 0o755)
+                os.chmod(LAB / 'bin/harness', 0o555)
                 need(digest(LAB / 'ssjack') == keeper_digest, 'keeper restoration digest mismatch')
                 need(digest(LAB / 'harness') == control_digest, 'control harness restoration digest mismatch')
+                need(digest(LAB / 'bin/harness') == product_harness_digest, 'product harness restoration digest mismatch')
             finally:
                 if scenario_file.exists():
                     scenario_file.unlink()
                 if product_keeper.exists():
                     product_keeper.unlink()
+                if harness_keeper.exists():
+                    harness_keeper.unlink()
                 denied_state.unlink()
+                for fixture in (receipt, fault):
+                    if fixture.exists():
+                        fixture.unlink()
                 denied_state.parent.rmdir()
+    (LAB / 'bin/native-metadata').chmod(0o555)
+    bind_ro(LAB / 'bin')
     bind_ro(LAB / 'ssjack')
     ROOT.mkdir()
     for d in ('usr/bin', 'usr/libexec', 'etc/clawwright', 'proc', 'run'):

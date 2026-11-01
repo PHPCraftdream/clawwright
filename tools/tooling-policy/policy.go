@@ -61,6 +61,16 @@ func check(root string) (report, error) {
 			approved[runnerPath] = gitBlobID(transformed)
 		}
 	}
+	const profilePath = "tools/native/task245-acceptance/profile.py"
+	if old, ok := legacy[profilePath]; ok {
+		oldBytes, err := git(root, "cat-file", "blob", old.blob)
+		if err != nil {
+			return report{}, fmt.Errorf("baseline profile blob: %w", err)
+		}
+		if transformed, err := approvedControlProfile(oldBytes); err == nil {
+			approved[profilePath] = gitBlobID(transformed)
+		}
+	}
 	return evaluateWithTransitions(current, legacy, reader, approved), nil
 }
 
@@ -72,6 +82,14 @@ const rustRunnerBlock = `        for source, output in (("task245-domain-init/ma
         for source, output in (("task245-control-profile/control-profile.c","control-profile"),`
 
 func approvedRunner(b []byte) ([]byte, error) {
+	transformed, err := approvedLaunchRunner(b)
+	if err != nil {
+		return nil, err
+	}
+	return approvedControlRunner(transformed)
+}
+
+func approvedLaunchRunner(b []byte) ([]byte, error) {
 	if bytes.Count(b, []byte(oldRunnerAnchor)) != 1 {
 		return nil, fmt.Errorf("runner anchor must occur exactly once")
 	}
@@ -207,7 +225,7 @@ func pathExt(name string) string {
 
 func approvedRustFallback(name string) bool {
 	switch name {
-	case "tools/native/task240-launch-stub/main.rs", "tools/native/task240-launch-stub/linux.rs", "tools/native/task240-launch-stub/packet.rs", "tools/native/task245-domain-init/main.rs":
+	case "tools/native/task240-launch-stub/main.rs", "tools/native/task240-launch-stub/linux.rs", "tools/native/task240-launch-stub/packet.rs", "tools/native/task245-domain-init/main.rs", "tools/native/task245-control-profile/installer/main.rs", "tools/native/task245-control-profile/installer/linux.rs", "tools/native/task245-control-profile/installer/filters.rs":
 		return true
 	default:
 		return false

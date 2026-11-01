@@ -94,13 +94,17 @@ def main():
         PHASE = "build-release-test"
         invoke(["go", "test", "-c", "-o", str(stage / "release-test"), "./task245-native-supervisor"], cwd=NATIVE, env=n_env)
         (stage / "release-test").chmod(0o755)
-        for source, output in (("task245-domain-init/main.rs", "native-init"), ("task240-launch-stub/main.rs", "native-stub")):
+        for source, output in (("task245-domain-init/main.rs", "native-init"), ("task240-launch-stub/main.rs", "native-stub"), ("task245-control-profile/installer/main.rs", "control-installer")):
             PHASE = "compile-" + output
             invoke(["rustc", "--edition=2021", "--target=x86_64-unknown-linux-gnu", "-C", "opt-level=2", "-C", "panic=abort", "-C", "target-feature=+crt-static", "-o", str(stage/output), str(NATIVE/source)])
-            (stage/output).chmod(0o755)
-        for source, output in (("task245-control-profile/control-profile.c","control-profile"),("task245-control-profile/probe.c","probe"),("task245-control-profile/metadata.c","native-metadata"),("task245-control-profile/metadata_test.c","metadata-regression"),("task245-acceptance/gateway.c","gateway"),("task245-acceptance/release_fixture.c","release-fixture")):
+            (stage/output).chmod(0o555 if output == "control-installer" else 0o755)
+        for source, output in (("task245-control-profile/probe.c", "probe"), ("task245-acceptance/gateway.c", "gateway"), ("task245-acceptance/release_fixture.c", "release-fixture")):
             PHASE = "compile-" + output
-            invoke(["cc","-std=c11","-O2","-static","-Werror=implicit-function-declaration","-o",str(stage/output),str(NATIVE/source),*([str(NATIVE/'task245-control-profile/metadata_client.c')] if output=='control-profile' else [])])
+            invoke(["cc", "-std=c11", "-O2", "-static", "-Werror=implicit-function-declaration", "-o", str(stage/output), str(NATIVE/source)])
+            (stage/output).chmod(0o755)
+        for output, package in (("control-profile", "./task245-control-profile/cmd/control-profile"), ("native-metadata", "./task245-control-profile/cmd/native-metadata"), ("metadata-regression", "./task245-control-profile/cmd/metadata-regression")):
+            PHASE = "build-" + output
+            build_go(NATIVE, package, stage / output, n_env)
             (stage/output).chmod(0o555 if output == "native-metadata" else 0o755)
         shutil.copyfile(NATIVE / "task245-acceptance/profile.py", stage / "profile.py")
         shutil.copyfile(NATIVE / "task245-acceptance/service.py", stage / "service.py")
@@ -110,7 +114,7 @@ def main():
         shutil.copyfile(delivery, stage / "delivery_pty.py")
         # Install named executable layout required by the authored profile.
         (stage / "bin").mkdir()
-        for source, target in (("harness","harness"),("native-lab-broker","native-lab-broker"),("native-metadata","native-metadata"),("ssjack","ssjack")):
+        for source, target in (("harness","harness"),("native-lab-broker","native-lab-broker"),("native-metadata","native-metadata"),("control-installer","control-installer"),("ssjack","ssjack")):
             shutil.copyfile(stage/source, stage/"bin"/target); (stage/"bin"/target).chmod(0o555 if target == "native-metadata" else 0o755)
         shutil.copyfile(stage/"control-profile", stage/"harness"); (stage/"harness").chmod(0o755)
         # The metadata child is a regression fixture, separate from the real bin/harness.
@@ -120,7 +124,7 @@ def main():
         if lab_case == "confinement":
             shutil.copyfile(stage / "probe", stage / "bin/harness")
             (stage / "bin/harness").chmod(0o755)
-        hashes={name:digest(stage/name) for name in ('ssjack','conductor','driver','harness','consumer','native-provider','native-lab-broker','release-test','release-fixture','native-stub','native-init','native-metadata','metadata-regression','gateway','control-profile','probe')}
+        hashes={name:digest(stage/name) for name in ('ssjack','conductor','driver','harness','consumer','native-provider','native-lab-broker','release-test','release-fixture','native-stub','native-init','control-installer','native-metadata','metadata-regression','gateway','control-profile','probe')}
         PHASE = "container-create"
         image = "python:3.13-slim"
         invoke(["docker","pull",image])
@@ -140,7 +144,7 @@ def main():
                     entry=tarfile.TarInfo("lab/"+str(path.relative_to(stage))); entry.type=tarfile.DIRTYPE; entry.mode=0o755; entry.uid=entry.gid=0; archive.addfile(entry); continue
                 entry=archive.gettarinfo(str(path),"lab/"+str(path.relative_to(stage)))
                 if not entry.isfile(): raise RuntimeError("nonregular staged input")
-                entry.uid=entry.gid=0; entry.mode=0o755
+                entry.uid=entry.gid=0; entry.mode=0o555 if path.relative_to(stage).as_posix() in ("native-metadata", "bin/native-metadata") else 0o755
                 with path.open("rb") as stream: archive.addfile(entry,stream)
         with tarpath.open("rb") as stream: invoke(["docker","cp","-",container+":/"],stdin=stream)
         PHASE="inspect-policy"

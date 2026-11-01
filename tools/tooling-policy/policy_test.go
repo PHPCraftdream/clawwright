@@ -240,7 +240,7 @@ func TestNestedDirectoryFilesCountTowardParentLimit(t *testing.T) {
 }
 
 func TestApprovedRustFallbackPathsAreExact(t *testing.T) {
-	allowed := []string{"tools/native/task240-launch-stub/main.rs", "tools/native/task240-launch-stub/linux.rs", "tools/native/task240-launch-stub/packet.rs", "tools/native/task245-domain-init/main.rs"}
+	allowed := []string{"tools/native/task240-launch-stub/main.rs", "tools/native/task240-launch-stub/linux.rs", "tools/native/task240-launch-stub/packet.rs", "tools/native/task245-domain-init/main.rs", "tools/native/task245-control-profile/installer/main.rs", "tools/native/task245-control-profile/installer/linux.rs", "tools/native/task245-control-profile/installer/filters.rs", "tools/native/task245-control-profile/installer/main.rs", "tools/native/task245-control-profile/installer/linux.rs", "tools/native/task245-control-profile/installer/filters.rs"}
 	for _, name := range allowed {
 		if !approvedRustFallback(name) { t.Errorf("approved path rejected: %s", name) }
 	}
@@ -330,7 +330,7 @@ func TestUnreadableBlobIsViolation(t *testing.T) {
 }
 
 func TestApprovedRustFallbackFinitePathsAndLineCeiling(t *testing.T) {
-	allowed := []string{"tools/native/task240-launch-stub/main.rs", "tools/native/task240-launch-stub/linux.rs", "tools/native/task240-launch-stub/packet.rs", "tools/native/task245-domain-init/main.rs"}
+	allowed := []string{"tools/native/task240-launch-stub/main.rs", "tools/native/task240-launch-stub/linux.rs", "tools/native/task240-launch-stub/packet.rs", "tools/native/task245-domain-init/main.rs", "tools/native/task245-control-profile/installer/main.rs", "tools/native/task245-control-profile/installer/linux.rs", "tools/native/task245-control-profile/installer/filters.rs", "tools/native/task245-control-profile/installer/main.rs", "tools/native/task245-control-profile/installer/linux.rs", "tools/native/task245-control-profile/installer/filters.rs"}
 	for _, path := range allowed {
 		if !approvedRustFallback(path) { t.Errorf("approved path rejected: %s", path) }
 		result := evaluateWithTransitions(map[string]inventory{path: {mode: "100644", blob: "new"}}, nil, func(inventory) (int, error) { return 1, nil }, nil)
@@ -347,10 +347,10 @@ func TestApprovedRustFallbackFinitePathsAndLineCeiling(t *testing.T) {
 func TestApprovedRunnerExactTransformAndAdmission(t *testing.T) {
 	before := []byte("prefix\n" + oldRunnerAnchor + "\nsuffix")
 	want := []byte("prefix\n" + rustRunnerBlock + "\nsuffix")
-	got, err := approvedRunner(before)
+	got, err := approvedLaunchRunner(before)
 	if err != nil || !bytes.Equal(got, want) { t.Fatalf("transform=%q err=%v, want %q", got, err, want) }
 	for _, input := range [][]byte{[]byte("missing anchor"), []byte(oldRunnerAnchor + oldRunnerAnchor)} {
-		if _, err := approvedRunner(input); err == nil { t.Fatalf("accepted invalid anchor input %q", input) }
+		if _, err := approvedLaunchRunner(input); err == nil { t.Fatalf("accepted invalid anchor input %q", input) }
 	}
 	if got := gitBlobID(nil); got != "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391" { t.Fatalf("empty blob ID=%s", got) }
 

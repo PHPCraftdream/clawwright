@@ -1,8 +1,8 @@
 name: Native supervisor source checks
 run-name: Native supervisor source checks
 
-# Pushes compile and test source only. The root-capability mechanism profile is a
-# separate, manually approved disposable-lab job; it is not product adoption.
+# Pushes include disposable root-capability component suites.
+# Full keeper composition remains a separate manual lab, not product adoption.
 on:
   push:
     paths:
@@ -63,6 +63,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          uname -r
           command -v rustc
           rustc --version --verbose
           cargo --version
@@ -78,13 +79,17 @@ jobs:
           "$RUNNER_TEMP/native-domain-init-tests"
           rustc --edition=2021 --target=x86_64-unknown-linux-gnu -C opt-level=2 -C panic=abort -C target-feature=+crt-static -o "$RUNNER_TEMP/native-launch-stub" tools/native/task240-launch-stub/main.rs
           rustc --edition=2021 --target=x86_64-unknown-linux-gnu -C opt-level=2 -C panic=abort -C target-feature=+crt-static -o "$RUNNER_TEMP/native-domain-init" tools/native/task245-domain-init/main.rs
+      - name: Test and compile control installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --test --edition=2021 --target=x86_64-unknown-linux-gnu -C opt-level=2 -C target-feature=+crt-static tools/native/task245-control-profile/installer/main.rs -o "$RUNNER_TEMP/control-installer-tests"
+          "$RUNNER_TEMP/control-installer-tests"
+          rustc --edition=2021 --target=x86_64-unknown-linux-gnu -C opt-level=2 -C panic=abort -C target-feature=+crt-static -o "$RUNNER_TEMP/control-installer" tools/native/task245-control-profile/installer/main.rs
       - name: Compile remaining native C source
         shell: bash
         run: |
           set -euo pipefail
-          cc -std=c11 -O2 -static -Werror=implicit-function-declaration -o "$RUNNER_TEMP/native-control-profile" tools/native/task245-control-profile/control-profile.c tools/native/task245-control-profile/metadata_client.c
-          cc -std=c11 -O2 -static -Werror=implicit-function-declaration -o "$RUNNER_TEMP/native-metadata" tools/native/task245-control-profile/metadata.c
-          cc -std=c11 -O2 -static -Werror=implicit-function-declaration -o "$RUNNER_TEMP/metadata-regression" tools/native/task245-control-profile/metadata_test.c
           cc -std=c11 -O2 -static -Werror=implicit-function-declaration -o "$RUNNER_TEMP/native-control-probe" tools/native/task245-control-profile/probe.c
           cc -std=c11 -O2 -static -Werror=implicit-function-declaration -o "$RUNNER_TEMP/native-release-fixture" tools/native/task245-acceptance/release_fixture.c
           cc -std=c11 -O2 -static -Werror=implicit-function-declaration -o "$RUNNER_TEMP/native-gateway" tools/native/task245-acceptance/gateway.c
@@ -104,6 +109,7 @@ jobs:
           set -euo pipefail
           go test -run='Test(EncodeLaunchPacket|ParseKeeperConfig|ParseServiceProof245|KeeperInheritedPipes)' ./task245-native-supervisor
           go test ./task245-native-content ./task240-native-policy ./task240-native-provider ./task245-lab-broker
+          go test ./task245-control-profile/cmd/control-profile ./task245-control-profile/cmd/native-metadata ./task245-control-profile/cmd/metadata-regression ./task245-control-profile/internal/proof ./task245-control-profile/internal/regression
       - name: Build native Go binaries
         shell: bash
         working-directory: tools/native
@@ -115,6 +121,22 @@ jobs:
           go build -o "$RUNNER_TEMP/native-supervisor" ./task245-native-supervisor
           go build -o "$RUNNER_TEMP/native-provider" ./task240-native-provider
           go build -o "$RUNNER_TEMP/native-lab-broker" ./task245-lab-broker
+          go build -o "$RUNNER_TEMP/control-profile" ./task245-control-profile/cmd/control-profile
+          go build -o "$RUNNER_TEMP/native-metadata" ./task245-control-profile/cmd/native-metadata
+          go build -o "$RUNNER_TEMP/metadata-regression" ./task245-control-profile/cmd/metadata-regression
+      - name: Run public control metadata kernel suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/control-metadata-input"
+          cp "$RUNNER_TEMP/control-profile" "$RUNNER_TEMP/control-metadata-input/control-profile"
+          cp "$RUNNER_TEMP/control-installer" "$RUNNER_TEMP/control-metadata-input/control-installer"
+          cp "$RUNNER_TEMP/native-metadata" "$RUNNER_TEMP/control-metadata-input/native-metadata"
+          cp "$RUNNER_TEMP/metadata-regression" "$RUNNER_TEMP/control-metadata-input/metadata-regression"
+          cp "$RUNNER_TEMP/native-control-probe" "$RUNNER_TEMP/control-metadata-input/probe"
+          chmod 0555 "$RUNNER_TEMP/control-metadata-input/control-profile" "$RUNNER_TEMP/control-metadata-input/control-installer" "$RUNNER_TEMP/control-metadata-input/native-metadata" "$RUNNER_TEMP/control-metadata-input/metadata-regression" "$RUNNER_TEMP/control-metadata-input/probe"
+          docker run --rm --network none --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --cap-add SETUID --cap-add SETGID --cap-add SYS_PTRACE --cap-add SYS_ADMIN --security-opt no-new-privileges --security-opt apparmor=unconfined --pids-limit 256 --memory 1g --env GITHUB_ACTIONS=true --mount "type=bind,src=$RUNNER_TEMP/control-metadata-input,dst=/input,readonly" --entrypoint /input/metadata-regression python:3.13-slim --kernel-suite
+          docker run --rm --network none --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --cap-add SETUID --cap-add SETGID --cap-add SYS_PTRACE --cap-add SYS_ADMIN --security-opt no-new-privileges --security-opt apparmor=unconfined --pids-limit 256 --memory 1g --env GITHUB_ACTIONS=true --mount "type=bind,src=$RUNNER_TEMP/control-metadata-input,dst=/input,readonly" --entrypoint /input/metadata-regression python:3.13-slim --confinement-suite
 
   connected-lab:
     name: Disposable lab CLI-to-native mechanism (not OpenClaw adoption)
