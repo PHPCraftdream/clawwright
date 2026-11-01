@@ -237,7 +237,7 @@ static void cleanup(int socketfd) {
     unlink(SOCK);
 }
 int main(int argc, char **argv) {
-    int socketfd = -1, received = -1, status = 1; struct sockaddr_un address = {.sun_family = AF_UNIX};
+    int socketfd = -1, received = -1, status = 1, stage = 0; struct sockaddr_un address = {.sun_family = AF_UNIX};
     struct stat st; struct ucred credentials; socklen_t credentials_size = sizeof credentials; unsigned char message[9]; char control[CMSG_SPACE(sizeof(int))] = {0};
     struct iovec iov = {message, sizeof message}; struct msghdr header = {.msg_iov=&iov, .msg_iovlen=1, .msg_control=control, .msg_controllen=sizeof control};
     if (argc != 2 || strcmp(argv[1], "--disposable-lab") || getuid() != 0 ||
@@ -248,12 +248,12 @@ int main(int argc, char **argv) {
     if (socketfd < 0) goto out;
     strncpy(address.sun_path, SOCK, sizeof address.sun_path - 1);
     if (bind(socketfd, (struct sockaddr *)&address, sizeof address) || chmod(SOCK, 0666) || listen(socketfd, 4)) goto out;
-    client = accept4(socketfd, NULL, NULL, SOCK_CLOEXEC);
+    stage = 1; client = accept4(socketfd, NULL, NULL, SOCK_CLOEXEC);
     if (client < 0 || getsockopt(client, SOL_SOCKET, SO_PEERCRED, &credentials, &credentials_size) ||
         credentials.uid != 65534) goto out;
     peer_pid = credentials.pid;
-    if (!authorized(peer_pid)) goto out;
-    rootdir = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    stage = 2; if (!authorized(peer_pid)) goto out;
+    stage = 3; rootdir = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
     const char *parts[] = {"var", "lib", "ssjack"};
     for (size_t i = 0; rootdir >= 0 && i < sizeof parts / sizeof *parts; i++) {
         int next = openat(rootdir, parts[i], O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
@@ -262,13 +262,13 @@ int main(int argc, char **argv) {
     }
     int next = rootdir < 0 ? -1 : openat(rootdir, "synthetic", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
     if (rootdir >= 0) close(rootdir); rootdir=next;
-    if (rootdir < 0 || fstat(rootdir, &st) || !S_ISDIR(st.st_mode) ||
+    stage = 4; if (rootdir < 0 || fstat(rootdir, &st) || !S_ISDIR(st.st_mode) ||
         st.st_uid != 65534 || st.st_nlink < 2 || (st.st_mode & 07777) != 0700) goto out;
-    if (recvmsg(client, &header, 0) != 8 || memcmp(message, "OCMETA01", 8) ||
+    stage = 5; if (recvmsg(client, &header, 0) != 8 || memcmp(message, "OCMETA01", 8) ||
         (header.msg_flags & (MSG_CTRUNC|MSG_TRUNC))) goto out;
     struct cmsghdr *item = CMSG_FIRSTHDR(&header);
     if (!item || item->cmsg_level != SOL_SOCKET || item->cmsg_type != SCM_RIGHTS ||
         item->cmsg_len != CMSG_LEN(sizeof(int)) || CMSG_NXTHDR(&header, item)) goto out;
-    memcpy(&received, CMSG_DATA(item), sizeof received); listener = received; received = -1; handle(); status = 0;
-out: if (received >= 0) close(received); cleanup(socketfd); return status;
+    memcpy(&received, CMSG_DATA(item), sizeof received); listener = received; received = -1; stage = 6; handle(); status = 0;
+out: if (status) fprintf(stderr,"metadata-daemon: stage=%d\n",stage); if (received >= 0) close(received); cleanup(socketfd); return status;
 }

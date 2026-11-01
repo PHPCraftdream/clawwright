@@ -239,7 +239,7 @@ def main():
             time.sleep(0.05)
         need(proc.poll() is None and broker_socket.exists(), 'lab broker readiness timed out')
         if scenario:
-            metadata_proc = subprocess.Popen(['/lab/bin/native-metadata', '--disposable-lab'], env={}, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            metadata_proc = subprocess.Popen(['/lab/bin/native-metadata', '--disposable-lab'], env={}, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             metadata_socket = Path('/run/task245-metadata.sock')
             deadline = time.monotonic() + 2
             while not metadata_socket.exists() and time.monotonic() < deadline:
@@ -249,6 +249,9 @@ def main():
         env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'GITHUB_SHA': os.environ['GITHUB_SHA'], 'GITHUB_RUN_ID': os.environ['GITHUB_RUN_ID']}
         result = subprocess.run([str(LAB / 'conductor')], env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=600)
         if result.returncode != 0 or result.stderr:
+            if metadata_proc is not None and metadata_proc.poll() is not None:
+                for line in metadata_proc.stderr.read(256).decode('ascii', 'ignore').splitlines():
+                    if re.fullmatch(r'metadata-daemon: stage=[0-6]', line): print('task245-profile: ' + line, file=sys.stderr)
             for line in result.stderr.splitlines():
                 if re.fullmatch(r'task245-conductor: [a-z -]{1,100}', line):
                     print('task245-profile: ' + line, file=sys.stderr)
