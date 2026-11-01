@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/wait.h>

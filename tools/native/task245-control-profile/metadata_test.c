@@ -34,7 +34,7 @@ static int test_close(int);
 #undef fsync
 #undef write
 
-static char rootpath[PATH_MAX];
+static char rootpath[sizeof "/lab/metadata-test-XXXXXX"];
 static int fault_phase, fault_count, fault_errno;
 static int is_ack(int fd) {
     char link[64], target[PATH_MAX];

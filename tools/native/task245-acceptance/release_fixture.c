@@ -72,9 +72,11 @@ static int provider(void) {
     if(mode==7) while(access("/run/release-drain",F_OK)!=0) usleep(1000);
     char payload[16384]; size_t got=0;
     while(got<payload_len) {
-        ssize_t n=read(s,payload+got,payload_len-got);
+        size_t want=(size_t)payload_len-got;
+        if(got>=sizeof payload||want>sizeof payload-got) fail(27);
+        ssize_t n=read(s,payload+got,want);
         if(n<0&&errno==EINTR) continue;
-        if(n<=0) fail(27);
+        if(n<=0||(size_t)n>want) fail(27);
         if(!got) mark(RECEIVED_PATH);
         got+=(size_t)n;
     }
