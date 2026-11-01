@@ -3,12 +3,15 @@
 package regression
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"syscall"
+	"strings"
 	"time"
 
 	"clawforge/tools/native/task240-native/task245-control-profile/internal/metadata"
@@ -19,6 +22,108 @@ var errACKUnexpectedWait = errors.New("invalid ACK entered pending wait")
 
 func RunACKRegression() error {
 	return metadata.RunACKRegression()
+}
+
+// ReportFailure emits only finite diagnostic codes and numeric process metadata.
+func ReportFailure(stage string, err error) {
+	fmt.Fprint(os.Stderr, formatFailure(stage, err))
+}
+
+func formatFailure(stage string, err error) string {
+	stage = diagnosticStage(stage)
+	class, errno, exit, signal := "error", 0, 0, 0
+	if errors.Is(err, context.DeadlineExceeded) {
+		class = "deadline"
+	} else if errors.Is(err, context.Canceled) {
+		class = "canceled"
+	}
+	var syscallErr syscall.Errno
+	if errors.As(err, &syscallErr) && syscallErr >= 0 && syscallErr <= 4095 {
+		errno = int(syscallErr)
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		exit = exitErr.ExitCode()
+		if exit < -1 || exit > 255 {
+			exit = -1
+		}
+		if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+			signal = int(status.Signal())
+			if signal < 0 || signal > 64 {
+				signal = 0
+			}
+		}
+	}
+	return fmt.Sprintf("metadata-regression: stage=%s class=%s errno=%d exit=%d signal=%d\n", stage, class, errno, exit, signal)
+}
+
+// ReportStage emits a validated progress breadcrumb.
+func ReportStage(stage string) {
+	fmt.Fprintf(os.Stderr, "metadata-regression: stage=%s event=start\n", diagnosticStage(stage))
+}
+
+func ReportDone(stage string) {
+	fmt.Fprintf(os.Stderr, "metadata-regression: stage=%s event=done\n", diagnosticStage(stage))
+}
+
+func diagnosticStage(stage string) string {
+	switch stage {
+	case "suite_ack", "suite_driver", "observer_positive", "observer_negative", "lifetime_cases", "service_proofs", "inactive", "active", "fault_write", "fault_fsync", "fault_close", "refusal_receipt", "refusal_fault", "fifo":
+		return stage
+	default:
+		return "unknown"
+	}
+}
+
+func RunDiagnosticRegression() error {
+	var got bytes.Buffer
+	filter := &diagnosticFilter{out: &got}
+	valid := "metadata-regression: stage=suite_ack event=start\n" +
+		"metadata-regression: stage=unknown event=done\n" +
+		"metadata-regression: stage=active class=error errno=13 exit=-1 signal=0\n" +
+		"metadata-regression: stage=fifo class=deadline errno=0 exit=0 signal=0\n"
+	for i := 0; i < len(valid); i += 3 {
+		end := min(i+3, len(valid))
+		_, _ = filter.Write([]byte(valid[i:end]))
+	}
+
+	invalid := []string{
+		"metadata-regression: stage=unknownstage class=error errno=0 exit=0 signal=0\n",
+		"metadata-regression: stage=active class=unknownclass errno=0 exit=0 signal=0\n",
+		"metadata-regression: stage=active class=error errno=4096 exit=0 signal=0\n",
+		"metadata-regression: stage=active class=error errno=0 exit=256 signal=0\n",
+		"metadata-regression: stage=active class=error errno=0 exit=0 signal=65\n",
+		"metadata-regression: stage=active class=error errno=01 exit=0 signal=0\n",
+		"metadata-regression: stage=active event=done secret=private\n",
+		"private bootstrap=secret\n",
+		strings.Repeat("x", 257) + "\n",
+	}
+	for _, line := range invalid {
+		_, _ = filter.Write([]byte(line))
+	}
+	_, _ = filter.Write([]byte("metadata-regression: stage=active event=done\n"))
+
+	want := "metadata-regression: stage=suite_ack event=start\n" +
+		"metadata-regression: stage=unknown event=done\n" +
+		"metadata-regression: stage=active class=error errno=13 exit=-1 signal=0\n" +
+		"metadata-regression: stage=fifo class=deadline errno=0 exit=0 signal=0\n" +
+		"metadata-regression: stage=active event=done\n"
+	if got.String() != want {
+		return errors.New("diagnostic filter output mismatch")
+	}
+	if strings.Contains(got.String(), "secret") {
+		return errors.New("diagnostic filter leaked invalid input")
+	}
+	if strings.Contains(formatFailure("active", errors.New("sensitive diagnostic")), "sensitive diagnostic") {
+		return errors.New("failure formatter leaked error text")
+	}
+	if formatFailure("active", fmt.Errorf("wrapped: %w", syscall.EACCES)) != "metadata-regression: stage=active class=error errno=13 exit=0 signal=0\n" {
+		return errors.New("failure formatter lost errno")
+	}
+	if formatFailure("active", context.DeadlineExceeded) != "metadata-regression: stage=active class=deadline errno=0 exit=0 signal=0\n" {
+		return errors.New("failure formatter lost deadline class")
+	}
+	return nil
 }
 
 func requireACKAbsent(path string) error {

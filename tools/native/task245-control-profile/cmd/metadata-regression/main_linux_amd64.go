@@ -127,7 +127,14 @@ func main() {
 }
 
 func runtimeError(context string, err error) {
-	fmt.Fprintln(os.Stderr, context+": failed")
+	stage := "unknown"
+	switch context {
+	case "metadata cancel-ack regression":
+		stage = "suite_ack"
+	case "metadata kernel driver", "metadata component kernel suite", "metadata confinement suite":
+		stage = "suite_driver"
+	}
+	regression.ReportFailure(stage, err)
 	os.Exit(1)
 }
 

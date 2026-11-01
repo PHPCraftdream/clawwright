@@ -32,41 +32,6 @@ type kernelIdentity struct {
 	start uint64
 }
 
-// RunKernelDriver runs the inactive and active cancellation proofs against the real daemon.
-func RunKernelDriver(ctx context.Context) error {
-	if os.Geteuid() != 0 || os.Getenv("GITHUB_ACTIONS") != "true" {
-		return errors.New("kernel regression driver requires root in GitHub Actions")
-	}
-	if err := RunACKObserverRegression(); err != nil {
-		return fmt.Errorf("ACK observer regression: %w", err)
-	}
-	if err := runACKObserverFailures(); err != nil {
-		return fmt.Errorf("ACK observer failure regression: %w", err)
-	}
-	if err := RunDaemonLifetimeCases(ctx); err != nil {
-		return fmt.Errorf("daemon lifetime cases: %w", err)
-	}
-	if err := RunServiceProofCases(ctx); err != nil {
-		return fmt.Errorf("service proof matrix: %w", err)
-	}
-	for _, active := range []bool{false, true} {
-		if err := runCase(ctx, active); err != nil {
-			return fmt.Errorf("kernel lifecycle active=%t: %w", active, err)
-		}
-	}
-	for _, phase := range []string{"write", "fsync", "close"} {
-		if err := runFaultCase(ctx, phase); err != nil {
-			return fmt.Errorf("kernel fault %s case: %w", phase, err)
-		}
-	}
-	for _, kind := range []string{"badreceipt", "wrongfault", "receiptfifo"} {
-		if err := runRefusalCase(ctx, kind); err != nil {
-			return fmt.Errorf("kernel refusal %s case: %w", kind, err)
-		}
-	}
-	return nil
-}
-
 // RunNotifierPreflight runs a single notifier case against a prepared lab.
 func RunNotifierPreflight(active bool) error {
 	if os.Geteuid() != 0 || os.Getenv("GITHUB_ACTIONS") != "true" {

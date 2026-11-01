@@ -10,12 +10,84 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 )
 
-// RunKernelSuite stages the fixed, prebuilt artifacts in the disposable lab.
+type diagnosticFilter struct {
+	out      io.Writer
+	line     []byte
+	dropping bool
+}
+
+func (w *diagnosticFilter) Write(p []byte) (int, error) {
+	for _, b := range p {
+		if w.dropping {
+			if b == '\n' {
+				w.dropping = false
+				w.line = w.line[:0]
+			}
+			continue
+		}
+
+		if b != '\n' {
+			if len(w.line) >= 256 {
+				w.line = w.line[:0]
+				w.dropping = true
+				continue
+			}
+			w.line = append(w.line, b)
+			continue
+		}
+
+		w.acceptLine()
+	}
+
+	return len(p), nil
+}
+
+func (w *diagnosticFilter) acceptLine() {
+	line := string(w.line)
+	w.line = w.line[:0]
+
+	fields := strings.Split(line, " ")
+	valid := false
+	if len(fields) == 3 && fields[0] == "metadata-regression:" && strings.HasPrefix(fields[1], "stage=") {
+		stage := strings.TrimPrefix(fields[1], "stage=")
+		valid = diagnosticStage(stage) == stage &&
+			(fields[2] == "event=start" || fields[2] == "event=done")
+	} else if len(fields) == 6 && fields[0] == "metadata-regression:" && strings.HasPrefix(fields[1], "stage=") {
+		stage := strings.TrimPrefix(fields[1], "stage=")
+		valid = diagnosticStage(stage) == stage &&
+			(fields[2] == "class=error" || fields[2] == "class=deadline" || fields[2] == "class=canceled")
+
+		limits := []int{4095, 255, 64}
+		for i, key := range []string{"errno=", "exit=", "signal="} {
+			field := fields[i+3]
+			if !strings.HasPrefix(field, key) {
+				valid = false
+				continue
+			}
+
+			value := strings.TrimPrefix(field, key)
+			n, err := strconv.Atoi(value)
+			min := 0
+			if i == 1 {
+				min = -1
+			}
+			if err != nil || n < min || n > limits[i] || strconv.Itoa(n) != value {
+				valid = false
+			}
+		}
+	}
+
+	if valid {
+		_, _ = io.WriteString(w.out, line+"\n")
+	}
+}
+
 func RunKernelSuite() error { return runKernelSuite(false) }
 
 // RunConfinementSuite exercises the real Go-to-Rust control path via the fixed probe.
@@ -99,12 +171,25 @@ func runKernelSuite(stageConfinement bool) error {
 	if err := os.Chmod(fault, 0600); err != nil { return err }
 	if err := syscall.Mount("/lab/bin", "/lab/bin", "", syscall.MS_BIND, ""); err != nil { return err }
 	if err := syscall.Mount("", "/lab/bin", "", syscall.MS_BIND|syscall.MS_REMOUNT|syscall.MS_RDONLY, ""); err != nil { return err }
-	if err := RunACKRegression(); err != nil { return err }
+	ReportStage("suite_ack")
+	if err := RunACKRegression(); err != nil {
+		ReportFailure("suite_ack", err)
+		return err
+	}
+	ReportDone("suite_ack")
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "/lab/ssjack", "--kernel-driver")
 	cmd.Env = append(os.Environ(), "GITHUB_ACTIONS=true")
-	if err := cmd.Run(); err != nil { return fmt.Errorf("run /lab/ssjack: %w", err) }
+	cmd.Stderr = &diagnosticFilter{out: os.Stderr}
+	ReportStage("suite_driver")
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return errors.Join(ctx.Err(), err)
+		}
+		return fmt.Errorf("run kernel driver: %w", err)
+	}
+	ReportDone("suite_driver")
 	return nil
 }
 

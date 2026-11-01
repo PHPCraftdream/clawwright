@@ -324,3 +324,47 @@ func ServicePeerChild() error {
 	}
 	return nil
 }
+
+func runDiagnosticStage(code string, run func() error) error {
+	ReportStage(code)
+	if err := run(); err != nil {
+		ReportFailure(code, err)
+		return err
+	}
+	ReportDone(code)
+	return nil
+}
+
+// RunKernelDriver runs the privileged diagnostic regression cases.
+func RunKernelDriver(ctx context.Context) error {
+	if os.Geteuid() != 0 || os.Getenv("GITHUB_ACTIONS") != "true" {
+		return errors.New("kernel driver regression requires root in GitHub Actions")
+	}
+	if err := RunDiagnosticRegression(); err != nil {
+		return err
+	}
+
+	stages := []struct {
+		code string
+		run  func() error
+	}{
+		{"observer_positive", RunACKObserverRegression},
+		{"observer_negative", runACKObserverFailures},
+		{"lifetime_cases", func() error { return RunDaemonLifetimeCases(ctx) }},
+		{"service_proofs", func() error { return RunServiceProofCases(ctx) }},
+		{"inactive", func() error { return runCase(ctx, false) }},
+		{"active", func() error { return runCase(ctx, true) }},
+		{"fault_write", func() error { return runFaultCase(ctx, "write") }},
+		{"fault_fsync", func() error { return runFaultCase(ctx, "fsync") }},
+		{"fault_close", func() error { return runFaultCase(ctx, "close") }},
+		{"refusal_receipt", func() error { return runRefusalCase(ctx, "badreceipt") }},
+		{"refusal_fault", func() error { return runRefusalCase(ctx, "wrongfault") }},
+		{"fifo", func() error { return runRefusalCase(ctx, "receiptfifo")}},
+	}
+	for _, stage := range stages {
+		if err := runDiagnosticStage(stage.code, stage.run); err != nil {
+			return err
+		}
+	}
+	return nil
+}
