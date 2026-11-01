@@ -137,7 +137,7 @@ int main(int argc, char **argv) {
         if (parent_guard(0) < 0 || fchdir(ROOT_FD) < 0 || chroot(".") < 0 || chdir("/") < 0) die();
         close(ROOT_FD);
         exit_checkpoint = 117;
-        if (mount("proc", "/proc", "proc", MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, "hidepid=0") < 0) die();
+        if (mount("proc", "/proc", "proc", MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, NULL) < 0) die();
         exit_checkpoint = 118;
         char run_options[128];
         if (snprintf(run_options, sizeof run_options, "mode=0700,size=1m,uid=%lu,gid=%lu",
