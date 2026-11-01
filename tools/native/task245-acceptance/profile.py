@@ -251,7 +251,7 @@ def main():
         if result.returncode != 0 or result.stderr:
             if metadata_proc is not None and metadata_proc.poll() is not None:
                 for line in metadata_proc.stderr.read(256).decode('ascii', 'ignore').splitlines():
-                    if re.fullmatch(r'metadata-daemon: stage=[0-6]', line): print('task245-profile: ' + line, file=sys.stderr)
+                    if re.fullmatch(r'metadata-daemon: stage=[0-6] auth=[0-4] errno=[0-9]{1,4}', line): print('task245-profile: ' + line, file=sys.stderr)
             for line in result.stderr.splitlines():
                 if re.fullmatch(r'task245-conductor: [a-z -]{1,100}', line):
                     print('task245-profile: ' + line, file=sys.stderr)

@@ -64,17 +64,21 @@ static int same_tgid(pid_t tid) {
     fclose(file);
     return tgid == peer_pid;
 }
+static int auth_check, auth_errno;
 static int authorized(pid_t tid) {
     char path[64];
     struct stat actual, expected;
     const char *paths[] = {"/lab/harness", "/lab/bin/harness"};
     int i;
-    if (!same_tgid(tid)) return 0;
+    auth_check=1; auth_errno=0; errno=0; if (!same_tgid(tid)) { auth_errno=errno; return 0; }
     snprintf(path, sizeof path, "/proc/%d/exe", tid);
-    if (stat(path, &actual) || !S_ISREG(actual.st_mode)) return 0;
-    for (i = 0; i < 2; i++)
-        if (!lstat(paths[i], &expected) && root_artifact(&expected) &&
-            actual.st_dev == expected.st_dev && actual.st_ino == expected.st_ino) return 1;
+    auth_check=2; errno=0; if (stat(path, &actual) || !S_ISREG(actual.st_mode)) { auth_errno=errno; return 0; }
+    auth_check=3;
+    for (i = 0; i < 2; i++) {
+        if (lstat(paths[i], &expected) || !root_artifact(&expected)) continue;
+        auth_check=4;
+        if (actual.st_dev == expected.st_dev && actual.st_ino == expected.st_ino) { auth_check=0; return 1; }
+    }
     return 0;
 }
 static int root_artifact(const struct stat *st) {
@@ -270,5 +274,5 @@ int main(int argc, char **argv) {
     if (!item || item->cmsg_level != SOL_SOCKET || item->cmsg_type != SCM_RIGHTS ||
         item->cmsg_len != CMSG_LEN(sizeof(int)) || CMSG_NXTHDR(&header, item)) goto out;
     memcpy(&received, CMSG_DATA(item), sizeof received); listener = received; received = -1; stage = 6; handle(); status = 0;
-out: if (status) fprintf(stderr,"metadata-daemon: stage=%d\n",stage); if (received >= 0) close(received); cleanup(socketfd); return status;
+out: if (status) fprintf(stderr,"metadata-daemon: stage=%d auth=%d errno=%d\n",stage,auth_check,auth_errno); if (received >= 0) close(received); cleanup(socketfd); return status;
 }
