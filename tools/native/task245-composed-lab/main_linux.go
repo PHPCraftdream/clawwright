@@ -22,7 +22,7 @@ func main() {
 	scenario := strings.TrimSpace(string(b))
 	clear(b)
 	if scenario == "positive" { if runStandaloneLab() != nil { failLab() }; return }
-	if runNegativeLab(scenario) != nil { failLab() }
+	if err := runNegativeLab(scenario); err != nil { _, _ = fmt.Fprintln(os.Stderr, "task245-conductor: " + err.Error()); failLab() }
 }
 
 func fail() { failLab() }

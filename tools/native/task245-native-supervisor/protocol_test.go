@@ -19,6 +19,13 @@ import (
 	"time"
 )
 
+func kernelFailure245(output []byte) string {
+ for _, reason := range []string{"private mount", "chroot", "proc mount", "read executable", "gateway start", "provider accept", "ready handshake", "mutation marker absent", "admission timeout", "negative scenario timed out", "valid holder rejected", "between-write rejection or context failure", "actual send backpressure not observed", "worker failed"} {
+  if bytes.Contains(output, []byte(": "+reason+"\n")) { return strings.ReplaceAll(reason," ","_") }
+ }
+ return "unclassified"
+}
+
 func TestConnectedReleaseKernel(t *testing.T) {
  if os.Getenv("TASK245_KERNEL")!="1" { t.Fatal("TASK245_KERNEL=1 required") }; if os.Geteuid()!=0 { t.Fatal("root required") }
  fixture,stub:=os.Getenv("TASK245_RELEASE_FIXTURE"),os.Getenv("TASK240_STUB"); if fixture==""||stub=="" { t.Fatal("kernel fixture and stub required") }
@@ -26,7 +33,7 @@ func TestConnectedReleaseKernel(t *testing.T) {
   for _,d:=range []string{"etc","proc","run","usr/bin","usr/libexec"}{if e=os.MkdirAll(filepath.Join(root,d),0755);e!=nil{t.Fatal(e)}}
   copy:=func(src,dst string,mode os.FileMode){b,x:=os.ReadFile(src);if x!=nil{t.Fatal(x)};if strings.HasSuffix(dst,"release-provider"){b=append(b,0)};if x=os.WriteFile(dst,b,mode);x!=nil{t.Fatal(x)}}
   node:=filepath.Join(root,"usr/bin/node");provider:=filepath.Join(root,"usr/libexec/release-provider");copy(fixture,node,0555);copy(fixture,provider,0555);copy(stub,filepath.Join(root,"usr/libexec/stub"),0555);copy(os.Args[0],filepath.Join(root,"release-test"),0555);if e=os.WriteFile(filepath.Join(root,"etc/release-case"),[]byte(name+"\n"),0444);e!=nil{t.Fatal(e)}
-  ctx,cancel:=context.WithTimeout(context.Background(),30*time.Second);defer cancel();cmd:=exec.CommandContext(ctx,filepath.Join(root,"release-test"),"-test.run=^TestReleaseNamespaceHelper$");cmd.Env=[]string{"TASK245_HELPER=init","TASK245_ROOT="+root,"TASK245_CASE="+name};cmd.SysProcAttr=&syscall.SysProcAttr{Cloneflags:syscall.CLONE_NEWPID|syscall.CLONE_NEWNS|syscall.CLONE_NEWNET};out,e:=cmd.CombinedOutput();if e!=nil{t.Fatalf("namespace helper failed (output length %d)",len(out))}
+  ctx,cancel:=context.WithTimeout(context.Background(),30*time.Second);defer cancel();cmd:=exec.CommandContext(ctx,filepath.Join(root,"release-test"),"-test.run=^TestReleaseNamespaceHelper$");cmd.Env=[]string{"TASK245_HELPER=init","TASK245_ROOT="+root,"TASK245_CASE="+name};cmd.SysProcAttr=&syscall.SysProcAttr{Cloneflags:syscall.CLONE_NEWPID|syscall.CLONE_NEWNS|syscall.CLONE_NEWNET};out,e:=cmd.CombinedOutput();if e!=nil{t.Fatalf("namespace helper failed diagnostic=%s (output length %d)",kernelFailure245(out),len(out))}
  }) }
 }
 

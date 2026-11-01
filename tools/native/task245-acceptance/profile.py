@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import re
 import signal
 import subprocess
 import sys
@@ -100,6 +101,9 @@ def main():
         need(regression.stderr == '', 'metadata cancel-ack regression wrote stderr')
     if not scenario:
         test = subprocess.run(['/lab/release-test', '-test.run=^TestConnectedReleaseKernel$', '-test.v'], env={'TASK245_KERNEL': '1', 'TASK245_RELEASE_FIXTURE': '/lab/release-fixture', 'TASK240_STUB': '/lab/native-stub'}, cwd=LAB, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)
+        if test.returncode != 0:
+            for code in re.findall(r'diagnostic=([a-z_]{1,80})', test.stdout):
+                print('task245-profile: kernel=' + code, file=sys.stderr)
         need(test.returncode == 0, 'connected release kernel test failed')
     status = Path('/proc/self/status').read_text()
     caps = next((x.split()[1] for x in status.splitlines() if x.startswith('CapEff:')), '')
@@ -193,6 +197,10 @@ def main():
             need(metadata_proc.poll() is None and metadata_socket.exists(), 'native metadata readiness timed out')
         env = {'PATH': '/usr/bin:/bin', 'GITHUB_SHA': os.environ['GITHUB_SHA'], 'GITHUB_RUN_ID': os.environ['GITHUB_RUN_ID']}
         result = subprocess.run([str(LAB / 'conductor')], env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=600)
+        if result.returncode != 0 or result.stderr:
+            for line in result.stderr.splitlines():
+                if re.fullmatch(r'task245-conductor: [a-z -]{1,100}', line):
+                    print('task245-profile: ' + line, file=sys.stderr)
         need(result.returncode == 0 and not result.stderr, 'ordinary conductor acceptance failed')
         rows = result.stdout.splitlines()
         need(len(rows) == 1, 'conductor output not a single JSON record')
