@@ -37,7 +37,7 @@ func TestParseUnixReplyAdmission(t *testing.T) {
 		bad[name] = f(b)
 	}
 	add("upper cookie", func(b []byte) []byte { binary.LittleEndian.PutUint32(b[28:], cookie[1]^1); return b })
-	add("family", func(b []byte) []byte { b[16] = 1; return b })
+	add("family", func(b []byte) []byte { b[16] = syscall.AF_INET; return b })
 	add("socket type", func(b []byte) []byte { b[17] = 2; return b })
 	add("state", func(b []byte) []byte { b[18] = 2; return b })
 	add("inode", func(b []byte) []byte { binary.LittleEndian.PutUint32(b[20:], 12); return b })
