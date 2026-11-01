@@ -10,6 +10,8 @@ The authored `metadata_test.c` regression includes the actual `metadata.c` ownin
 
 Direct kernel tests use synthetic bindings and are distinct from the real CLI/keeper composed path. The direct test set contains eight cases; they do not establish completion of the composed negatives.
 
+The disposable container requests `apparmor=unconfined` so its explicit `SYS_ADMIN` capability can create the mount/namespace laboratory. This does not alter host AppArmor policy or disable Docker seccomp. The container remains non-privileged, networkless, without host bind mounts, with an explicit capability set and no-new-privileges. Inner Landlock, seccomp and native custody checks remain required. Docker inspection verifies the exact requested security options; runtime acceptance is still pending.
+
 ## Bounded metadata and cancellation mediation
 
 Cancellation is mediated in source, not **BLOCKED**. The disposable root daemon serves bounded actual-metadata snapshots through seccomp-notify: it reads fixed state/receipt metadata and a sealed-memfd snapshot, validates exactly seven bytes of cancellation input, and releases the notification only after checking the current receipt and native-fault evidence. No directory writes, arbitrary paths, payload access, or authority are granted. The daemon uses only existing capabilities and performs no host installation. Client authentication is `SO_PEERCRED` plus executable inode; serviced tasks are checked against actual TGID. Landlock remains read-only for `/lab/bin`. Notification-ID races remain a limitation; the authored harness correlates actual state and verifies it unchanged, with no synthetic outcomes.

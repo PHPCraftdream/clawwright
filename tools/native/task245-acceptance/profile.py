@@ -230,5 +230,8 @@ if __name__ == '__main__':
         print('task245-profile: ' + str(error), file=sys.stderr)
         raise SystemExit(1)
     except Exception as error:
-        print('task245-profile: exception=' + type(error).__name__, file=sys.stderr)
+        frame = error.__traceback__
+        while frame.tb_next is not None:
+            frame = frame.tb_next
+        print(f'task245-profile: exception={type(error).__name__} line={frame.tb_lineno} errno={getattr(error, "errno", None)}', file=sys.stderr)
         raise SystemExit(1)

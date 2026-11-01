@@ -119,7 +119,7 @@ def main():
         envs = ("PATH=/usr/local/bin:/usr/bin:/bin","LANG=C.UTF-8","LC_ALL=C.UTF-8","GITHUB_ACTIONS=true","GITHUB_SHA="+os.environ["GITHUB_SHA"],"GITHUB_RUN_ID="+os.environ["GITHUB_RUN_ID"])
         args=["docker","create","--name",container,"--network=none","--cap-drop=ALL"]
         for cap in sorted(CAPS): args += ["--cap-add="+cap]
-        args += ["--security-opt=no-new-privileges","--pids-limit=256","--memory=4g","--memory-swap=4g","--ulimit","core=0","--tmpfs","/tmp:rw,nosuid,nodev,noexec,size=256m"]
+        args += ["--security-opt=no-new-privileges","--security-opt=apparmor=unconfined","--pids-limit=256","--memory=4g","--memory-swap=4g","--ulimit","core=0","--tmpfs","/tmp:rw,nosuid,nodev,noexec,size=256m"]
         for item in envs: args += ["--env",item]
         args += ["--entrypoint","/usr/bin/env",image,"-i",*envs,"/usr/local/bin/python3","/lab/profile.py",*( ["--confinement"] if lab_case == "confinement" else ["--scenario",lab_case] if lab_case != "connected" else [])]
         invoke(args); created=True
@@ -137,7 +137,7 @@ def main():
         with tarpath.open("rb") as stream: invoke(["docker","cp","-",container+":/"],stdin=stream)
         PHASE="inspect-policy"
         info=json.loads(invoke(["docker","inspect",container]).stdout)[0]; host=info["HostConfig"]
-        checks=(not host["Privileged"] and not host["Binds"] and host["NetworkMode"]=="none" and not host["PidMode"] and host["CapDrop"]==["ALL"] and set(host["CapAdd"] or [])=={"CAP_"+x for x in CAPS} and "no-new-privileges" in (host["SecurityOpt"] or []) and host["Memory"]==4*1024**3 and host["MemorySwap"]==host["Memory"])
+        checks=(not host["Privileged"] and not host["Binds"] and host["NetworkMode"]=="none" and not host["PidMode"] and host["CapDrop"]==["ALL"] and set(host["CapAdd"] or [])=={"CAP_"+x for x in CAPS} and set(host["SecurityOpt"] or []) == {"no-new-privileges", "apparmor=unconfined"} and host["Memory"]==4*1024**3 and host["MemorySwap"]==host["Memory"])
         require(checks,"container security policy mismatch")
         PHASE="application"
         result=invoke(["docker","start","-a","-i",container],check=False)
