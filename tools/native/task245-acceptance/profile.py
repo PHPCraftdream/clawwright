@@ -195,7 +195,7 @@ def main():
                 need(metadata_proc.poll() is None, 'native metadata exited before readiness')
                 time.sleep(0.05)
             need(metadata_proc.poll() is None and metadata_socket.exists(), 'native metadata readiness timed out')
-        env = {'PATH': '/usr/bin:/bin', 'GITHUB_SHA': os.environ['GITHUB_SHA'], 'GITHUB_RUN_ID': os.environ['GITHUB_RUN_ID']}
+        env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'GITHUB_SHA': os.environ['GITHUB_SHA'], 'GITHUB_RUN_ID': os.environ['GITHUB_RUN_ID']}
         result = subprocess.run([str(LAB / 'conductor')], env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=600)
         if result.returncode != 0 or result.stderr:
             for line in result.stderr.splitlines():

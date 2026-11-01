@@ -20,10 +20,20 @@ import (
 )
 
 func kernelFailure245(output []byte) string {
- for _, reason := range []string{"private mount", "chroot", "proc mount", "read executable", "gateway start", "provider accept", "ready handshake", "mutation marker absent", "admission timeout", "negative scenario timed out", "valid holder rejected", "between-write rejection or context failure", "actual send backpressure not observed", "worker failed"} {
+ for _, reason := range []string{"private mount", "chroot", "proc mount", "read executable", "gateway start", "provider accept before gateway exec", "provider accept before broker exec", "provider accept after provider exec", "provider accept after broker exec", "provider accept", "ready handshake", "mutation marker absent", "admission timeout", "negative scenario timed out", "valid holder rejected", "between-write rejection or context failure", "actual send backpressure not observed", "worker failed"} {
   if bytes.Contains(output, []byte(": "+reason+"\n")) { return strings.ReplaceAll(reason," ","_") }
  }
  return "unclassified"
+}
+
+func providerAcceptFailure245(r *execRegistry245) string {
+ r.mu.Lock(); defer r.mu.Unlock()
+ gateway, broker, provider := false, false, false
+ for _, role := range r.roles { gateway = gateway || role=="gateway"; broker = broker || role=="broker"; provider = provider || role=="provider" }
+ if !gateway { return "provider accept before gateway exec" }
+ if !broker { return "provider accept before broker exec" }
+ if provider { return "provider accept after provider exec" }
+ return "provider accept after broker exec"
 }
 
 func TestConnectedReleaseKernel(t *testing.T) {
@@ -40,7 +50,7 @@ func TestConnectedReleaseKernel(t *testing.T) {
 func TestReleaseNamespaceHelper(t *testing.T) {
  role:=os.Getenv("TASK245_HELPER");if role==""{return};if role=="init" {if os.Getpid()!=1{t.Fatalf("init pid = %d, want 1",os.Getpid())};root:=os.Getenv("TASK245_ROOT");if syscall.Mount("","/","",syscall.MS_PRIVATE|syscall.MS_REC,"")!=nil{t.Fatal("private mount")};if syscall.Chroot(root)!=nil||os.Chdir("/")!=nil{t.Fatal("chroot")};if syscall.Mount("proc","/proc","proc",syscall.MS_NOSUID|syscall.MS_NOEXEC|syscall.MS_NODEV,"")!=nil{t.Fatal("proc mount")};c,x:=context.WithTimeout(context.Background(),30*time.Second);defer x();cmd:=exec.CommandContext(c,"/release-test","-test.run=^TestReleaseNamespaceHelper$");cmd.Env=[]string{"TASK245_HELPER=worker","TASK245_CASE="+os.Getenv("TASK245_CASE")};cmd.Stdin=os.Stdin;cmd.Stdout=os.Stdout;cmd.Stderr=os.Stderr;if e:=cmd.Run();e!=nil{t.Fatal("worker failed")};return };if role!="worker"{t.Fatal("bad helper role")};if os.Getpid()<=1||os.Getppid()!=1{t.Fatal("worker ancestry rejected")}
  ctx,cancel:=context.WithTimeout(context.Background(),10*time.Second);defer cancel();node,provider,stub:="/usr/bin/node","/usr/libexec/release-provider","/usr/libexec/stub";hash:=func(p string)string{b,e:=os.ReadFile(p);if e!=nil{t.Fatal("read executable")};s:=sha256.Sum256(b);return hex.EncodeToString(s[:])};const sock="/run/clawwright-native.sock"
- l,e:=net.ListenUnix("unix",&net.UnixAddr{Name:sock,Net:"unix"});if e!=nil{t.Fatal("listen")};defer l.Close();if e=l.SetDeadline(time.Now().Add(10*time.Second));e!=nil{t.Fatal("listener deadline")};wc:=workerConfig{Node:node,Stub:stub,Provider:provider,ConfigPath:"/etc/release-case",SocketPath:sock,GatewayArgv:[]string{node,"gateway"},BrokerArgv:[]string{node,"broker"},NodeSHA256:hash(node),StubSHA256:hash(stub),ProviderSHA256:hash(provider),Target:"target",Revision:"revision",Purpose:"release",registry:&execRegistry245{roles:map[int]string{}}};tracker,pid,e:=startGateway(ctx,wc);if e!=nil{t.Fatal("gateway start")};defer tracker.Close();conn,e:=l.AcceptUnix();if e!=nil{t.Fatal("provider accept")};defer conn.Close();raw,rawErr:=conn.SyscallConn();if rawErr!=nil{t.Fatal("provider socket control")};var cred *syscall.Ucred;var ce error;if rawErr=raw.Control(func(fd uintptr){cred,ce=syscall.GetsockoptUcred(int(fd),syscall.SOL_SOCKET,syscall.SO_PEERCRED)});rawErr!=nil||ce!=nil||cred==nil{t.Fatal("peer credentials")}
+ l,e:=net.ListenUnix("unix",&net.UnixAddr{Name:sock,Net:"unix"});if e!=nil{t.Fatal("listen")};defer l.Close();if e=l.SetDeadline(time.Now().Add(10*time.Second));e!=nil{t.Fatal("listener deadline")};wc:=workerConfig{Node:node,Stub:stub,Provider:provider,ConfigPath:"/etc/release-case",SocketPath:sock,GatewayArgv:[]string{node,"gateway"},BrokerArgv:[]string{node,"broker"},NodeSHA256:hash(node),StubSHA256:hash(stub),ProviderSHA256:hash(provider),Target:"target",Revision:"revision",Purpose:"release",registry:&execRegistry245{roles:map[int]string{}}};tracker,pid,e:=startGateway(ctx,wc);if e!=nil{t.Fatal("gateway start")};defer tracker.Close();conn,e:=l.AcceptUnix();if e!=nil{t.Fatal(providerAcceptFailure245(wc.registry))};defer conn.Close();raw,rawErr:=conn.SyscallConn();if rawErr!=nil{t.Fatal("provider socket control")};var cred *syscall.Ucred;var ce error;if rawErr=raw.Control(func(fd uintptr){cred,ce=syscall.GetsockoptUcred(int(fd),syscall.SOL_SOCKET,syscall.SO_PEERCRED)});rawErr!=nil||ce!=nil||cred==nil{t.Fatal("peer credentials")}
  fds,e:=syscall.Socketpair(syscall.AF_UNIX,syscall.SOCK_SEQPACKET|syscall.SOCK_CLOEXEC,0);if e!=nil{t.Fatal("socketpair")};if e=syscall.SetNonblock(fds[0],true);e!=nil{t.Fatal("nonblock control")};if e=syscall.SetNonblock(fds[1],true);e!=nil{t.Fatal("nonblock relay")};c:=os.NewFile(uintptr(fds[0]),"control");r:=os.NewFile(uintptr(fds[1]),"relay");defer c.Close();defer r.Close();if e=c.SetDeadline(time.Now().Add(10*time.Second));e!=nil{t.Fatal("control deadline")};if e=r.SetDeadline(time.Now().Add(10*time.Second));e!=nil{t.Fatal("relay deadline")};var h [64]byte;copy(h[:8],"SSINK001");copy(h[8:24],[]byte("0123456789abcdef"));copy(h[24:56],[]byte(strings.Repeat("b",32)));binary.BigEndian.PutUint64(h[56:],8192);scenario:=os.Getenv("TASK245_CASE")
 done:=make(chan error,1)
 backpressureCount:=0
