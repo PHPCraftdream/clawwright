@@ -84,6 +84,35 @@ func TestPublicCLIReadsStagedBlobAndRequiresStaging(t *testing.T) {
 	}
 }
 
+func TestPublicCLIAcceptsOnlyApprovedRunnerTransitionFromBaseline(t *testing.T) {
+	binary := buildCLI(t)
+	clone := cloneCheckout(t)
+	const runnerPath = "tools/native/task245-acceptance/run.py"
+
+	baselineBytes, err := git(clone, "show", baseline+":"+runnerPath)
+	if err != nil {
+		t.Fatalf("read immutable baseline runner: %v", err)
+	}
+	approvedBytes, err := approvedRunner(baselineBytes)
+	if err != nil {
+		t.Fatalf("derive approved runner from baseline blob: %v", err)
+	}
+	writeRepo(t, clone, runnerPath, string(approvedBytes))
+	gitTest(t, clone, "add", runnerPath)
+
+	accepted := runCLI(t, binary, clone)
+	if accepted.exitCode != 0 || strings.Contains(accepted.stderr, runnerPath+": implementation is new or changed from baseline") {
+		t.Fatalf("exact staged baseline transition rejected: exit=%d stdout=%q stderr=%q", accepted.exitCode, accepted.stdout, accepted.stderr)
+	}
+
+	writeRepo(t, clone, runnerPath, string(approvedBytes)+"\n# unrelated business change\n")
+	gitTest(t, clone, "add", runnerPath)
+	rejected := runCLI(t, binary, clone)
+	if rejected.exitCode != 1 || !strings.Contains(rejected.stderr, runnerPath+": implementation is new or changed from baseline") {
+		t.Fatalf("extra staged runner change was not rejected: exit=%d stdout=%q stderr=%q", rejected.exitCode, rejected.stdout, rejected.stderr)
+	}
+}
+
 func TestPublicCLIMissingBaselineAndUnreadableBlob(t *testing.T) {
 	binary := buildCLI(t)
 	empty := initRepository(t)

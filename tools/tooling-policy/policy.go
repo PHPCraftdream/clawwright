@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
 	"os/exec"
@@ -49,7 +50,39 @@ func check(root string) (report, error) {
 		}
 		return lineCount(data), nil
 	}
-	return evaluate(current, legacy, reader), nil
+	approved := make(map[string]string)
+	const runnerPath = "tools/native/task245-acceptance/run.py"
+	if old, ok := legacy[runnerPath]; ok {
+		oldBytes, err := git(root, "cat-file", "blob", old.blob)
+		if err != nil {
+			return report{}, fmt.Errorf("baseline runner blob: %w", err)
+		}
+		if transformed, err := approvedRunner(oldBytes); err == nil {
+			approved[runnerPath] = gitBlobID(transformed)
+		}
+	}
+	return evaluateWithTransitions(current, legacy, reader, approved), nil
+}
+
+const oldRunnerAnchor = `        for source, output in (("task245-domain-init/init.c","native-init"),("task240-launch-stub/stub.c","native-stub"),("task245-control-profile/control-profile.c","control-profile"),`
+const rustRunnerBlock = `        for source, output in (("task245-domain-init/main.rs", "native-init"), ("task240-launch-stub/main.rs", "native-stub")):
+            PHASE = "compile-" + output
+            invoke(["rustc", "--edition=2021", "--target=x86_64-unknown-linux-gnu", "-C", "opt-level=2", "-C", "panic=abort", "-C", "target-feature=+crt-static", "-o", str(stage/output), str(NATIVE/source)])
+            (stage/output).chmod(0o755)
+        for source, output in (("task245-control-profile/control-profile.c","control-profile"),`
+
+func approvedRunner(b []byte) ([]byte, error) {
+	if bytes.Count(b, []byte(oldRunnerAnchor)) != 1 {
+		return nil, fmt.Errorf("runner anchor must occur exactly once")
+	}
+	return bytes.Replace(b, []byte(oldRunnerAnchor), []byte(rustRunnerBlock), 1), nil
+}
+
+func gitBlobID(data []byte) string {
+	h := sha1.New()
+	fmt.Fprintf(h, "blob %d\x00", len(data))
+	h.Write(data)
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func lineCount(data []byte) int {
@@ -172,7 +205,20 @@ func pathExt(name string) string {
 	return base[i:]
 }
 
+func approvedRustFallback(name string) bool {
+	switch name {
+	case "tools/native/task240-launch-stub/main.rs", "tools/native/task240-launch-stub/linux.rs", "tools/native/task240-launch-stub/packet.rs", "tools/native/task245-domain-init/main.rs":
+		return true
+	default:
+		return false
+	}
+}
+
 func evaluate(current, legacy map[string]inventory, lines func(inventory) (int, error)) report {
+	return evaluateWithTransitions(current, legacy, lines, nil)
+}
+
+func evaluateWithTransitions(current, legacy map[string]inventory, lines func(inventory) (int, error), approved map[string]string) report {
 	result := report{Files: make([]string, 0), Debt: make([]string, 0), Violations: make([]string, 0)}
 	language := make(map[string]int)
 	currentDirs := directoryEntries(current)
@@ -196,7 +242,8 @@ func evaluate(current, legacy map[string]inventory, lines func(inventory) (int, 
 			ext := strings.ToLower(pathExt(name))
 			language[ext]++
 			old, existed := legacy[name]
-			if ext != ".go" && (!existed || old.blob != item.blob) {
+			transitionApproved := approved[name] != "" && approved[name] == item.blob
+			if ext != ".go" && (!existed || old.blob != item.blob) && !(ext == ".rs" && approvedRustFallback(name)) && !transitionApproved {
 				result.Violations = append(result.Violations, name+": implementation is new or changed from baseline")
 			}
 			count, err := lines(item)
@@ -215,6 +262,9 @@ func evaluate(current, legacy map[string]inventory, lines func(inventory) (int, 
 			}
 			if ext != ".go" && existed && old.blob == item.blob {
 				result.Debt = append(result.Debt, name+": non-Go implementation remains frozen")
+			}
+			if ext == ".rs" && approvedRustFallback(name) {
+				result.Debt = append(result.Debt, name+": narrowly approved Rust fallback debt; not a general language allowance")
 			}
 		}
 	}

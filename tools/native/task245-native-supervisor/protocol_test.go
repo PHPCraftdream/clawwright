@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 func kernelFailure245(output []byte) string {
@@ -222,4 +223,341 @@ func TestParseKeeperConfigRejectsDuplicateKeys(t *testing.T) {
 func TestParseKeeperConfigRejectsEscapedDuplicateKey(t *testing.T) {
 	var cfg keeperConfig
 	if err := parseKeeperConfig([]byte(`{"keeperSHA256":"`+strings.Repeat("a", 64)+`","keeper\u0053HA256":"`+strings.Repeat("b", 64)+`"}`), &cfg); err == nil { t.Fatal("escaped duplicate keeperSHA256 was accepted") }
+}
+
+	// Dispatch the sealed test image before the Go test runner starts.
+func init() {
+	if len(os.Args) == 2 && os.Args[0] == "native-supervisor" && os.Args[1] == "--task245-domain-worker" {
+		os.Exit(domainWorkerProbe245())
+	}
+}
+
+func domainWorkerProbe245() int {
+	if os.Getpid() != 2 || os.Getppid() != 1 || os.Getuid() != 65534 || os.Geteuid() != 65534 || os.Getgid() != 65533 || os.Getegid() != 65533 {
+		return 31
+	}
+	groups, err := os.Getgroups()
+	if err != nil || len(groups) != 0 {
+		return 32
+	}
+	got, _, errno := syscall.RawSyscall6(syscall.SYS_PRCTL, 39, 0, 0, 0, 0, 0)
+	if errno != 0 || got != 1 {
+		return 34
+	}
+	for _, fd := range []int{3, 6} {
+		seals, _, er := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), 1034, 0)
+		if er != 0 || seals&15 != 15 {
+			return 35
+		}
+	}
+	var a, b syscall.Stat_t
+	if syscall.Fstat(3, &a) != nil || syscall.Stat("/proc/self/exe", &b) != nil || a.Dev != b.Dev || a.Ino != b.Ino {
+		return 36
+	}
+	if !domainFreshNamespaces245() {
+		return 40
+	}
+	data, err := os.ReadFile("/proc/self/mountinfo")
+	if err != nil || !bytes.Contains(data, []byte(" - proc proc ")) || !bytes.Contains(data, []byte(" - tmpfs tmpfs ")) || !workerMountsOK() {
+		return 37
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) > 6 && fields[4] == "/proc" {
+			for _, opt := range []string{"ro", "nosuid", "nodev", "noexec"} {
+				if !hasOpt(fields[5], opt) {
+					return 41
+				}
+			}
+		}
+	}
+	if _, err = syscall.Write(4, []byte("domain-worker-ready")); err != nil {
+		return 38
+	}
+	var one [1]byte
+	if _, err = syscall.Read(4, one[:]); err != nil {
+		return 39
+	}
+	return 0
+}
+
+func memfdDomain245(t *testing.T, name string, data []byte, mode uint32, seal bool) *os.File {
+	t.Helper()
+	p, _ := syscall.BytePtrFromString(name)
+	fd, _, errno := syscall.Syscall(319, uintptr(unsafe.Pointer(p)), 3, 0)
+	if errno != 0 {
+		t.Fatalf("memfd_create: %v", errno)
+	}
+	f := os.NewFile(fd, name)
+	t.Cleanup(func() { _ = f.Close() })
+	if _, err := f.Write(data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Chmod(os.FileMode(mode)); err != nil {
+		t.Fatal(err)
+	}
+	if seal {
+		if _, _, errno = syscall.Syscall(syscall.SYS_FCNTL, fd, 1033, 15); errno != 0 {
+			t.Fatalf("sealing: %v", errno)
+		}
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+func domainFreshNamespaces245() bool {
+	meta := os.NewFile(6, "namespace-metadata")
+	if meta == nil {
+		return false
+	}
+	var expected [24]byte
+	_, err := io.ReadFull(meta, expected[:])
+	_ = meta.Close()
+	if err != nil {
+		return false
+	}
+	for i, name := range []string{"pid", "mnt", "net"} {
+		var self, init syscall.Stat_t
+		if syscall.Stat("/proc/self/ns/"+name, &self) != nil || syscall.Stat("/proc/1/ns/"+name, &init) != nil {
+			return false
+		}
+		want := binary.BigEndian.Uint64(expected[i*8:])
+		if self.Ino == want || self.Ino != init.Ino {
+			return false
+		}
+	}
+	return true
+}
+
+func TestDomainInitDiagnosticKernel(t *testing.T) {
+	binaryPath := os.Getenv("TASK245_INIT")
+	if binaryPath == "" {
+		t.Fatal("TASK245_INIT required (native-supervisor workflow)")
+	}
+	if os.Geteuid() != 0 {
+		t.Fatal("root required")
+	}
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"invalid-id", []string{"0", "1"}, "task245-init: checkpoint=112 errno=0\n"},
+		{"missing-image-fd", []string{"65534", "65533"}, "task245-init: checkpoint=112 errno=9\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, binaryPath, tc.args...)
+			cmd.Env = []string{}
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
+			err := cmd.Run()
+			if ctx.Err() != nil {
+				t.Fatal("diagnostic case timed out")
+			}
+			if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 112 {
+				t.Fatal("diagnostic case did not exit 112")
+			}
+			got := stderr.String()
+			if len(got) > 64 || got != tc.want {
+				t.Fatal("unexpected bounded bootstrap diagnostic")
+			}
+		})
+	}
+}
+
+func TestDomainInitKernel(t *testing.T) {
+	binaryPath := os.Getenv("TASK245_INIT")
+	if binaryPath == "" {
+		t.Fatal("TASK245_INIT required (native-supervisor workflow)")
+	}
+	if os.Geteuid() != 0 {
+		t.Fatal("root required")
+	}
+	t.Run("positive", func(t *testing.T) { runDomainInitLifecycle245(t, binaryPath, false) })
+	t.Run("parent-death", func(t *testing.T) { runDomainInitLifecycle245(t, binaryPath, true) })
+	t.Run("invalid-id", func(t *testing.T) { runDomainInitReject245(t, binaryPath, "0", "65533", true) })
+	t.Run("unsealed-image", func(t *testing.T) { runDomainInitReject245(t, binaryPath, "65534", "65533", false) })
+	for _, kind := range []string{"metadata-unsealed", "control-stream", "root-writable", "root-mode-writable", "image-mode"} {
+		t.Run(kind, func(t *testing.T) { runDomainInitBadFD245(t, binaryPath, kind) })
+	}
+}
+
+func domainFixture245(t *testing.T, sealImage bool) (string, *os.File, *os.File, *os.File, [2]int) {
+	t.Helper()
+	root, err := os.MkdirTemp("", "domain-init-root-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{"proc", "run"} {
+		if err = os.Mkdir(filepath.Join(root, d), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = syscall.Mount(root, root, "", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
+		t.Fatalf("bind root: %v", err)
+	}
+	t.Cleanup(func() { _ = syscall.Unmount(root, syscall.MNT_DETACH); _ = os.RemoveAll(root) })
+	if err = syscall.Mount("", root, "", syscall.MS_BIND|syscall.MS_REMOUNT|syscall.MS_RDONLY, ""); err != nil {
+		t.Fatal(err)
+	}
+	imageBytes, err := os.ReadFile(os.Args[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	image := memfdDomain245(t, "domain-image", imageBytes, 0555, sealImage)
+	metaData := make([]byte, 24)
+	for i, name := range []string{"pid", "mnt", "net"} {
+		var ns syscall.Stat_t
+		if err := syscall.Stat("/proc/self/ns/"+name, &ns); err != nil {
+			t.Fatalf("stat namespace %s: %v", name, err)
+		}
+		binary.BigEndian.PutUint64(metaData[i*8:], ns.Ino)
+	}
+	meta := memfdDomain245(t, "domain-metadata", metaData, 0444, true)
+	pair, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_SEQPACKET, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = syscall.Close(pair[0]) })
+	rootfd, err := os.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = rootfd.Close() })
+	return root, image, meta, rootfd, pair
+}
+
+func runDomainInitPositive245(t *testing.T, path string) {
+	runDomainInitLifecycle245(t, path, false)
+}
+
+func runDomainInitLifecycle245(t *testing.T, path string, killParent bool) {
+	_, image, meta, rootfd, pair := domainFixture245(t, true)
+	control := os.NewFile(uintptr(pair[1]), "domain-control-child")
+	t.Cleanup(func() { _ = control.Close() })
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, path, "65534", "65533")
+	cmd.Env = []string{}
+	cmd.ExtraFiles = []*os.File{image, control, rootfd, meta}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	_ = control.Close()
+	syscall.CloseOnExec(pair[0])
+	_ = syscall.SetNonblock(pair[0], true)
+	deadline := time.Now().Add(12 * time.Second)
+	ready := false
+	for time.Now().Before(deadline) {
+		var buf [64]byte
+		n, err := syscall.Read(pair[0], buf[:])
+		if err == nil && string(buf[:n]) == "domain-worker-ready" {
+			ready = true
+			break
+		}
+		if err != syscall.EAGAIN && err != syscall.EWOULDBLOCK && err != nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !ready {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		t.Fatal("actual worker did not send readiness")
+	}
+	if killParent {
+		if err := cmd.Process.Kill(); err != nil {
+			t.Fatalf("kill domain-init parent: %v", err)
+		}
+		if err := cmd.Wait(); err == nil {
+			t.Fatal("domain-init parent kill unexpectedly succeeded")
+		}
+		deadline = time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			var buf [64]byte
+			n, err := syscall.Read(pair[0], buf[:])
+			if n > 0 {
+				t.Fatal("worker sent data after parent death")
+			}
+			if err == nil {
+				return
+			}
+			if err == syscall.ECONNRESET {
+				return
+			}
+			if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
+			t.Fatalf("unexpected worker socket error after parent death: %v", err)
+		}
+		t.Fatal("worker did not close socket within 3 seconds of parent death")
+	}
+	_, _ = syscall.Write(pair[0], []byte("x"))
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("domain-init exited %v", err)
+	}
+}
+
+func runDomainInitReject245(t *testing.T, path, uid, gid string, sealImage bool) {
+	_, image, meta, rootfd, pair := domainFixture245(t, sealImage)
+	control := os.NewFile(uintptr(pair[1]), "domain-control-child")
+	t.Cleanup(func() { _ = control.Close() })
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, path, uid, gid)
+	cmd.Env = []string{}
+	cmd.ExtraFiles = []*os.File{image, control, rootfd, meta}
+	err := cmd.Run()
+	if ctx.Err() != nil {
+		t.Fatalf("negative case timed out: %v", ctx.Err())
+	}
+	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 112 {
+		t.Fatalf("refusal=%v, want status 112", err)
+	}
+}
+
+func runDomainInitBadFD245(t *testing.T, path, kind string) {
+	root, image, meta, rootfd, pair := domainFixture245(t, true)
+	control := os.NewFile(uintptr(pair[1]), "domain-control-child")
+	t.Cleanup(func() { _ = control.Close() })
+	switch kind {
+	case "metadata-unsealed":
+		meta = memfdDomain245(t, "bad-metadata", nil, 0444, false)
+	case "control-stream":
+		fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+		if err != nil { t.Fatal(err) }
+		_ = control.Close()
+		control = os.NewFile(uintptr(fds[1]), "domain-control-stream")
+		t.Cleanup(func() { _ = control.Close(); _ = syscall.Close(fds[0]) })
+	case "root-writable", "root-mode-writable":
+		if err := syscall.Mount("", root, "", syscall.MS_BIND|syscall.MS_REMOUNT, ""); err != nil { t.Fatal(err) }
+		if kind == "root-mode-writable" {
+			if err := os.Chmod(root, 0777); err != nil { t.Fatal(err) }
+			if err := syscall.Mount("", root, "", syscall.MS_BIND|syscall.MS_REMOUNT|syscall.MS_RDONLY, ""); err != nil { t.Fatal(err) }
+		}
+	case "image-mode":
+		data, err := os.ReadFile(os.Args[0]); if err != nil { t.Fatal(err) }
+		image = memfdDomain245(t, "bad-image-mode", data, 0444, true)
+	default:
+		t.Fatalf("unknown bad-FD case %q", kind)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, path, "65534", "65533")
+	cmd.Env = []string{}
+	cmd.ExtraFiles = []*os.File{image, control, rootfd, meta}
+	err := cmd.Run()
+	if ctx.Err() != nil { t.Fatalf("negative case timed out: %v", ctx.Err()) }
+	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 112 { t.Fatalf("refusal=%v, want status 112", err) }
 }

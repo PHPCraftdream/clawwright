@@ -94,7 +94,11 @@ def main():
         PHASE = "build-release-test"
         invoke(["go", "test", "-c", "-o", str(stage / "release-test"), "./task245-native-supervisor"], cwd=NATIVE, env=n_env)
         (stage / "release-test").chmod(0o755)
-        for source, output in (("task245-domain-init/init.c","native-init"),("task240-launch-stub/stub.c","native-stub"),("task245-control-profile/control-profile.c","control-profile"),("task245-control-profile/probe.c","probe"),("task245-control-profile/metadata.c","native-metadata"),("task245-control-profile/metadata_test.c","metadata-regression"),("task245-acceptance/gateway.c","gateway"),("task245-acceptance/release_fixture.c","release-fixture")):
+        for source, output in (("task245-domain-init/main.rs", "native-init"), ("task240-launch-stub/main.rs", "native-stub")):
+            PHASE = "compile-" + output
+            invoke(["rustc", "--edition=2021", "--target=x86_64-unknown-linux-gnu", "-C", "opt-level=2", "-C", "panic=abort", "-C", "target-feature=+crt-static", "-o", str(stage/output), str(NATIVE/source)])
+            (stage/output).chmod(0o755)
+        for source, output in (("task245-control-profile/control-profile.c","control-profile"),("task245-control-profile/probe.c","probe"),("task245-control-profile/metadata.c","native-metadata"),("task245-control-profile/metadata_test.c","metadata-regression"),("task245-acceptance/gateway.c","gateway"),("task245-acceptance/release_fixture.c","release-fixture")):
             PHASE = "compile-" + output
             invoke(["cc","-std=c11","-O2","-static","-Werror=implicit-function-declaration","-o",str(stage/output),str(NATIVE/source),*([str(NATIVE/'task245-control-profile/metadata_client.c')] if output=='control-profile' else [])])
             (stage/output).chmod(0o555 if output == "native-metadata" else 0o755)

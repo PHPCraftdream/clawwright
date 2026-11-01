@@ -1,10 +1,25 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"testing"
 )
+
+func TestApprovedRunnerStillEnforcesLineCeiling(t *testing.T) {
+	legacy := map[string]inventory{"tools/native/task245-acceptance/run.py": {mode: "100644", blob: "old"}}
+	approved := map[string]string{"tools/native/task245-acceptance/run.py": "approved"}
+	result := evaluateWithTransitions(map[string]inventory{"tools/native/task245-acceptance/run.py": {mode: "100644", blob: "approved"}}, legacy, func(item inventory) (int, error) {
+		if item.blob == "old" {
+			return 100, nil
+		}
+		return 701, nil
+	}, approved)
+	if len(result.Violations) == 0 || !strings.Contains(strings.Join(result.Violations, " "), "exceeds 700") {
+		t.Fatalf("line ceiling not enforced: %+v", result)
+	}
+}
 
 func TestClassification(t *testing.T) {
 	cases := map[string]string{
@@ -224,6 +239,16 @@ func TestNestedDirectoryFilesCountTowardParentLimit(t *testing.T) {
 	}
 }
 
+func TestApprovedRustFallbackPathsAreExact(t *testing.T) {
+	allowed := []string{"tools/native/task240-launch-stub/main.rs", "tools/native/task240-launch-stub/linux.rs", "tools/native/task240-launch-stub/packet.rs", "tools/native/task245-domain-init/main.rs"}
+	for _, name := range allowed {
+		if !approvedRustFallback(name) { t.Errorf("approved path rejected: %s", name) }
+	}
+	for _, name := range []string{"tools/native/task246-domain-init/main.rs", "tools/native/task240-launch-stub/extra.rs", "tools/other.rs"} {
+		if approvedRustFallback(name) { t.Errorf("unapproved path accepted: %s", name) }
+	}
+}
+
 func TestEvaluatorRejectsNewNonGoAndSymlinkSubmodule(t *testing.T) {
 	legacy := map[string]inventory{"tools/existing.sh": {mode: "100644", blob: "same"}}
 	current := map[string]inventory{
@@ -300,6 +325,50 @@ func TestUnreadableBlobIsViolation(t *testing.T) {
 		return 0, fmt.Errorf("missing blob")
 	})
 	if len(result.Violations) != 1 || !strings.Contains(result.Violations[0], "unreadable blob") {
-		t.Fatalf("violations=%v", result.Violations)
+		t.Fatalf("violations=%v, want one unreadable blob violation", result.Violations)
 	}
+}
+
+func TestApprovedRustFallbackFinitePathsAndLineCeiling(t *testing.T) {
+	allowed := []string{"tools/native/task240-launch-stub/main.rs", "tools/native/task240-launch-stub/linux.rs", "tools/native/task240-launch-stub/packet.rs", "tools/native/task245-domain-init/main.rs"}
+	for _, path := range allowed {
+		if !approvedRustFallback(path) { t.Errorf("approved path rejected: %s", path) }
+		result := evaluateWithTransitions(map[string]inventory{path: {mode: "100644", blob: "new"}}, nil, func(inventory) (int, error) { return 1, nil }, nil)
+		if len(result.Violations) != 0 { t.Errorf("approved path %s violated: %v", path, result.Violations) }
+	}
+	for _, path := range []string{"tools/native/task240-launch-stub/sibling.rs", "tools/native/task240-launch-stub/new.rs", "tools/native/task240-launch-stub/wrapper.c"} {
+		result := evaluateWithTransitions(map[string]inventory{path: {mode: "100644", blob: "new"}}, nil, func(inventory) (int, error) { return 1, nil }, nil)
+		if len(result.Violations) == 0 { t.Errorf("unapproved path accepted: %s", path) }
+	}
+	result := evaluateWithTransitions(map[string]inventory{allowed[0]: {mode: "100644", blob: "new"}}, nil, func(inventory) (int, error) { return 701, nil }, nil)
+	if len(result.Violations) == 0 || !strings.Contains(strings.Join(result.Violations, " "), "exceeds 700") { t.Fatalf("line ceiling not enforced: %+v", result) }
+}
+
+func TestApprovedRunnerExactTransformAndAdmission(t *testing.T) {
+	before := []byte("prefix\n" + oldRunnerAnchor + "\nsuffix")
+	want := []byte("prefix\n" + rustRunnerBlock + "\nsuffix")
+	got, err := approvedRunner(before)
+	if err != nil || !bytes.Equal(got, want) { t.Fatalf("transform=%q err=%v, want %q", got, err, want) }
+	for _, input := range [][]byte{[]byte("missing anchor"), []byte(oldRunnerAnchor + oldRunnerAnchor)} {
+		if _, err := approvedRunner(input); err == nil { t.Fatalf("accepted invalid anchor input %q", input) }
+	}
+	if got := gitBlobID(nil); got != "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391" { t.Fatalf("empty blob ID=%s", got) }
+
+	const runnerPath = "tools/native/task245-acceptance/run.py"
+	oldBlob, approvedBlob := "baseline-runner", gitBlobID(want)
+	legacy := map[string]inventory{runnerPath: {mode: "100644", blob: oldBlob}}
+	check := func(path, blob string, lines int) report {
+		return evaluateWithTransitions(map[string]inventory{path: {mode: "100644", blob: blob}}, legacy, func(item inventory) (int, error) {
+			if item.blob == oldBlob {
+				return 100, nil
+			}
+			return lines, nil
+		}, map[string]string{runnerPath: approvedBlob})
+	}
+	if result := check(runnerPath, approvedBlob, 10); len(result.Violations) != 0 { t.Fatalf("exact runner transform rejected: %+v", result) }
+	if result := check(runnerPath, oldBlob, 10); len(result.Violations) != 0 { t.Fatalf("unchanged baseline runner rejected: %+v", result) }
+	for _, tc := range []struct{ path, blob string }{{runnerPath, "arbitrary-blob"}, {"tools/native/task245-acceptance/sibling.py", approvedBlob}} {
+		if result := check(tc.path, tc.blob, 10); len(result.Violations) == 0 { t.Errorf("admitted path=%s blob=%s: %+v", tc.path, tc.blob, result) }
+	}
+	if result := check(runnerPath, approvedBlob, 701); len(result.Violations) == 0 || !strings.Contains(strings.Join(result.Violations, " "), "exceeds 700") { t.Fatalf("runner line ceiling not enforced: %+v", result) }
 }

@@ -16,8 +16,23 @@ on:
       - 'tools/native/task245-composed-lab/**'
       - 'tools/native/task240-native-policy/**'
       - 'tools/native/task240-native-admission/**'
-      - 'tools/native/task240-launch-stub/stub.c'
-      - 'tools/native/task245-domain-init/init.c'
+      - 'tools/native/task240-launch-stub/**'
+      - 'tools/native/task245-domain-init/**'
+      - '.github/workflows/native-supervisor.yml'
+  pull_request:
+    paths:
+      - 'tools/native/go.mod'
+      - 'tools/native/task240-native-provider/**'
+      - 'tools/native/task245-native-content/**'
+      - 'tools/native/task245-native-supervisor/**'
+      - 'tools/native/task245-control-profile/**'
+      - 'tools/native/task245-lab-broker/**'
+      - 'tools/native/task245-acceptance/**'
+      - 'tools/native/task245-composed-lab/**'
+      - 'tools/native/task240-native-policy/**'
+      - 'tools/native/task240-native-admission/**'
+      - 'tools/native/task240-launch-stub/**'
+      - 'tools/native/task245-domain-init/**'
       - '.github/workflows/native-supervisor.yml'
   workflow_dispatch:
     inputs:
@@ -44,18 +59,41 @@ jobs:
         with:
           go-version: '1.26.0'
           cache: false
-      - name: Compile native C source
+      - name: Record required Rust toolchain
         shell: bash
         run: |
           set -euo pipefail
-          cc -std=c11 -O2 -static -Werror=implicit-function-declaration -o "$RUNNER_TEMP/native-launch-stub" tools/native/task240-launch-stub/stub.c
-          cc -std=c11 -O2 -static -Werror=implicit-function-declaration -o "$RUNNER_TEMP/native-domain-init" tools/native/task245-domain-init/init.c
+          command -v rustc
+          rustc --version --verbose
+          cargo --version
+          rustup show active-toolchain || echo 'rustup is absent; Rust toolchain must be provided by the runner'
+          rustc --print target-list | grep -Fx x86_64-unknown-linux-gnu
+      - name: Test and compile native Rust components
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --test --edition=2021 --target=x86_64-unknown-linux-gnu -C opt-level=2 -C target-feature=+crt-static tools/native/task240-launch-stub/main.rs -o "$RUNNER_TEMP/native-launch-stub-tests"
+          "$RUNNER_TEMP/native-launch-stub-tests"
+          rustc --test --edition=2021 --target=x86_64-unknown-linux-gnu -C opt-level=2 -C target-feature=+crt-static tools/native/task245-domain-init/main.rs -o "$RUNNER_TEMP/native-domain-init-tests"
+          "$RUNNER_TEMP/native-domain-init-tests"
+          rustc --edition=2021 --target=x86_64-unknown-linux-gnu -C opt-level=2 -C panic=abort -C target-feature=+crt-static -o "$RUNNER_TEMP/native-launch-stub" tools/native/task240-launch-stub/main.rs
+          rustc --edition=2021 --target=x86_64-unknown-linux-gnu -C opt-level=2 -C panic=abort -C target-feature=+crt-static -o "$RUNNER_TEMP/native-domain-init" tools/native/task245-domain-init/main.rs
+      - name: Compile remaining native C source
+        shell: bash
+        run: |
+          set -euo pipefail
           cc -std=c11 -O2 -static -Werror=implicit-function-declaration -o "$RUNNER_TEMP/native-control-profile" tools/native/task245-control-profile/control-profile.c tools/native/task245-control-profile/metadata_client.c
           cc -std=c11 -O2 -static -Werror=implicit-function-declaration -o "$RUNNER_TEMP/native-metadata" tools/native/task245-control-profile/metadata.c
           cc -std=c11 -O2 -static -Werror=implicit-function-declaration -o "$RUNNER_TEMP/metadata-regression" tools/native/task245-control-profile/metadata_test.c
           cc -std=c11 -O2 -static -Werror=implicit-function-declaration -o "$RUNNER_TEMP/native-control-probe" tools/native/task245-control-profile/probe.c
           cc -std=c11 -O2 -static -Werror=implicit-function-declaration -o "$RUNNER_TEMP/native-release-fixture" tools/native/task245-acceptance/release_fixture.c
           cc -std=c11 -O2 -static -Werror=implicit-function-declaration -o "$RUNNER_TEMP/native-gateway" tools/native/task245-acceptance/gateway.c
+      - name: Run domain init kernel tests
+        shell: bash
+        working-directory: tools/native
+        run: |
+          set -euo pipefail
+          sudo env -i PATH="$PATH" HOME="$RUNNER_TEMP/native-check-home" GOTOOLCHAIN=local CGO_ENABLED=0 TASK245_INIT="$RUNNER_TEMP/native-domain-init" TASK240_STUB="$RUNNER_TEMP/native-launch-stub" go test -v -count=2 -timeout=90s -run '^TestDomainInit' ./task245-native-supervisor
       - name: Run pure Go source tests
         shell: bash
         working-directory: tools/native
