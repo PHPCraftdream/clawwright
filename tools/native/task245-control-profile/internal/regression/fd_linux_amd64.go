@@ -199,7 +199,8 @@ func CheckFilteredDescriptors(original bool) error {
 			return err
 		}
 	}
-	if _, err = syscall.Pwrite(fixedFD, []byte("release"), 0); err = expectErr("pwrite protected", err, syscall.EPERM); err != nil {
+	_, err = syscall.Pwrite(fixedFD, []byte("release"), 0)
+	if err = expectErr("pwrite protected", err, syscall.EPERM); err != nil {
 		return err
 	}
 	return nil

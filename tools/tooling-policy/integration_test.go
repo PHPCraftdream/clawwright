@@ -58,7 +58,7 @@ func TestPublicCLIReadsStagedBlobAndRequiresStaging(t *testing.T) {
 		t.Fatalf("initial CLI failed: %s", initial.stderr)
 	}
 
-	fixture := "tools/tooling-policy/cli-fixture.go"
+	fixture := "tools/native/task245-control-profile/cmd/control-profile/cli-fixture.go"
 	writeRepo(t, clone, fixture, "package fixture\n")
 	unstaged := runCLI(t, binary, clone)
 	if unstaged.exitCode != 0 || unstaged.stdout != initial.stdout {
