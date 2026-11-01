@@ -1,6 +1,6 @@
 //go:build linux && amd64
 
-package main
+package admission
 
 import (
 	"context"
@@ -49,8 +49,9 @@ type traceTask struct { id taskIdentity; stopped, exiting bool; pending syscall.
 type traceCommand struct { action uint8; ctx context.Context; snap *traceSnapshot; tid, fd int; reply chan traceReply }
 type traceReply struct { snap *traceSnapshot; err error }
 type traceWait func(int, *syscall.WaitStatus, int, *syscall.Rusage) (int, error)
-type TraceTracker struct { commands chan traceCommand; done chan struct{}; cancel context.CancelFunc; root int; once sync.Once; wait traceWait }
-type traceSnapshot struct { owner *TraceTracker; generation uint64; tasks []taskIdentity }
+type TraceTracker struct { commands chan traceCommand; done chan struct{}; cancel context.CancelFunc; root int; once sync.Once; wait traceWait; execGuard func(int,uint64) error }
+type recvCandidate struct { TID, TGID, FD int; Generation uint64 }
+type traceSnapshot struct { owner *TraceTracker; generation uint64; tasks []taskIdentity; candidates []recvCandidate }
 
 func readProcBound(path string, max int64) ([]byte,error) { f,e:=os.Open(path); if e!=nil{return nil,e}; defer f.Close(); b,e:=io.ReadAll(io.LimitReader(f,max+1)); if e!=nil||int64(len(b))>max{return nil,errTrace}; return b,nil }
 func procIdentity(tid int)(taskIdentity,error){ base:="/proc/"+strconv.Itoa(tid); b,e:=readProcBound(base+"/status",65536); if e!=nil{return taskIdentity{},e}; tg:=0; for _,l:=range strings.Split(string(b),"\n"){if strings.HasPrefix(l,"Tgid:"){tg,_=strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(l,"Tgid:")));break}}; b,e=readProcBound(base+"/stat",65536); if e!=nil||tg<=0{return taskIdentity{},errTrace}; x:=strings.LastIndex(string(b),")"); if x<0{return taskIdentity{},errTrace}; f:=strings.Fields(string(b)[x+1:]); if len(f)<=19{return taskIdentity{},errTrace}; n,e:=strconv.ParseUint(f[19],10,64); if e!=nil{return taskIdentity{},e}; return taskIdentity{TID:tid,TGID:tg,StartTicks:n},nil }
@@ -58,9 +59,11 @@ func namespaceInode(path string)(uint64,error){ i,e:=os.Stat(path);if e!=nil{ret
 func checkClosedTasks(tasks map[int]*traceTask,root int)error{ own,e:=namespaceInode("/proc/self/ns/pid");if e!=nil{return errTrace}; p,e:=namespaceInode("/proc/"+strconv.Itoa(os.Getppid())+"/ns/pid");if e!=nil||p!=own{return errTrace}; tracked:=map[int]bool{};for tid,t:=range tasks{if t==nil||t.id.TID!=tid{return errTrace};tracked[t.id.TGID]=true;id,x:=procIdentity(tid);if x!=nil||id.TGID!=t.id.TGID||id.StartTicks!=t.id.StartTicks{return errTrace};n,x:=namespaceInode("/proc/"+strconv.Itoa(tid)+"/ns/pid");if x!=nil||n!=own{return errTrace}};r,e:=procIdentity(root);if e!=nil||!tracked[r.TGID]{return errTrace}; entries,e:=os.ReadDir("/proc");if e!=nil||len(entries)>maxTraceTasks{return errTrace}; self,parent:=os.Getpid(),os.Getppid();for _,v:=range entries{if !v.IsDir(){continue};pid,x:=strconv.Atoi(v.Name());if x!=nil||pid<=0{continue};id,x:=procIdentity(pid);if x!=nil{return errTrace};if id.TGID!=self&&id.TGID!=parent&&!tracked[id.TGID]{return errTrace}};return nil }
 func ptrace(req,tid int,data uintptr,addrlen ...uintptr)(uintptr,error){var a uintptr;if len(addrlen)>0{a=addrlen[0]};r,_,e:=syscall.RawSyscall6(syscall.SYS_PTRACE,uintptr(req),uintptr(tid),a,data,0,0);if e!=0{return r,e};return r,nil}
 
-func NewTraceTracker(ctx context.Context,root int)(*TraceTracker,error){ return newTraceTracker(ctx,root,syscall.Wait4) }
+func NewTraceTracker(ctx context.Context,root int)(*TraceTracker,error){ return newTraceTracker(ctx,root,syscall.Wait4,nil) }
+// NewGuardedTraceTracker enforces the exec policy at ptrace exec stops before the task is resumed.
+func NewGuardedTraceTracker(ctx context.Context,root int, guard func(int,uint64) error)(*TraceTracker,error){ if guard==nil{return nil,errTrace}; return newTraceTracker(ctx,root,syscall.Wait4,guard) }
 // The private wait seam lets kernel tests reorder real stops, never authorize delivery.
-func newTraceTracker(ctx context.Context,root int,wait traceWait)(*TraceTracker,error){if ctx==nil||root<=0||wait==nil{return nil,errTrace};if _,ok:=ctx.Deadline();!ok||ctx.Err()!=nil{return nil,errTrace};c,cancel:=context.WithCancel(ctx);t:=&TraceTracker{commands:make(chan traceCommand),done:make(chan struct{}),cancel:cancel,root:root,wait:wait};ready:=make(chan error,1);go t.loop(c,ready);select{case e:=<-ready:if e!=nil{cancel();return nil,e};return t,nil;case <-c.Done():cancel();return nil,errTrace}}
+func newTraceTracker(ctx context.Context,root int,wait traceWait, guard ...func(int,uint64) error)(*TraceTracker,error){if ctx==nil||root<=0||wait==nil{return nil,errTrace};if _,ok:=ctx.Deadline();!ok||ctx.Err()!=nil{return nil,errTrace};c,cancel:=context.WithCancel(ctx);t:=&TraceTracker{commands:make(chan traceCommand),done:make(chan struct{}),cancel:cancel,root:root,wait:wait};if len(guard)>0 { t.execGuard=guard[0] };ready:=make(chan error,1);go t.loop(c,ready);select{case e:=<-ready:if e!=nil{cancel();return nil,e};return t,nil;case <-c.Done():cancel();return nil,errTrace}}
 func(t *TraceTracker)loop(ctx context.Context,ready chan<- error){
 	runtime.LockOSThread();defer close(t.done)
 	rootID,e:=procIdentity(t.root); ents,x:=os.ReadDir("/proc/"+strconv.Itoa(t.root)+"/task");if e!=nil||x!=nil||len(ents)!=1||ents[0].Name()!=strconv.Itoa(t.root)||rootID.TID!=rootID.TGID{ready<-errTrace;return}
@@ -98,7 +101,7 @@ func(t *TraceTracker)loop(ctx context.Context,ready chan<- error){
 				if _, e = ptrace(ptraceGetEventMsg, pid, uintptr(unsafe.Pointer(&former))); e != nil { return errTrace }
 				old := task
 				if int(former) != pid { old = owned[int(former)]; if old == nil || old.id.TGID != pid { return errTrace }; delete(owned, int(former)); owned[pid] = old; task = old; task.stopped=true }
-				ni, x := procIdentity(pid); if x != nil { return errTrace }; gen := old.id.ExecGeneration + 1; task.id = ni; task.id.ExecGeneration = gen; task.recvEntry = false; task.exiting = false
+				ni, x := procIdentity(pid); if x != nil { return errTrace }; gen := old.id.ExecGeneration + 1; if t.execGuard != nil && t.execGuard(pid,gen) != nil { return errTrace }; task.id = ni; task.id.ExecGeneration = gen; task.recvEntry = false; task.exiting = false
 			} else if event == 0 && s != syscall.Signal(int(syscall.SIGTRAP)|0x80) { task.pending = s }
 			if task.exiting && event != 6 { if _, e = ptrace(ptraceSyscall, pid, 0); e != nil { return errTrace }; task.stopped = false; continue }
 			if event == 0 && s == syscall.Signal(int(syscall.SIGTRAP)|0x80) {
@@ -137,7 +140,7 @@ func(t *TraceTracker)loop(ctx context.Context,ready chan<- error){
 			}
 			select{case <-c.ctx.Done():cleanup();c.reply<-traceReply{err:errTrace};return;case <-sig:case <-ctx.Done():cleanup();c.reply<-traceReply{err:errTrace};return}
 		}
-		generation++;active=&traceSnapshot{owner:t,generation:generation};transferTarget=0;for _,v:=range owned{active.tasks=append(active.tasks,v.id)};c.reply<-traceReply{snap:active}
+		generation++;active=&traceSnapshot{owner:t,generation:generation};transferTarget=0;for tid,v:=range owned{active.tasks=append(active.tasks,v.id);if v.recvEntry&&v.recvFD>=0 { active.candidates=append(active.candidates,recvCandidate{TID:tid,TGID:v.id.TGID,FD:v.recvFD,Generation:v.id.ExecGeneration}) }};c.reply<-traceReply{snap:active}
 	}}
 }
 func(t *TraceTracker)Freeze(ctx context.Context)(*traceSnapshot,error){if t==nil||ctx==nil||ctx.Err()!=nil{return nil,errTrace};if _,ok:=ctx.Deadline();!ok{return nil,errTrace};r,e:=t.request(traceCommand{action:1,ctx:ctx});return r.snap,e}

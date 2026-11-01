@@ -1,6 +1,6 @@
 //go:build linux && amd64
 
-package main
+package admission
 
 import (
 	"context"
@@ -74,6 +74,21 @@ func ObserveKernelState(ctx context.Context, tracker *TraceTracker, providerTGID
 	o := &KernelObservation{KeeperNonce: nonce, KeeperBinding: binding, BarrierGeneration: snapshot.generation, Tasks: tasks, Endpoints: pair, Holders: holders, tracker: tracker, snapshot: snapshot}
 	o.Digest = digestKernelObservation(o)
 	return o, nil
+}
+
+// ReleaseBarrier relinquishes the held barrier only while the observation is
+// live. The caller remains responsible for completing all independent checks.
+func (o *KernelObservation) ReleaseBarrier() error {
+	if o == nil { return errKernelObservation }
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.closed || o.tracker == nil || o.snapshot == nil || o.snapshot.owner != o.tracker || o.snapshot.generation != o.BarrierGeneration {
+		return errKernelObservation
+	}
+	if err := o.tracker.Release(o.snapshot); err != nil { return errKernelObservation }
+	o.closed = true
+	o.tracker, o.snapshot = nil, nil
+	return nil
 }
 
 // Close invalidates the held observation and closes the tracker domain. The
