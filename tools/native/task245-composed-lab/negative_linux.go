@@ -46,7 +46,8 @@ func runNegativeLab(scenario string) (err error) {
 	if _, e = os.Lstat(filepath.Join(declarativeauthority.StatePath, "native-cancel-owner")); !errors.Is(e, os.ErrNotExist) { return errors.New("cancel owner evidence was not fresh") }
 	answers := []labAnswer{{"Exact canonical delivery reference: ", []byte(l.ref)}, {"Application-store master secret: ", l.master}}
 	out, e := l.cli(labUID, answers, "appstore", "unlock", harnessPath, l.ref, mode)
-	if e != nil || !strings.Contains(out, "DELIVERY_ACCEPTANCE_OK") { return errors.New("negative harness failed") }
+	if e != nil { return errors.New("negative harness failed " + strings.ToLower(e.Error())) }
+	if !strings.Contains(out, "DELIVERY_ACCEPTANCE_OK") { return errors.New("negative harness output marker missing") }
 	if scenario == "cancel" {
 		if !strings.Contains(out, "DELIVERY_CANCELLED_OUTCOME_UNKNOWN") { return errors.New("cancel outcome missing") }
 		if e = verifyCancelledConsumer(filepath.Join(declarativeauthority.StatePath, "native-cancel-owner")); e != nil { return errors.New("cancel consumer termination unverified") }

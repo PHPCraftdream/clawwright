@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#include "metadata.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/memfd.h>
@@ -131,18 +132,11 @@ static int scenario_cancel(void) {
 }
 static int open_cancel(uint64_t id) {
     int memfd;
-    if (slot >= 0 || !scenario_cancel()) return -EACCES;
+    if (slot >= 0 || !scenario_cancel() || !valid(id)) return -EACCES;
     memfd = syscall(SYS_memfd_create, "cancel", MFD_CLOEXEC | MFD_ALLOW_SEALING);
     if (memfd < 0) return -errno;
-    if (ftruncate(memfd, 7) || fcntl(memfd, F_ADD_SEALS,
-                                    F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL) ||
-        !valid(id)) { close(memfd); return -EACCES; }
-    int added = ioctl(listener, SECCOMP_IOCTL_NOTIF_ADDFD,
-                       &(struct seccomp_notif_addfd){.id=id, .srcfd=memfd,
-                                                    .newfd_flags=O_CLOEXEC});
-    if (added < 0) { close(memfd); return -EACCES; }
-    slot = memfd; targetfd = added;
-    return added;
+    if (ftruncate(memfd, 7) || fcntl(memfd, F_ADD_SEALS, F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL)) { close(memfd); return -EACCES; }
+    slot = memfd; targetfd = TASK245_CANCEL_FD; return TASK245_CANCEL_FD;
 }
 static int fault_cancel(void) {
     struct stat st;
@@ -186,68 +180,47 @@ static int release_ack(void) {
 static void handle(void) {
     struct seccomp_notif request;
     for (;;) {
-        struct seccomp_notif_resp response = {.error=-EACCES};
-        char path[512];
-        int result = -EACCES;
+        struct seccomp_notif_resp response = {.error=-EACCES}; char path[512]; int result=-EACCES, isauth;
         memset(&request, 0, sizeof request);
-        if (ioctl(listener, SECCOMP_IOCTL_NOTIF_RECV, &request) < 0) {
-            if (errno == EINTR) continue;
-            return;
-        }
-        response.id = request.id;
-        if (!authorized(request.pid)) goto send;
-        if (request.data.nr == SYS_close) {
-            int released = 1;
-            if (slot >= 0 && same_tgid(request.pid) &&
-                (int)request.data.args[0] == targetfd && valid(request.id))
-                released = release_ack();
-            if (slot >= 0 && (int)request.data.args[0] == targetfd) {
-                close(slot); slot = -1; targetfd = -1;
-            }
-            if (!released) { response.error = -EIO; response.flags = 0; goto send; }
-            response.error = 0;
-            response.flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE;
+        if (ioctl(listener, SECCOMP_IOCTL_NOTIF_RECV, &request) < 0) { if(errno==EINTR)continue; return; }
+        response.id=request.id; isauth=authorized(request.pid);
+        if(request.data.nr==SYS_close_range && request.data.args[0]<=TASK245_CANCEL_FD && request.data.args[1]>=TASK245_CANCEL_FD) { response.error=-EPERM; goto send; }
+        if(request.data.nr==SYS_write && (int)request.data.args[0]==TASK245_CANCEL_FD) {
+            unsigned char data[7]; struct iovec local={data,7}, remote={(void *)(uintptr_t)request.data.args[1],7};
+            if(isauth && slot>=0 && request.data.args[2]==7 && valid(request.id) && process_vm_readv(request.pid,&local,1,&remote,1,0)==7 && pwrite(slot,data,7,0)==7) { response.error=0; response.val=7; }
             goto send;
         }
-        if (request.data.nr == SYS_open || request.data.nr == SYS_openat) {
-            uint64_t address = request.data.nr == SYS_open ? request.data.args[0] : request.data.args[1];
-            int dirfd = request.data.nr == SYS_open ? AT_FDCWD : (int)request.data.args[0];
-            int flags = (int)(request.data.nr == SYS_open ? request.data.args[1] : request.data.args[2]);
-            if (copy_string(request.pid, address, path, sizeof path)) goto send;
-            if ((dirfd == AT_FDCWD || request.data.nr == SYS_open) &&
-                (!strcmp(path, STATE) || !strcmp(path, RECEIPT))) {
-                if ((flags & O_ACCMODE) != O_RDONLY || (flags & (O_CREAT|O_TRUNC|O_APPEND))) goto send;
-                result = metadata(request.id, path);
-            } else if ((dirfd == AT_FDCWD || request.data.nr == SYS_open) &&
-                       !strcmp(path, REQ) && (flags & (O_ACCMODE|O_CREAT|O_TRUNC)) ==
-                       (O_WRONLY|O_CREAT|O_TRUNC)) {
-                result = open_cancel(request.id);
-                if (result >= 0) { cancel_tgid = peer_pid; }
-            } else if (request.data.nr == SYS_openat &&
-                       (!strncmp(path, "/lab/bin/", 9) || !strcmp(path, "/lab/bin"))) {
-                response.error = 0;
-                response.flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE;
-                goto send;
+        if(request.data.nr==SYS_close && (int)request.data.args[0]==TASK245_CANCEL_FD) {
+            int released=1;
+            if(isauth && slot>=0) {
+                if(!valid(request.id)) goto send;
+                released=release_ack(); close(slot); slot=-1; targetfd=-1;
             }
-        } else if (request.data.nr == SYS_unlinkat &&
-                   (int)request.data.args[0] == AT_FDCWD &&
-                   copy_string(request.pid, request.data.args[1], path, sizeof path) == 0 &&
-                   !strcmp(path, REQ)) {
-            struct stat st;
-            int fd = openat(rootdir, ACK, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
-            if (fd < 0) result = errno == ENOENT ? -ENOENT : -EACCES;
-            else {
-                if (fstat(fd, &st) == 0 && S_ISREG(st.st_mode) && st.st_uid == 65534 &&
-                    st.st_nlink == 1 && (st.st_mode & 07777) == 0600 && st.st_size == 7 &&
-                    pread(fd, path, 7, 0) == 7 && !memcmp(path, "release", 7) && valid(request.id))
-                    result = unlinkat(rootdir, ACK, 0) ? -errno : 0;
-                close(fd);
-            }
+            response.error=released?0:-EIO; response.val=0; goto send;
         }
-        if (result >= 0) { response.error = 0; response.val = result; }
-        else response.error = result;
-    send:
-        if (valid(request.id)) ioctl(listener, SECCOMP_IOCTL_NOTIF_SEND, &response);
+        if(request.data.nr==SYS_close) { response.error=0; response.flags=SECCOMP_USER_NOTIF_FLAG_CONTINUE; goto send; }
+        if(!isauth) {
+            if(request.data.nr==SYS_open || request.data.nr==SYS_openat) { response.error=0; response.flags=SECCOMP_USER_NOTIF_FLAG_CONTINUE; }
+            goto send;
+        }
+        if(request.data.nr==SYS_open || request.data.nr==SYS_openat) {
+            uint64_t address=request.data.nr==SYS_open?request.data.args[0]:request.data.args[1];
+            int dirfd=request.data.nr==SYS_open?AT_FDCWD:(int)request.data.args[0];
+            int flags=(int)(request.data.nr==SYS_open?request.data.args[1]:request.data.args[2]);
+            if(copy_string(request.pid,address,path,sizeof path)) goto send;
+            if((dirfd==AT_FDCWD || request.data.nr==SYS_open) && (!strcmp(path,STATE)||!strcmp(path,RECEIPT))) {
+                if((flags&O_ACCMODE)!=O_RDONLY || (flags&(O_CREAT|O_TRUNC|O_APPEND))) goto send;
+                result=metadata(request.id,path);
+            } else if((dirfd==AT_FDCWD || request.data.nr==SYS_open) && !strcmp(path,REQ) && (flags&(O_ACCMODE|O_CREAT|O_TRUNC))==(O_WRONLY|O_CREAT|O_TRUNC)) {
+                result=open_cancel(request.id); if(result>=0)cancel_tgid=peer_pid;
+            } else { response.error=0; response.flags=SECCOMP_USER_NOTIF_FLAG_CONTINUE; goto send; }
+        } else if(request.data.nr==SYS_unlinkat && (int)request.data.args[0]==AT_FDCWD && copy_string(request.pid,request.data.args[1],path,sizeof path)==0 && !strcmp(path,REQ)) {
+            struct stat st; int fd=openat(rootdir,ACK,O_RDONLY|O_CLOEXEC|O_NOFOLLOW);
+            if(fd<0) result=errno==ENOENT?-ENOENT:-EACCES;
+            else { if(fstat(fd,&st)==0 && S_ISREG(st.st_mode) && st.st_uid==65534 && st.st_nlink==1 && (st.st_mode&07777)==0600 && st.st_size==7 && pread(fd,path,7,0)==7 && !memcmp(path,"release",7) && valid(request.id)) result=unlinkat(rootdir,ACK,0)?-errno:0; close(fd); }
+        }
+        if(result>=0) { response.error=0; response.val=result; } else response.error=result;
+    send: if(valid(request.id)) ioctl(listener,SECCOMP_IOCTL_NOTIF_SEND,&response);
     }
 }
 static int marker(const char *path) {
@@ -297,4 +270,5 @@ int main(int argc, char **argv) {
     if (!item || item->cmsg_level != SOL_SOCKET || item->cmsg_type != SCM_RIGHTS ||
         item->cmsg_len != CMSG_LEN(sizeof(int)) || CMSG_NXTHDR(&header, item)) goto out;
     memcpy(&received, CMSG_DATA(item), sizeof received); listener = received; received = -1; handle(); status = 0;
-out: if (received >= 0) close(received); cleanup(socketfd); return status; }
+out: if (received >= 0) close(received); cleanup(socketfd); return status;
+}

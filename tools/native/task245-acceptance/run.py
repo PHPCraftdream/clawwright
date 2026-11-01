@@ -107,6 +107,8 @@ def main():
         for source, target in (("harness","harness"),("native-lab-broker","native-lab-broker"),("native-metadata","native-metadata"),("ssjack","ssjack")):
             shutil.copyfile(stage/source, stage/"bin"/target); (stage/"bin"/target).chmod(0o555 if target == "native-metadata" else 0o755)
         shutil.copyfile(stage/"control-profile", stage/"harness"); (stage/"harness").chmod(0o755)
+        # The metadata child is a regression fixture, separate from the real bin/harness.
+        shutil.copyfile(stage/"metadata-regression", stage/"bin/metadata-child"); (stage/"bin/metadata-child").chmod(0o755)
         # Preserve ordinary product ssjack as /lab/ssjack; driver is input only.
         (stage/"bin/ssjack").chmod(0o755)
         if lab_case == "confinement":

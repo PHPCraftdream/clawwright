@@ -20,6 +20,9 @@ import (
 )
 
 func kernelFailure245(output []byte) string {
+ for _, fault := range []struct{code, label string}{{"10","fixture_case_open"},{"11","fixture_case_invalid"},{"20","fixture_socket"},{"21","fixture_connect"},{"22","fixture_metadata"},{"23","fixture_admission"},{"24","fixture_admission_magic"},{"25","fixture_payload_length"},{"26","fixture_mutation"},{"27","fixture_payload_read"},{"30","fixture_broker_socket"},{"31","fixture_broker_fork"},{"32","fixture_broker_dup"},{"33","fixture_provider_exec"},{"34","fixture_stdin"},{"35","fixture_transfer"},{"40","fixture_gateway_socket"},{"41","fixture_gateway_fork"},{"42","fixture_gateway_dup"},{"43","fixture_gateway_flags"},{"44","fixture_broker_exec"},{"45","fixture_gateway_recv"},{"46","fixture_gateway_rights"}} {
+  if bytes.Contains(output, []byte("release-fixture: code="+fault.code+"\n")) { return fault.label }
+ }
  for _, reason := range []string{"private mount", "chroot", "proc mount", "read executable", "gateway start", "provider accept before gateway exec", "provider accept before broker exec", "provider accept after provider exec", "provider accept after broker exec", "provider accept", "ready handshake", "mutation marker absent", "admission timeout", "negative scenario timed out", "valid holder rejected", "between-write rejection or context failure", "actual send backpressure not observed", "worker failed"} {
   if bytes.Contains(output, []byte(": "+reason+"\n")) { return strings.ReplaceAll(reason," ","_") }
  }

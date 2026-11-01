@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 extern char **environ;
@@ -24,7 +25,7 @@ extern char **environ;
 #define PROVIDER_PATH "/usr/libexec/release-provider"
 #define REQUEST "{\"protocolVersion\":1,\"provider\":\"clawwright-ssjack\",\"ids\":[\"gateway-token\"]}"
 
-static void fail(int n) { _exit(n); }
+static void fail(int n) { dprintf(2,"release-fixture: code=%d\n",n); _exit(n); }
 static int exact_write(int fd, const void *v, size_t n) {
     const char *p=v;
     while (n) { ssize_t k=write(fd,p,n); if(k<0&&errno==EINTR) continue; if(k<=0)return -1; p+=k; n-=(size_t)k; }
@@ -47,7 +48,7 @@ static int scenario(void) {
     if(n==9&&!memcmp(b,"lost-ack\n",9)) return 3;
     if(n==7&&!memcmp(b,"cancel\n",7)) return 4;
     if(n==16&&!memcmp(b,"unexpected-exec\n",16)) return 5;
-    if(n==20&&!memcmp(b,"between-write-holder\n",20)) return 6;
+    if(n==sizeof("between-write-holder\n")-1&&!memcmp(b,"between-write-holder\n",sizeof("between-write-holder\n")-1)) return 6;
     fail(11); return -1;
 }
 static void mark(const char *path) {

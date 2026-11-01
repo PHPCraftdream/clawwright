@@ -100,11 +100,11 @@ def main():
         need(regression.stdout == 'metadata cancel-ack regression: PASS\n', 'metadata cancel-ack regression output mismatch')
         need(regression.stderr == '', 'metadata cancel-ack regression wrote stderr')
     if not scenario:
-        test = subprocess.run(['/lab/release-test', '-test.run=^TestConnectedReleaseKernel$', '-test.v'], env={'TASK245_KERNEL': '1', 'TASK245_RELEASE_FIXTURE': '/lab/release-fixture', 'TASK240_STUB': '/lab/native-stub'}, cwd=LAB, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)
-        if test.returncode != 0:
-            for code in re.findall(r'diagnostic=([a-z_]{1,80})', test.stdout):
+        connected = subprocess.run(['/lab/release-test', '-test.run=^TestConnectedReleaseKernel$', '-test.v'], env={'TASK245_KERNEL': '1', 'TASK245_RELEASE_FIXTURE': '/lab/release-fixture', 'TASK240_STUB': '/lab/native-stub'}, cwd=LAB, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)
+        if connected.returncode != 0:
+            for code in re.findall(r'diagnostic=([a-z_]{1,80})', connected.stdout):
                 print('task245-profile: kernel=' + code, file=sys.stderr)
-        need(test.returncode == 0, 'connected release kernel test failed')
+        need(connected.returncode == 0, 'connected release kernel test failed')
     status = Path('/proc/self/status').read_text()
     caps = next((x.split()[1] for x in status.splitlines() if x.startswith('CapEff:')), '')
     bits = int(caps, 16)
@@ -119,6 +119,44 @@ def main():
     os.chmod(LAB / 'disposable-profile', 0o444)
     (LAB / 'bin/native-metadata').chmod(0o555)
     bind_ro(LAB / 'bin')
+    if not scenario:
+        control_digest = digest(LAB / 'control-profile')
+        keeper_digest = digest(LAB / 'ssjack')
+        product_keeper = LAB / 'ssjack-product'
+        need(not product_keeper.exists(), 'ssjack-product fixture already exists')
+        shutil.copyfile(LAB / 'ssjack', product_keeper)
+        os.chmod(product_keeper, 0o755)
+        scenario_file = LAB / 'scenario'
+        try:
+            shutil.copyfile(LAB / 'metadata-regression', LAB / 'harness')
+            shutil.copyfile(LAB / 'metadata-regression', LAB / 'ssjack')
+            os.chmod(LAB / 'harness', 0o755)
+            os.chmod(LAB / 'ssjack', 0o755)
+            inactive = subprocess.run(['/lab/harness', '--notifier-inactive'], env={'GITHUB_ACTIONS': 'true'}, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=20)
+            need(inactive.returncode == 0, 'metadata notifier inactive regression returned nonzero')
+            need(inactive.stdout == 'metadata notifier inactive: PASS' + chr(10), 'metadata notifier inactive regression output mismatch')
+            need(inactive.stderr == '', 'metadata notifier inactive regression wrote stderr')
+            need(not scenario_file.exists(), 'notifier scenario must be fresh')
+            scenario_file.write_text('cancel')
+            os.chown(scenario_file, 0, 0)
+            os.chmod(scenario_file, 0o444)
+            regression = subprocess.run(['/lab/ssjack', '--notifier'], env={'GITHUB_ACTIONS': 'true'}, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=40)
+            need(regression.returncode == 0, 'metadata notifier regression returned nonzero')
+            need(regression.stdout == 'metadata notifier regression: PASS' + chr(10), 'metadata notifier regression output mismatch')
+            need(regression.stderr == '', 'metadata notifier regression wrote stderr')
+        finally:
+            try:
+                shutil.copyfile(product_keeper, LAB / 'ssjack')
+                shutil.copyfile(LAB / 'control-profile', LAB / 'harness')
+                os.chmod(LAB / 'ssjack', 0o755)
+                os.chmod(LAB / 'harness', 0o755)
+                need(digest(LAB / 'ssjack') == keeper_digest, 'keeper restoration digest mismatch')
+                need(digest(LAB / 'harness') == control_digest, 'control harness restoration digest mismatch')
+            finally:
+                if scenario_file.exists():
+                    scenario_file.unlink()
+                if product_keeper.exists():
+                    product_keeper.unlink()
     bind_ro(LAB / 'ssjack')
     ROOT.mkdir()
     for d in ('usr/bin', 'usr/libexec', 'etc/clawwright', 'proc', 'run'):
