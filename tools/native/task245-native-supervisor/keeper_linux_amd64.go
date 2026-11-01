@@ -61,7 +61,7 @@ func procStart(pid int)(string,error){b,e:=readBounded("/proc/"+strconv.Itoa(pid
 func reciprocalPipe(fd,pid int,childWrites bool) bool {
 	link,e:=os.Readlink("/proc/self/fd/"+strconv.Itoa(fd));if e!=nil||!strings.HasPrefix(link,"pipe:[")||!strings.HasSuffix(link,"]"){return false}
 	inode:=strings.TrimSuffix(strings.TrimPrefix(link,"pipe:["),"]");if inode==""{return false}
-	flags,_,e:=syscall.Syscall(syscall.SYS_FCNTL,uintptr(fd),3,0);if e!=0{return false};want:=uintptr(0);if childWrites{want=1};if flags&3!=want{return false}
+	flags,_,errno:=syscall.Syscall(syscall.SYS_FCNTL,uintptr(fd),3,0);if errno!=0{return false};want:=uintptr(0);if childWrites{want=1};if flags&3!=want{return false}
 	pflags,ok:=procFDFlags(pid,inode);if !ok||pflags&3!=uint64(want^1){return false}
 	return pipeHolderExclusive(inode,pid)
 }
