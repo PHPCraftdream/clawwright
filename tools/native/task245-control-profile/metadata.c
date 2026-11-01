@@ -273,6 +273,8 @@ int main(int argc, char **argv) {
     struct cmsghdr *item = CMSG_FIRSTHDR(&header);
     if (!item || item->cmsg_level != SOL_SOCKET || item->cmsg_type != SCM_RIGHTS ||
         item->cmsg_len != CMSG_LEN(sizeof(int)) || CMSG_NXTHDR(&header, item)) goto out;
-    memcpy(&received, CMSG_DATA(item), sizeof received); listener = received; received = -1; stage = 6; handle(); status = 0;
+    memcpy(&received, CMSG_DATA(item), sizeof received); listener = received; received = -1;
+    uint64_t probe = 0; errno = 0; if (ioctl(listener, SECCOMP_IOCTL_NOTIF_ID_VALID, &probe) < 0 && errno != ENOENT) goto out;
+    stage = 6; handle(); status = 0;
 out: if (status) fprintf(stderr,"metadata-daemon: stage=%d auth=%d errno=%d\n",stage,auth_check,auth_errno); if (received >= 0) close(received); cleanup(socketfd); return status;
 }

@@ -249,6 +249,16 @@ static void notifier_case(void) {
     must(!strcmp(out,"metadata notifier exec: PASS\n"));kill(medpid,SIGTERM);waitpid(medpid,&status,0);close(listener);listener=-1;close(ctl[0]);
 }
 int main(int argc, char **argv) {
+    if(argc==2&&!strcmp(argv[1],"--service-peer")) {
+        if(geteuid()!=0||!getenv("GITHUB_ACTIONS")||strcmp(getenv("GITHUB_ACTIONS"),"true"))_exit(2);
+        int fd=socket(AF_UNIX,SOCK_SEQPACKET|SOCK_CLOEXEC,0);if(fd<0)_exit(2);
+        if(setgroups(0,NULL)||setgid(65534)||setuid(65534))_exit(2);
+        int result=metadata_service(fd);if(result){close(fd);_exit(1);}
+        int pair[2];must(pipe2(pair,O_CLOEXEC)==0);char magic[8]="OCMETA01",control[CMSG_SPACE(sizeof(int))]={0};
+        struct iovec io={.iov_base=magic,.iov_len=8};struct msghdr msg={.msg_iov=&io,.msg_iovlen=1,.msg_control=control,.msg_controllen=sizeof control};
+        struct cmsghdr*c=CMSG_FIRSTHDR(&msg);c->cmsg_level=SOL_SOCKET;c->cmsg_type=SCM_RIGHTS;c->cmsg_len=CMSG_LEN(sizeof(int));memcpy(CMSG_DATA(c),&pair[0],sizeof(int));
+        must(sendmsg(fd,&msg,0)==8);char reply;must(recv(fd,&reply,1,0)==0);close(pair[0]);close(pair[1]);close(fd);_exit(0);
+    }
     if(argc==4&&!strcmp(argv[1],"--active-client")) {
         char *end; errno=0; long sock=strtol(argv[2],&end,10); must(!errno&&*argv[2]&&!*end&&sock>=0&&sock<=INT_MAX);
         errno=0; long phase=strtol(argv[3],&end,10); must(!errno&&*argv[3]&&!*end&&phase>=0&&phase<=5);

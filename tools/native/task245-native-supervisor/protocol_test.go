@@ -107,6 +107,63 @@ func TestEncodeLaunchPacketRejectsInvalidFields(t *testing.T) {
 	for _, tc := range cases { t.Run(tc.name, func(t *testing.T) { if _, err := encodeLaunchPacket(tc.args, tc.cfg, tc.sock); err == nil { t.Fatal("invalid packet fields were accepted") } }) }
 }
 
+func TestLabServicePeerKernel(t *testing.T) {
+	if os.Getenv("TASK245_SERVICE_PEER") != "1" { return }
+	if os.Geteuid() != 65534 { t.Fatal("service peer uid") }
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	fd, err := connectLabBroker(ctx, os.Getenv("TASK245_BROKER_HASH"))
+	if err != nil { t.Fatal("service peer rejected") }
+	defer syscall.Close(fd)
+	if _, err = syscall.SendmsgN(fd, []byte("OCLAB001"), nil, nil, syscall.MSG_NOSIGNAL); err != nil && err != syscall.EPIPE && err != syscall.ECONNRESET { t.Fatal("wrong caller send") }
+	var payload [9]byte; rights := make([]byte, syscall.CmsgSpace(4))
+	n, on, flags, _, err := syscall.Recvmsg(fd, payload[:], rights, 0)
+	if n > 0 || on > 0 || flags&(syscall.MSG_TRUNC|syscall.MSG_CTRUNC) != 0 || err == nil && (n != 0 || on != 0) || err != nil && err != syscall.ECONNRESET { t.Fatal("wrong caller obtained handoff") }
+}
+
+func TestParseServiceProof245(t *testing.T) {
+	hash := strings.Repeat("a", 64)
+	canonical := "OCLABAUTH1 123 456 7 8 9 10 " + hash + "\n"
+	pid, start, exeDev, exeIno, sockDev, sockIno, gotHash, ok := parseServiceProof245(canonical)
+	if !ok {
+		t.Fatal("canonical proof rejected")
+	}
+	if pid != 123 || start != "456" || exeDev != 7 || exeIno != 8 || sockDev != 9 || sockIno != 10 || gotHash != hash {
+		t.Fatalf("parsed values = (%d, %q, %d, %d, %d, %d, %q)", pid, start, exeDev, exeIno, sockDev, sockIno, gotHash)
+	}
+	_, _, exeDev, _, _, _, _, ok = parseServiceProof245(strings.Replace(canonical, " 7 8 ", " 0 8 ", 1))
+	if !ok || exeDev != 0 {
+		t.Fatalf("zero executable device rejected or parsed as %d", exeDev)
+	}
+
+	cases := []struct {
+		name string
+		line string
+	}{
+		{"wrong prefix", strings.Replace(canonical, "OCLABAUTH1", "OCLABAUTH0", 1)},
+		{"missing field", "OCLABAUTH1 123 456 7 8 9 " + hash + "\n"},
+		{"extra field", strings.TrimSuffix(canonical, "\n") + " extra\n"},
+		{"leading zero pid", strings.Replace(canonical, " 123 ", " 0123 ", 1)},
+		{"signed pid", strings.Replace(canonical, " 123 ", " +123 ", 1)},
+		{"zero pid", strings.Replace(canonical, " 123 ", " 0 ", 1)},
+		{"zero start", strings.Replace(canonical, " 456 ", " 0 ", 1)},
+		{"zero exe inode", strings.Replace(canonical, " 7 8 ", " 7 0 ", 1)},
+		{"zero socket inode", strings.Replace(canonical, " 9 10 ", " 9 0 ", 1)},
+		{"invalid hash", strings.TrimSuffix(canonical, hash+"\n") + strings.Repeat("g", 64) + "\n"},
+		{"uppercase hash", strings.TrimSuffix(canonical, hash+"\n") + strings.Repeat("A", 64) + "\n"},
+		{"extra newline", canonical + "\n"},
+		{"embedded nul", strings.Replace(canonical, " 456 ", "\x00456 ", 1)},
+		{"oversize", strings.Repeat("x", 513)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, _, _, _, _, _, _, ok := parseServiceProof245(tc.line); ok {
+				t.Fatal("invalid proof accepted")
+			}
+		})
+	}
+}
+
 func TestParseKeeperConfigRejectsDuplicateKeys(t *testing.T) {
 	var cfg keeperConfig
 	if err := parseKeeperConfig([]byte(`{"keeperSHA256":"`+strings.Repeat("a", 64)+`","keeperSHA256":"`+strings.Repeat("b", 64)+`"}`), &cfg); err == nil { t.Fatal("duplicate keeperSHA256 was accepted") }

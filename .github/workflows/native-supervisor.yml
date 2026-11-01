@@ -64,7 +64,7 @@ jobs:
           CGO_ENABLED: '0'
         run: |
           set -euo pipefail
-          go test -run='Test(EncodeLaunchPacket|ParseKeeperConfig)' ./task245-native-supervisor
+          go test -run='Test(EncodeLaunchPacket|ParseKeeperConfig|ParseServiceProof245)' ./task245-native-supervisor
           go test ./task245-native-content ./task240-native-policy ./task240-native-provider ./task245-lab-broker
       - name: Build native Go binaries
         shell: bash

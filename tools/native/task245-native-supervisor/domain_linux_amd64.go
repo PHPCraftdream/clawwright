@@ -77,4 +77,71 @@ func trustedLaunchConfig()(launchConfig,error){var c launchConfig;bad:=func()(la
  f,e:=os.OpenFile("/etc/clawwright/native-launch.json",os.O_RDONLY|syscall.O_NOFOLLOW,0);if e!=nil{return bad()};defer f.Close();fi,e:=f.Stat();if e!=nil||!fi.Mode().IsRegular()||fi.Size()<2||fi.Size()>65536{return bad()};s,ok:=fi.Sys().(*syscall.Stat_t);if !ok||s.Uid!=0||s.Nlink!=1||s.Mode&0022!=0{return bad()};b,e:=io.ReadAll(io.LimitReader(f,65537));if e!=nil||len(b)>65536||duplicateJSON(b)!=nil{return bad()};d:=json.NewDecoder(strings.NewReader(string(b)));d.DisallowUnknownFields();if d.Decode(&c)!=nil||d.Decode(new(any))!=io.EOF{return bad()};return c,nil}
 func duplicateJSON(b []byte)error{d:=json.NewDecoder(strings.NewReader(string(b)));nodes:=0;var value func(int)(any,error);value=func(depth int)(any,error){if depth>32{return nil,errLaunchDomain};nodes++;if nodes>8192{return nil,errLaunchDomain};t,e:=d.Token();if e!=nil{return nil,e};delim,ok:=t.(json.Delim);if !ok{return t,nil};switch delim{case '{':m:=map[string]any{};for d.More(){kt,e:=d.Token();if e!=nil{return nil,e};key,ok:=kt.(string);if !ok{return nil,errLaunchDomain};if _,exists:=m[key];exists{return nil,errLaunchDomain};v,e:=value(depth+1);if e!=nil{return nil,e};m[key]=v};end,e:=d.Token();if e!=nil||end!=json.Delim('}'){return nil,errLaunchDomain};return m,nil;case '[':a:=[]any{};for d.More(){v,e:=value(depth+1);if e!=nil{return nil,e};a=append(a,v)};end,e:=d.Token();if e!=nil||end!=json.Delim(']'){return nil,errLaunchDomain};return a,nil};return nil,errLaunchDomain};if _,e:=value(0);e!=nil{return errLaunchDomain};if _,e:=d.Token();e!=io.EOF{return errLaunchDomain};return nil}
 
-func connectLabBroker(ctx context.Context,want string)(int,error){bad:=func()(int,error){return -1,errLaunchDomain};for _,p:=range []string{"/run","/run/task245-lab"}{fi,e:=os.Lstat(p);if e!=nil||!fi.IsDir()||fi.Mode()&os.ModeSymlink!=0{return bad()};s,ok:=fi.Sys().(*syscall.Stat_t);if !ok||s.Uid!=0||s.Mode&0022!=0{return bad()}};const path="/run/task245-lab/broker.sock";fi,e:=os.Lstat(path);if e!=nil||fi.Mode()&os.ModeSocket==0||fi.Mode()&os.ModeSymlink!=0{return bad()};st,ok:=fi.Sys().(*syscall.Stat_t);if !ok||st.Uid!=0{return bad()};fd,e:=syscall.Socket(syscall.AF_UNIX,syscall.SOCK_SEQPACKET|syscall.SOCK_CLOEXEC,0);if e!=nil{return bad()};fail:=func()(int,error){_ = syscall.Close(fd);return bad()};tv:=syscall.NsecToTimeval(int64(30*time.Second));if syscall.SetsockoptTimeval(fd,syscall.SOL_SOCKET,syscall.SO_RCVTIMEO,&tv)!=nil||syscall.SetsockoptTimeval(fd,syscall.SOL_SOCKET,syscall.SO_SNDTIMEO,&tv)!=nil||syscall.Connect(fd,&syscall.SockaddrUnix{Name:path})!=nil{return fail()};cred,e:=syscall.GetsockoptUcred(fd,syscall.SOL_SOCKET,syscall.SO_PEERCRED);if e!=nil||cred.Uid!=0||cred.Pid<=0{return fail()};proc,e:=os.Open("/proc/"+strconv.Itoa(int(cred.Pid))+"/exe");if e!=nil{return fail()};defer proc.Close();artifact,e:=os.Open("/lab/bin/native-lab-broker");if e!=nil{return fail()};defer artifact.Close();a,e:=proc.Stat();if e!=nil{return fail()};b,e:=artifact.Stat();if e!=nil{return fail()};as,aok:=a.Sys().(*syscall.Stat_t);bs,bok:=b.Sys().(*syscall.Stat_t);if !aok||!bok||as.Dev!=bs.Dev||as.Ino!=bs.Ino||as.Uid!=0||as.Mode&0022!=0||bs.Uid!=0||bs.Mode&0022!=0||!b.Mode().IsRegular(){return fail()};h:=sha256.New();if _,e=io.Copy(h,io.LimitReader(proc,64<<20+1));e!=nil||hex.EncodeToString(h.Sum(nil))!=want{return fail()};_ = ctx;return fd,nil}
+func connectLabBroker(ctx context.Context, want string) (int, error) {
+	bad := func() (int, error) { return -1, errLaunchDomain }
+	if ctx == nil || ctx.Err() != nil || len(want) != 64 || strings.ToLower(want) != want { return bad() }
+	if _, err := hex.DecodeString(want); err != nil { return bad() }
+	for _, p := range []string{"/", "/run", "/run/task245-lab", "/run/task245-services", "/lab", "/lab/bin"} {
+		fi, err := os.Lstat(p)
+		if err != nil || !fi.IsDir() || fi.Mode()&os.ModeSymlink != 0 { return bad() }
+		s, ok := fi.Sys().(*syscall.Stat_t)
+		if !ok || s.Uid != 0 || s.Mode&0022 != 0 { return bad() }
+	}
+	proofFD, err := syscall.Open("/run/task245-services/broker.auth", syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+	if err != nil { return bad() }
+	proof := os.NewFile(uintptr(proofFD), "broker.auth")
+	if proof == nil { _ = syscall.Close(proofFD); return bad() }
+	defer proof.Close()
+	var ps syscall.Stat_t
+	if syscall.Fstat(proofFD, &ps) != nil || ps.Uid != 0 || ps.Mode&syscall.S_IFMT != syscall.S_IFREG || ps.Nlink != 1 || ps.Mode&07777 != 0444 || ps.Size < 1 || ps.Size > 512 { return bad() }
+	pb, err := io.ReadAll(io.LimitReader(proof, 513))
+	if err != nil || len(pb) > 512 { return bad() }
+	pid, start, dev, ino, sockDev, sockIno, hash, ok := parseServiceProof245(string(pb))
+	if !ok || hash != want { return bad() }
+	artifactFD, err := syscall.Open("/lab/bin/native-lab-broker", syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+	if err != nil { return bad() }
+	artifact := os.NewFile(uintptr(artifactFD), "native-lab-broker")
+	if artifact == nil { _ = syscall.Close(artifactFD); return bad() }
+	defer artifact.Close()
+	var as syscall.Stat_t
+	if syscall.Fstat(artifactFD, &as) != nil || as.Uid != 0 || as.Mode&syscall.S_IFMT != syscall.S_IFREG || as.Nlink != 1 || as.Mode&07777 != 0755 || uint64(as.Dev) != dev || as.Ino != ino { return bad() }
+	h := sha256.New()
+	n, err := io.Copy(h, io.LimitReader(artifact, (64<<20)+1))
+	if err != nil || n > 64<<20 || hex.EncodeToString(h.Sum(nil)) != want { return bad() }
+	const path = "/run/task245-lab/broker.sock"
+	var before syscall.Stat_t
+	if syscall.Lstat(path, &before) != nil || before.Uid != 0 || before.Mode&syscall.S_IFMT != syscall.S_IFSOCK || before.Mode&07777 != 0666 || uint64(before.Dev) != sockDev || before.Ino != sockIno { return bad() }
+	fd, err := syscall.Socket(syscall.AF_UNIX, syscall.SOCK_SEQPACKET|syscall.SOCK_CLOEXEC, 0)
+	if err != nil { return bad() }
+	fail := func() (int, error) { _ = syscall.Close(fd); return bad() }
+	timeout := 30 * time.Second
+	if deadline, has := ctx.Deadline(); has { remain := time.Until(deadline); if remain <= 0 { return fail() }; if remain < timeout { timeout = remain } }
+	tv := syscall.NsecToTimeval(timeout.Nanoseconds())
+	if syscall.SetsockoptTimeval(fd, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &tv) != nil || syscall.SetsockoptTimeval(fd, syscall.SOL_SOCKET, syscall.SO_SNDTIMEO, &tv) != nil || ctx.Err() != nil || syscall.Connect(fd, &syscall.SockaddrUnix{Name: path}) != nil { return fail() }
+	cred, err := syscall.GetsockoptUcred(fd, syscall.SOL_SOCKET, syscall.SO_PEERCRED)
+	if err != nil || cred.Uid != 0 || int(cred.Pid) != pid { return fail() }
+	actualStart, err := procStart(pid)
+	if err != nil || actualStart != start || ctx.Err() != nil { return fail() }
+	var after syscall.Stat_t
+	if syscall.Lstat(path, &after) != nil || after.Dev != before.Dev || after.Ino != before.Ino || after.Mode&syscall.S_IFMT != syscall.S_IFSOCK { return fail() }
+	return fd, nil
+}
+
+func parseServiceProof245(line string) (int, string, uint64, uint64, uint64, uint64, string, bool) {
+	bad := func() (int, string, uint64, uint64, uint64, uint64, string, bool) { return 0, "", 0, 0, 0, 0, "", false }
+	if len(line) > 512 || !strings.HasSuffix(line, "\n") { return bad() }
+	fields := strings.Fields(line)
+	if len(fields) != 8 || fields[0] != "OCLABAUTH1" { return bad() }
+	values := make([]uint64, 6)
+	for i, field := range fields[1:7] {
+		v, err := strconv.ParseUint(field, 10, 64)
+		if err != nil || strconv.FormatUint(v, 10) != field { return bad() }
+		values[i] = v
+	}
+	if values[0] <= 1 || values[0] > 1<<31-1 || values[1] == 0 || values[3] == 0 || values[5] == 0 { return bad() }
+	hash := fields[7]
+	if len(hash) != 64 || strings.ToLower(hash) != hash { return bad() }
+	if _, err := hex.DecodeString(hash); err != nil { return bad() }
+	if "OCLABAUTH1 "+strings.Join(fields[1:], " ")+"\n" != line { return bad() }
+	return int(values[0]), strconv.FormatUint(values[1], 10), values[2], values[3], values[4], values[5], hash, true
+}

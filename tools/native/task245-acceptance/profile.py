@@ -11,6 +11,7 @@ import signal
 import subprocess
 import sys
 import time
+from service import attest_service, remove_attestation; from service_test import check_services
 
 LAB = Path('/lab')
 ROOT = Path('/lab/native-root')
@@ -18,11 +19,9 @@ CONFIG = Path('/etc/clawwright')
 UID = GID = 65534
 MS_BIND, MS_REMOUNT, MS_RDONLY = 4096, 32, 1
 
-
 def need(ok, why):
     if not ok:
         raise RuntimeError(why)
-
 
 def digest(p):
     h = hashlib.sha256()
@@ -30,7 +29,6 @@ def digest(p):
         for b in iter(lambda: f.read(1 << 20), b''):
             h.update(b)
     return h.hexdigest()
-
 
 def bind_ro(p):
     import ctypes
@@ -43,7 +41,6 @@ def bind_ro(p):
 
     mount(MS_BIND)
     mount(MS_BIND | MS_REMOUNT | MS_RDONLY)
-
 
 def confinement_mode():
     need(sys.platform == 'linux' and os.geteuid() == 0, 'Linux root required')
@@ -80,7 +77,6 @@ def confinement_mode():
         'adoption': False,
         'product_base': '2997e692cdc24f5b9a5aa23cadc3b22ab1b32f02',
     }, sort_keys=True, separators=(',', ':')))
-
 
 def main():
     args = sys.argv[1:]
@@ -228,6 +224,7 @@ def main():
     (LAB / 'isolation-ok').write_text('task245\n')
     os.chown(LAB / 'isolation-ok', 0, 0)
     os.chmod(LAB / 'isolation-ok', 0o444)
+    check_services()
     proc = subprocess.Popen([str(broker), '--disposable-lab'], env={}, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     metadata_proc = None
     try:
@@ -238,6 +235,7 @@ def main():
             need(proc.poll() is None, 'lab broker exited before readiness')
             time.sleep(0.05)
         need(proc.poll() is None and broker_socket.exists(), 'lab broker readiness timed out')
+        attest_service(proc, broker, broker_socket, 'broker')
         if scenario:
             metadata_proc = subprocess.Popen(['/lab/bin/native-metadata', '--disposable-lab'], env={}, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             metadata_socket = Path('/run/task245-metadata.sock')
@@ -246,6 +244,7 @@ def main():
                 need(metadata_proc.poll() is None, 'native metadata exited before readiness')
                 time.sleep(0.05)
             need(metadata_proc.poll() is None and metadata_socket.exists(), 'native metadata readiness timed out')
+            attest_service(metadata_proc, Path('/lab/bin/native-metadata'), metadata_socket, 'metadata')
         env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'GITHUB_SHA': os.environ['GITHUB_SHA'], 'GITHUB_RUN_ID': os.environ['GITHUB_RUN_ID']}
         result = subprocess.run([str(LAB / 'conductor')], env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=600)
         if result.returncode != 0 or result.stderr:
@@ -283,7 +282,9 @@ def main():
                 except subprocess.TimeoutExpired:
                     child.kill()
                     child.wait(timeout=2)
-
+        if Path('/run/task245-services').is_dir():
+            for role in ('metadata', 'broker'):
+                remove_attestation(role)
 
 if __name__ == '__main__':
     try:

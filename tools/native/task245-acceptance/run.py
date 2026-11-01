@@ -99,6 +99,8 @@ def main():
             invoke(["cc","-std=c11","-O2","-static","-Werror=implicit-function-declaration","-o",str(stage/output),str(NATIVE/source),*([str(NATIVE/'task245-control-profile/metadata_client.c')] if output=='control-profile' else [])])
             (stage/output).chmod(0o555 if output == "native-metadata" else 0o755)
         shutil.copyfile(NATIVE / "task245-acceptance/profile.py", stage / "profile.py")
+        shutil.copyfile(NATIVE / "task245-acceptance/service.py", stage / "service.py")
+        shutil.copyfile(NATIVE / "task245-acceptance/service_test.py", stage / "service_test.py")
         delivery = PRODUCT / "scripts/lab/delivery_pty.py"
         require(delivery.is_file(), "pinned delivery_pty.py missing")
         shutil.copyfile(delivery, stage / "delivery_pty.py")
