@@ -92,7 +92,23 @@ func fdFlags245(path string)(uint64,error){b,e:=os.ReadFile(path);if e!=nil||len
 func pipeCustody245(child,parent int,uid uint32,cp,pp []syscall.Stat_t)bool{
 	if len(cp)!=2||len(pp)!=2||cp[0].Dev==cp[1].Dev&&cp[0].Ino==cp[1].Ino{return false}
 	entries,e:=os.ReadDir("/proc");if e!=nil||len(entries)>auth245MaxTasks{return false};holders:=[2]map[string]bool{make(map[string]bool),make(map[string]bool)};tasks:=0
-	for _,ent:=range entries{tgid,x:=strconv.Atoi(ent.Name());if x!=nil{continue};ts,x:=os.ReadDir("/proc/"+ent.Name()+"/task");if x!=nil{return false};for _,te:=range ts{tid,x:=strconv.Atoi(te.Name());if x!=nil{continue};tasks++;if tasks>auth245MaxTasks{return false};fdpath:=fmt.Sprintf("/proc/%d/task/%d/fd",tgid,tid);fds,x:=os.ReadDir(fdpath);if x!=nil{return false};if len(fds)>auth245MaxFDs{return false};for _,fe:=range fds{st,x:=statProc245(fdpath+"/"+fe.Name());if x!=nil{return false};if st.Mode&syscall.S_IFMT!=syscall.S_IFIFO{continue};for k:=0;k<2;k++{if st.Dev==cp[k].Dev&&st.Ino==cp[k].Ino{holders[k][strconv.Itoa(tgid)+":"+fe.Name()]=true}}}}}
+	for _,ent:=range entries{tgid,x:=strconv.Atoi(ent.Name());if x!=nil{continue};ts,x:=os.ReadDir("/proc/"+ent.Name()+"/task");if x!=nil{return false};for _,te:=range ts{tid,x:=strconv.Atoi(te.Name());if x!=nil{continue};tasks++;if tasks>auth245MaxTasks{return false};fdpath:=fmt.Sprintf("/proc/%d/task/%d/fd",tgid,tid);if !inventoryPipeTable245(fdpath,tgid,cp,holders){return false}}}
 	for k:=0;k<2;k++{if len(holders[k])<1{return false};for key:=range holders[k]{parts:=strings.SplitN(key,":",2);tgid,_:=strconv.Atoi(parts[0]);if tgid!=child&&tgid!=parent{return false}}};return true
 }
-var _ = fmt.Sprintf
+func inventoryPipeTable245(path string, tgid int, cp []syscall.Stat_t, holders [2]map[string]bool) bool {
+	if len(cp) != 2 || holders[0] == nil || holders[1] == nil { return false }
+	dir, err := os.Open(path)
+	if err != nil { return false }
+	defer dir.Close()
+	fds, err := dir.ReadDir(-1)
+	if err != nil || len(fds) > auth245MaxFDs { return false }
+	for _, entry := range fds {
+		st, err := statProc245(path + "/" + entry.Name())
+		if err != nil { return false }
+		if st.Mode&syscall.S_IFMT != syscall.S_IFIFO { continue }
+		for k := 0; k < 2; k++ {
+			if st.Dev == cp[k].Dev && st.Ino == cp[k].Ino { holders[k][strconv.Itoa(tgid)+":"+entry.Name()] = true }
+		}
+	}
+	return true
+}
