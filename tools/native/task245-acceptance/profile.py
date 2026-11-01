@@ -224,4 +224,11 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except RuntimeError as error:
+        print('task245-profile: ' + str(error), file=sys.stderr)
+        raise SystemExit(1)
+    except Exception as error:
+        print('task245-profile: exception=' + type(error).__name__, file=sys.stderr)
+        raise SystemExit(1)

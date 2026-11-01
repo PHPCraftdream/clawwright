@@ -142,6 +142,11 @@ def main():
         PHASE="application"
         result=invoke(["docker","start","-a","-i",container],check=False)
         state=json.loads(invoke(["docker","inspect",container]).stdout)[0]["State"]
+        if result.returncode != 0 or state.get("ExitCode") != 0 or result.stderr:
+            print(f"task245-container: command_exit={result.returncode} container_exit={state.get('ExitCode')}", file=sys.stderr)
+            for line in result.stderr.splitlines():
+                if re.fullmatch(r'task245-profile: [A-Za-z0-9 ._:/=\-]{1,200}', line):
+                    print(line, file=sys.stderr)
         require(result.returncode==0 and state.get("ExitCode")==0 and not result.stderr,"isolated acceptance failed")
         require(len(result.stdout.encode())<=16384,"result too large")
         rows=[x for x in result.stdout.splitlines() if x]; require(len(rows)==1,"invalid result framing")
