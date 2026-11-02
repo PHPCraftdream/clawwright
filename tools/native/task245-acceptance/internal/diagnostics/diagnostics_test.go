@@ -47,6 +47,9 @@ func TestReportFailureReservesMainFailureRecord(t *testing.T) {
 	if err := ReportFailure(&profile, true, "task245-profile: checkpoints=1-2-32", broker.Bytes(), nil, "command_failed", 7); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := io.WriteString(&profile, "task245-profile: stage=ceremony\n"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := io.WriteString(&profile, "task245-profile: failed\n"); err != nil {
 		t.Fatal(err)
 	}
@@ -61,8 +64,8 @@ func TestReportFailureReservesMainFailureRecord(t *testing.T) {
 	if !strings.Contains(output, "task245-profile: checkpoints=1-2-32\n") || !strings.Contains(output, "task245-profile: task245-conductor: event=command_failed exit=7\n") {
 		t.Fatalf("safe records missing from container output: %q", output)
 	}
-	if strings.Contains(output, "task245-profile: failed\n") {
-		t.Fatalf("forwarded arbitrary failure record: %q", output)
+	if !strings.Contains(output, "task245-profile: stage=ceremony\n") || strings.Contains(output, "task245-profile: failed\n") {
+		t.Fatalf("stage record missing or fixed failure record forwarded: %q", output)
 	}
 }
 
@@ -141,6 +144,86 @@ func TestProfileCheckpointGrammar(t *testing.T) {
 	for _, s := range []string{"0", "33", "01", "+1", "-1", "1x"} {
 		if got := Records("profile", []byte("task245-profile: checkpoints="+s+"\n")); len(got) != 0 {
 			t.Fatalf("accepted %q", s)
+		}
+	}
+}
+
+func TestBrokerWaitLifecycleForwardingChain(t *testing.T) {
+	var capture Capture
+	for _, chunk := range []string{
+		"task245-broker: wait=signal exit=-1 ",
+		"signal=9\ntask245-broker: lifecycle=peer_eof errno=0\ntask245-broker: child=255\n",
+	} {
+		if _, err := io.WriteString(&capture, chunk); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var report bytes.Buffer
+	if err := ReportFailure(&report, true, "task245-profile: checkpoints=1-2-32", capture.Bytes(), nil, "command_failed", 7); err != nil {
+		t.Fatal(err)
+	}
+
+	var container bytes.Buffer
+	if err := ContainerFailure(&container, true, 7, 0, report.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+
+	want := "task245-container: command_exit=7 container_exit=0\ntask245-profile: checkpoints=1-2-32\ntask245-profile: task245-conductor: event=command_failed exit=7\ntask245-profile: task245-broker: wait=signal exit=-1 signal=9\ntask245-profile: task245-broker: lifecycle=peer_eof errno=0\ntask245-profile: task245-broker: child=255\n"
+	if container.String() != want {
+		t.Fatalf("got %q, want %q", container.String(), want)
+	}
+}
+
+func TestBrokerMalformedWaitLifecycleNotForwarded(t *testing.T) {
+	cases := []string{
+		"task245-broker: wait=signal exit=0 signal=9\n",
+		"task245-broker: wait=signal exit=-1 signal=0\n",
+		"task245-broker: wait=signal exit=-1 signal=65\n",
+		"task245-broker: wait=signal exit=-01 signal=9\n",
+		"task245-broker: lifecycle=unknown errno=0\n",
+		"task245-broker: lifecycle=peer_eof errno=0 rawsecret\n",
+		"task245-broker: wait=signal exit=-1 signal=9 trailing\n",
+	}
+	for _, raw := range cases {
+		t.Run(strings.TrimSpace(raw), func(t *testing.T) {
+			var capture Capture
+			_, _ = io.WriteString(&capture, raw)
+
+			var report bytes.Buffer
+			if err := ReportFailure(&report, true, "task245-profile: checkpoints=1", capture.Bytes(), nil, "stderr", 1); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(report.String(), "task245-profile: checkpoints=1\n") || !strings.Contains(report.String(), "task245-conductor: event=stderr exit=1") || strings.Contains(report.String(), "task245-broker:") {
+				t.Fatalf("unexpected report %q", report.String())
+			}
+		})
+	}
+	for _, raw := range []string{
+		"task245-profile: stage=unknown\n",
+		"task245-profile: stage=ceremony trailingsecret\n",
+	} {
+		if records := Records("profile", []byte(raw)); len(records) != 0 {
+			t.Fatalf("forwarded unsafe profile record %q", records)
+		}
+	}
+}
+
+func TestAllowedProfileStageRoundTrip(t *testing.T) {
+	for _, stage := range []string{
+		"setup", "identity", "freshness", "metadata_regression", "kernel", "capabilities",
+		"inventory", "metadata_preflight", "tool_bind", "native_setup", "service_preflight", "ceremony",
+	} {
+		line := "task245-profile: stage=" + stage + "\n"
+		var capture Capture
+		_, _ = io.WriteString(&capture, line)
+
+		var out bytes.Buffer
+		if err := ForwardFailure(&out, true, capture.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		if out.String() != line {
+			t.Fatalf("stage %q roundtrip = %q", stage, out.String())
 		}
 	}
 }

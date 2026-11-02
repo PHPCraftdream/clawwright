@@ -149,12 +149,31 @@ func confinement() error {
 	return line(output{Status: "control-confinement-passed", MechanismOnly: true, Adoption: false, ProductBase: productBase})
 }
 
+type profileFailure struct {
+	stage string
+	cause error
+}
+
+func (e profileFailure) Error() string { return "profile stage failed" }
+func (e profileFailure) Unwrap() error { return e.cause }
+
+func atProfileStage(stage string, err error) error {
+	if err == nil {
+		return nil
+	}
+	var existing profileFailure
+	if errors.As(err, &existing) {
+		return err
+	}
+	return profileFailure{stage: stage, cause: err}
+}
+
 func directKernelResult(w io.Writer, out, stderr []byte, commandErr error) error {
 	if commandErr != nil || len(stderr) != 0 {
 		if err := diagnostics.ReportKernelFailure(w, true, out); err != nil {
 			return errors.New("kernel diagnostic output failed")
 		}
-		return errors.New("connected release kernel test failed")
+		return atProfileStage("kernel", errors.New("connected release kernel test failed"))
 	}
 	return nil
 }
@@ -177,30 +196,44 @@ func mainRun(args []string) error {
 		return errors.New("invalid arguments")
 	}
 	if err := require(os.Geteuid() == 0 && os.Getenv("GITHUB_ACTIONS") == "true" && os.Getenv("GITHUB_SHA") != "" && os.Getenv("GITHUB_RUN_ID") != "", "Linux root and GitHub CI identity required"); err != nil {
-		return err
+		return atProfileStage("identity", err)
 	}
 	if _, err := os.Stat(lab + "/disposable-profile"); !os.IsNotExist(err) {
-		return errors.New("profile must be fresh")
+		return atProfileStage("freshness", errors.New("profile must be fresh"))
 	}
 	if _, err := os.Stat("/lab/native-root"); !os.IsNotExist(err) {
-		return errors.New("native root must be fresh")
+		return atProfileStage("freshness", errors.New("native root must be fresh"))
 	}
 	if scenario == "" {
 		out, stderr, err := command(lab+"/metadata-regression", nil, []string{"GITHUB_ACTIONS=true"}, 15*time.Second, false)
 		if err != nil || string(out) != "metadata cancel-ack regression: PASS\n" || len(stderr) != 0 {
-			return errors.New("metadata cancel-ack regression failed")
+			return atProfileStage("metadata_regression", errors.New("metadata cancel-ack regression failed"))
 		}
 		out, stderr, err = command(lab+"/release-test", []string{"-test.run=^TestConnectedReleaseKernel$", "-test.v"}, []string{"TASK245_KERNEL=1", "TASK245_RELEASE_FIXTURE=/lab/release-fixture", "TASK240_STUB=/lab/native-stub"}, time.Minute, false)
 		if err := directKernelResult(os.Stderr, out, stderr, err); err != nil {
 			return err
 		}
 	}
-	return runProfile(scenario)
+	return atProfileStage("setup", runProfile(scenario))
+}
+
+func reportProfileFailure(w io.Writer, err error) error {
+	if err == nil {
+		return nil
+	}
+	var failure profileFailure
+	if errors.As(err, &failure) && diagnostics.ProfileStage(failure.stage) {
+		if _, writeErr := fmt.Fprintln(w, "task245-profile: stage="+failure.stage); writeErr != nil {
+			return writeErr
+		}
+	}
+	_, writeErr := fmt.Fprintln(w, "task245-profile: failed")
+	return writeErr
 }
 
 func main() {
 	if err := mainRun(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "task245-profile: failed")
+		_ = reportProfileFailure(os.Stderr, err)
 		os.Exit(1)
 	}
 }

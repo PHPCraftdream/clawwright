@@ -78,7 +78,9 @@ func profileCopy(src, dst string, mode os.FileMode) error {
 
 // runProfile prepares the disposable, immutable native root; the next ceremony
 // stage owns broker startup and all resulting acceptance evidence.
-func runProfile(scenario string) error {
+func runProfile(scenario string) (result error) {
+	stage := "identity"
+	defer func() { result = atProfileStage(stage, result) }()
 	if os.Geteuid() != 0 ||
 		os.Getenv("GITHUB_ACTIONS") != "true" ||
 		os.Getenv("GITHUB_SHA") == "" ||
@@ -86,6 +88,7 @@ func runProfile(scenario string) error {
 		return errors.New("Linux root and GitHub CI identity required")
 	}
 
+	stage = "capabilities"
 	status, err := os.ReadFile("/proc/self/status")
 	if err != nil {
 		return errors.New("process capabilities unavailable")
@@ -106,11 +109,13 @@ func runProfile(scenario string) error {
 		return errors.New("CAP_SYS_ADMIN and CAP_SYS_PTRACE required")
 	}
 
+	stage = "freshness"
 	for _, path := range []string{lab + "/disposable-profile", nativeRoot, "/run/task245-lab"} {
 		if profileExists(path) {
 			return errors.New("profile must be fresh")
 		}
 	}
+	stage = "inventory"
 	for _, name := range []string{
 		"ssjack", "conductor", "driver", "consumer", "harness", "native-provider",
 		"native-init", "native-stub", "gateway", "delivery_pty.py", "control-profile",
@@ -139,10 +144,12 @@ func runProfile(scenario string) error {
 	}
 
 	if scenario == "" {
+		stage = "metadata_preflight"
 		if err = profilePreflightMetadata(); err != nil {
 			return err
 		}
 	}
+	stage = "tool_bind"
 	if err = os.Chmod(lab+"/bin/native-metadata", 0555); err != nil {
 		return errors.New("metadata tool permissions failed")
 	}
@@ -165,6 +172,7 @@ func runProfile(scenario string) error {
 		}
 	}()
 
+	stage = "native_setup"
 	if err = os.Mkdir(nativeRoot, 0755); err != nil {
 		return errors.New("native root creation failed")
 	}
@@ -311,9 +319,11 @@ func runProfile(scenario string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
+	stage = "service_preflight"
 	if err = service.CheckServices(ctx); err != nil {
 		return errors.New("service preflight failed")
 	}
+	stage = "ceremony"
 	return runCeremony(scenario, supervisor, keeper, broker)
 }
 

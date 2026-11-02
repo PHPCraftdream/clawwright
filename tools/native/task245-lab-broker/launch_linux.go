@@ -199,17 +199,60 @@ func startChildWait245(cmd *exec.Cmd) <-chan error {
 			}
 		}
 		_, _ = os.Stderr.WriteString("task245-broker: child=" + strconv.Itoa(code) + "\n")
+		_, _ = os.Stderr.WriteString(childWaitDiagnostic245(cmd, err) + "\n")
 		waitDone <- err
 	}()
 	return waitDone
 }
 
+func childWaitDiagnostic245(cmd *exec.Cmd, err error) string {
+	kind, code, signal := "error", -1, 0
+	if err == nil {
+		kind, code = "exit", 0
+	} else if _, ok := err.(*exec.ExitError); ok && cmd.ProcessState != nil {
+		if status, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); ok {
+			if status.Exited() {
+				kind, code = "exit", status.ExitStatus()
+			} else if status.Signaled() {
+				kind, signal = "signal", int(status.Signal())
+			}
+		}
+	}
+	return "task245-broker: wait=" + kind + " exit=" + strconv.Itoa(code) + " signal=" + strconv.Itoa(signal)
+}
+
+func errnoNumber245(err error) int {
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		return int(errno)
+	}
+	return 0
+}
+
+func logLifecycle245(w io.Writer, kind string, errno int) {
+	switch kind {
+	case "timeout_setup", "child_exit", "context_done", "peer_error", "peer_eof", "peer_rights", "peer_data":
+	default:
+		kind = "peer_error"
+	}
+	if errno < 0 || errno > 4095 {
+		errno = 0
+	}
+	_, _ = io.WriteString(w, "task245-broker: lifecycle="+kind+" errno="+strconv.Itoa(errno)+"\n")
+}
+
 func ownChildLifecycle(ctx context.Context, fd int, cmd *exec.Cmd, waitDone <-chan error) error {
+	return ownChildLifecycleDiagnostics245(ctx, fd, cmd, waitDone, os.Stderr)
+}
+
+func ownChildLifecycleDiagnostics245(ctx context.Context, fd int, cmd *exec.Cmd, waitDone <-chan error, w io.Writer) error {
 	if _, ok := ctx.Deadline(); !ok {
+		logLifecycle245(w, "timeout_setup", 0)
 		_ = stopChild245(ctx, cmd, waitDone)
 		return brokerErr
 	}
 	if err := clearHandshakeTimeout245(fd); err != nil {
+		logLifecycle245(w, "timeout_setup", errnoNumber245(err))
 		_ = stopChild245(ctx, cmd, waitDone)
 		return brokerErr
 	}
@@ -221,18 +264,30 @@ func ownChildLifecycle(ctx context.Context, fd int, cmd *exec.Cmd, waitDone <-ch
 		select {
 		case err := <-waitDone:
 			if err == nil && ctx.Err() == nil {
+				logLifecycle245(w, "child_exit", 0)
 				return nil
 			}
+			logLifecycle245(w, "child_exit", errnoNumber245(err))
 			return brokerErr
 		case <-ctx.Done():
+			logLifecycle245(w, "context_done", 0)
 			goto failed
 		case <-ticker.C:
-			_, oobn, _, _, err := syscall.Recvmsg(fd, b[:], oob, syscall.MSG_DONTWAIT|syscall.MSG_CMSG_CLOEXEC)
+			n, oobn, flags, _, err := syscall.Recvmsg(fd, b[:], oob, syscall.MSG_DONTWAIT|syscall.MSG_CMSG_CLOEXEC)
 			if oobn > 0 {
 				closeReceivedRights(oob[:oobn])
 			}
 			if err == syscall.EINTR || err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
 				continue
+			}
+			if err != nil {
+				logLifecycle245(w, "peer_error", errnoNumber245(err))
+			} else if oobn > 0 || flags&syscall.MSG_CTRUNC != 0 {
+				logLifecycle245(w, "peer_rights", 0)
+			} else if n == 0 {
+				logLifecycle245(w, "peer_eof", 0)
+			} else {
+				logLifecycle245(w, "peer_data", 0)
 			}
 			goto failed
 		}
@@ -314,10 +369,10 @@ func sealedMetadataNative(v any) (*os.File, error) {
 
 type workerLaunch245 struct {
 	Root, Manifest, ManifestSHA256, Init, InitSHA256, Node, NodeSHA256, Stub, StubSHA256, Provider, ProviderSHA256, ConfigPath, SocketPath string
-	GatewayArgv, BrokerArgv                                                                                                               []string
+	GatewayArgv, BrokerArgv                                                                                                                []string
 	Target, Revision, Purpose, SelectedImage, SupervisorSHA256, CaptureEvidence, LabScenario                                               string
-	RuntimeUID, RuntimeGID                                                                                                                  uint32
-	OuterPIDNS, OuterMNTNS, OuterNETNS                                                                                                       uint64
+	RuntimeUID, RuntimeGID                                                                                                                 uint32
+	OuterPIDNS, OuterMNTNS, OuterNETNS                                                                                                     uint64
 }
 
 func itoa(n int) string {

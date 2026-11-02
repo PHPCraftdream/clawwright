@@ -92,16 +92,39 @@ func parseRecord(source, line string) (string, bool) {
 	fields := strings.Split(line, " ")
 	switch source {
 	case "broker":
-		if len(fields) != 2 || fields[0] != "task245-broker:" {
+		if len(fields) < 2 || fields[0] != "task245-broker:" {
 			return "", false
 		}
-		if strings.HasPrefix(fields[1], "stage=") {
+		if len(fields) == 2 && strings.HasPrefix(fields[1], "stage=") {
 			n, ok := number(strings.TrimPrefix(fields[1], "stage="), 1, 5)
 			return "task245-broker: stage=" + strconv.Itoa(n), ok
 		}
-		if strings.HasPrefix(fields[1], "child=") {
+		if len(fields) == 2 && strings.HasPrefix(fields[1], "child=") {
 			n, ok := number(strings.TrimPrefix(fields[1], "child="), 0, 255)
 			return "task245-broker: child=" + strconv.Itoa(n), ok
+		}
+		if len(fields) == 4 && fields[1] == "wait=exit" && strings.HasPrefix(fields[2], "exit=") && strings.HasPrefix(fields[3], "signal=") {
+			exit, ok1 := number(strings.TrimPrefix(fields[2], "exit="), 0, 255)
+			signal, ok2 := number(strings.TrimPrefix(fields[3], "signal="), 0, 0)
+			return "task245-broker: wait=exit exit=" + strconv.Itoa(exit) + " signal=" + strconv.Itoa(signal), ok1 && ok2
+		}
+		if len(fields) == 4 && fields[1] == "wait=signal" && strings.HasPrefix(fields[2], "exit=") && strings.HasPrefix(fields[3], "signal=") {
+			exit, ok1 := number(strings.TrimPrefix(fields[2], "exit="), -1, -1)
+			signal, ok2 := number(strings.TrimPrefix(fields[3], "signal="), 1, 64)
+			return "task245-broker: wait=signal exit=" + strconv.Itoa(exit) + " signal=" + strconv.Itoa(signal), ok1 && ok2
+		}
+		if len(fields) == 4 && fields[1] == "wait=error" && strings.HasPrefix(fields[2], "exit=") && strings.HasPrefix(fields[3], "signal=") {
+			exit, ok1 := number(strings.TrimPrefix(fields[2], "exit="), -1, -1)
+			signal, ok2 := number(strings.TrimPrefix(fields[3], "signal="), 0, 0)
+			return "task245-broker: wait=error exit=" + strconv.Itoa(exit) + " signal=" + strconv.Itoa(signal), ok1 && ok2
+		}
+		if len(fields) == 3 && strings.HasPrefix(fields[1], "lifecycle=") && strings.HasPrefix(fields[2], "errno=") {
+			lifecycle := strings.TrimPrefix(fields[1], "lifecycle=")
+			switch lifecycle {
+			case "timeout_setup", "child_exit", "context_done", "peer_eof", "peer_data", "peer_rights", "peer_error":
+				errno, ok := number(strings.TrimPrefix(fields[2], "errno="), 0, 4095)
+				return "task245-broker: lifecycle=" + lifecycle + " errno=" + strconv.Itoa(errno), ok
+			}
 		}
 	case "metadata":
 		if line == "metadata-daemon: event=stderr" {
@@ -141,12 +164,26 @@ func parseRecord(source, line string) (string, bool) {
 	return "", false
 }
 
+func ProfileStage(stage string) bool {
+	_, ok := parseProfile("task245-profile: stage=" + stage)
+	return ok
+}
+
 func parseProfile(line string) (string, bool) {
 	const prefix = "task245-profile: "
 	if !strings.HasPrefix(line, prefix) {
 		return "", false
 	}
 	body := strings.TrimPrefix(line, prefix)
+	if strings.HasPrefix(body, "stage=") {
+		stage := strings.TrimPrefix(body, "stage=")
+		for _, allowed := range []string{"setup", "identity", "freshness", "metadata_regression", "kernel", "capabilities", "inventory", "metadata_preflight", "tool_bind", "native_setup", "service_preflight", "ceremony"} {
+			if stage == allowed {
+				return prefix + "stage=" + stage, true
+			}
+		}
+		return "", false
+	}
 	if strings.HasPrefix(body, "kernel=") {
 		label := strings.TrimPrefix(body, "kernel=")
 		if kernelLabel(label) {
@@ -224,12 +261,14 @@ func ReportFailure(w io.Writer, failed bool, checkpoint string, broker, metadata
 	var size int
 	count := 0
 	const mainFailure = "task245-profile: failed\n"
+	const longestStage = "task245-profile: stage=metadata_regression\n"
+	reserveBytes := len(longestStage) + len(mainFailure)
 	ordered := make([]string, 0, count)
 	for _, record := range profile {
 		if _, exists := seen[record]; exists {
 			continue
 		}
-		if count >= maxLines-1 || size+len(record)+1 > maxCapture-len(mainFailure) {
+		if count >= maxLines-2 || size+len(record)+1 > maxCapture-reserveBytes {
 			continue
 		}
 		seen[record] = struct{}{}
