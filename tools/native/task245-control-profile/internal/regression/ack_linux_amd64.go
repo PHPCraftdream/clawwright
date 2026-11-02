@@ -68,7 +68,7 @@ func ReportDone(stage string) {
 
 func diagnosticStage(stage string) string {
 	switch stage {
-	case "suite_ack", "suite_driver", "observer_positive", "observer_negative", "lifetime_cases", "service_proofs", "inactive", "active", "fault_write", "fault_fsync", "fault_close", "refusal_receipt", "refusal_fault", "fifo":
+	case "suite_ack", "suite_driver", "observer_positive", "observer_negative", "lifetime_cases", "service_proofs", "inactive", "active", "fault_write", "fault_fsync", "fault_close", "refusal_receipt", "refusal_fault", "fifo", "life_no_client", "life_handoff", "life_listener", "life_canceled", "life_hash", "life_start", "life_socket", "life_proof", "life_holder", "life_marker", "life_daemon_wait", "life_holder_wait", "life_kill_daemon", "life_kill_holder", "life_cleanup":
 		return stage
 	default:
 		return "unknown"
@@ -79,6 +79,8 @@ func RunDiagnosticRegression() error {
 	var got bytes.Buffer
 	filter := &diagnosticFilter{out: &got}
 	valid := "metadata-regression: stage=suite_ack event=start\n" +
+		"metadata-regression: stage=life_socket event=start\n" +
+		"metadata-regression: stage=life_socket event=done\n" +
 		"metadata-regression: stage=unknown event=done\n" +
 		"metadata-regression: stage=active class=error errno=13 exit=-1 signal=0\n" +
 		"metadata-regression: stage=fifo class=deadline errno=0 exit=0 signal=0\n"
@@ -104,6 +106,8 @@ func RunDiagnosticRegression() error {
 	_, _ = filter.Write([]byte("metadata-regression: stage=active event=done\n"))
 
 	want := "metadata-regression: stage=suite_ack event=start\n" +
+		"metadata-regression: stage=life_socket event=start\n" +
+		"metadata-regression: stage=life_socket event=done\n" +
 		"metadata-regression: stage=unknown event=done\n" +
 		"metadata-regression: stage=active class=error errno=13 exit=-1 signal=0\n" +
 		"metadata-regression: stage=fifo class=deadline errno=0 exit=0 signal=0\n" +

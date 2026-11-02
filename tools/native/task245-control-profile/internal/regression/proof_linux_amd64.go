@@ -97,9 +97,12 @@ func runServiceProofCase(parent context.Context, name string) error {
 		}
 		return nil
 	}
+	ReportStage("life_proof")
 	if err := publishKernelProof(daemon.Process.Pid, start, artifactStat, hash, &socket); err != nil {
+		ReportFailure("life_proof", err)
 		return fmt.Errorf("publish actual daemon proof: %w", err)
 	}
+	ReportDone("life_proof")
 	if name != "good" && name != "wrongcaller" {
 		if err := mutateServiceProof(name); err != nil {
 			return err
@@ -149,11 +152,12 @@ func RunDaemonLifetimeCases(parent context.Context) error {
 		return errors.New("daemon lifetime matrix requires root in GitHub Actions")
 	}
 	for _, name := range []string{"no-client", "incomplete-handoff", "live-listener"} {
-		if err := runDaemonLifetimeCase(parent, name); err != nil {
-			return fmt.Errorf("daemon lifetime %s: %w", name, err)
+		code := map[string]string{"no-client": "life_no_client", "incomplete-handoff": "life_handoff", "live-listener": "life_listener"}[name]
+		if err := runDiagnosticStage(code, func() error { return runDaemonLifetimeCase(parent, name) }); err != nil {
+			return err
 		}
 	}
-	return RunCanceledNotificationCase(parent)
+	return runDiagnosticStage("life_canceled", func() error { return RunCanceledNotificationCase(parent) })
 }
 
 // RunCanceledNotificationCase proves the real notifier's stale-event path after
@@ -179,11 +183,13 @@ func RunCanceledNotificationCase(parent context.Context) error {
 	if !ok {
 		return errors.New("metadata artifact stat unavailable")
 	}
+	ReportStage("life_hash")
 	hash, err := hashFile("/lab/bin/native-metadata")
 	if err != nil {
+		ReportFailure("life_hash", err)
 		return err
 	}
-
+	ReportDone("life_hash")
 	var stderr bytes.Buffer
 	daemon := exec.CommandContext(ctx, "/lab/bin/native-metadata", "--owning-regression-daemon-canceled")
 	daemon.Env = append(os.Environ(), "GITHUB_ACTIONS=true")
@@ -208,8 +214,12 @@ func RunCanceledNotificationCase(parent context.Context) error {
 		_ = control.Close()
 		_ = stdout.Close()
 		if daemonOwned {
+			ReportStage("life_kill_daemon")
 			_ = daemon.Process.Kill()
+			ReportDone("life_kill_daemon")
+			ReportStage("life_daemon_wait")
 			<-daemonDone
+			ReportDone("life_daemon_wait")
 		}
 	}()
 
@@ -221,9 +231,12 @@ func RunCanceledNotificationCase(parent context.Context) error {
 	if err != nil {
 		return err
 	}
+	ReportStage("life_proof")
 	if err := publishKernelProof(daemon.Process.Pid, start, artifactStat, hash, &socket); err != nil {
+		ReportFailure("life_proof", err)
 		return fmt.Errorf("publish actual daemon proof: %w", err)
 	}
+	ReportDone("life_proof")
 
 	holder := exec.CommandContext(ctx, "/lab/control-profile", "kernel-lifetime", "cancel")
 	holder.Env = []string{"GITHUB_ACTIONS=true", "PATH=/lab/bin", "LANG=C", "LC_ALL=C", "SSJACK_ENV_TOKEN=fixture-bootstrap-token", "SSJACK_SESSION=fixture-session", "SSJACK_ENDPOINT=https://127.0.0.1:1", "SSJACK_CERTIFICATE_SHA256=" + strings.Repeat("0", 64)}
@@ -238,8 +251,12 @@ func RunCanceledNotificationCase(parent context.Context) error {
 	holderOwned := true
 	defer func() {
 		if holderOwned {
+			ReportStage("life_kill_holder")
 			_ = holder.Process.Kill()
+			ReportDone("life_kill_holder")
+			ReportStage("life_holder_wait")
 			<-holderDone
+			ReportDone("life_holder_wait")
 		}
 	}()
 
@@ -324,39 +341,54 @@ func runDaemonLifetimeCase(parent context.Context, name string) error {
 	if !ok {
 		return errors.New("metadata artifact stat unavailable")
 	}
+	ReportStage("life_hash")
 	hash, err := hashFile("/lab/bin/native-metadata")
 	if err != nil {
+		ReportFailure("life_hash", err)
 		return err
 	}
-
+	ReportDone("life_hash")
 	var stderr bytes.Buffer
 	daemon := exec.CommandContext(ctx, "/lab/bin/native-metadata", "--owning-regression-daemon-lifetime")
 	daemon.Env = append(os.Environ(), "GITHUB_ACTIONS=true")
 	daemon.Stderr = &stderr
+	ReportStage("life_start")
 	if err := daemon.Start(); err != nil {
+		ReportFailure("life_start", err)
 		return fmt.Errorf("start actual lifetime daemon: %w", err)
 	}
+	ReportDone("life_start")
 	done := make(chan error, 1)
 	go func() { done <- daemon.Wait() }()
 	daemonOwned := true
 	defer func() {
 		if daemonOwned {
+			ReportStage("life_kill_daemon")
 			_ = daemon.Process.Kill()
+			ReportDone("life_kill_daemon")
+			ReportStage("life_daemon_wait")
 			<-done
+			ReportDone("life_daemon_wait")
 		}
 	}()
 
 	var socket syscall.Stat_t
+	ReportStage("life_socket")
 	if err := waitForProofSocket(ctx, done, &daemonOwned, &socket); err != nil {
+		ReportFailure("life_socket", err)
 		return err
 	}
+	ReportDone("life_socket")
 	start, err := procStartTicks(daemon.Process.Pid)
 	if err != nil {
 		return err
 	}
+	ReportStage("life_proof")
 	if err := publishKernelProof(daemon.Process.Pid, start, artifactStat, hash, &socket); err != nil {
+		ReportFailure("life_proof", err)
 		return fmt.Errorf("publish actual daemon proof: %w", err)
 	}
+	ReportDone("life_proof")
 
 	var holder *exec.Cmd
 	var holderDone chan error
@@ -364,11 +396,17 @@ func runDaemonLifetimeCase(parent context.Context, name string) error {
 	var holderStdin io.WriteCloser
 	defer func() {
 		if holderStdin != nil {
+			ReportStage("life_cleanup")
 			_ = holderStdin.Close()
+			ReportDone("life_cleanup")
 		}
 		if holderOwned {
+			ReportStage("life_kill_holder")
 			_ = holder.Process.Kill()
+			ReportDone("life_kill_holder")
+			ReportStage("life_holder_wait")
 			<-holderDone
+			ReportDone("life_holder_wait")
 		}
 	}()
 	if name != "no-client" {
@@ -395,9 +433,12 @@ func runDaemonLifetimeCase(parent context.Context, name string) error {
 		if err != nil {
 			return err
 		}
+		ReportStage("life_holder")
 		if err := holder.Start(); err != nil {
+			ReportFailure("life_holder", err)
 			return fmt.Errorf("start lifetime holder: %w", err)
 		}
+		ReportDone("life_holder")
 		holderDone = make(chan error, 1)
 		holderOwned = true
 		go func() { holderDone <- holder.Wait() }()
@@ -418,6 +459,7 @@ func runDaemonLifetimeCase(parent context.Context, name string) error {
 			}
 			marker <- nil
 		}()
+		ReportStage("life_marker")
 		select {
 		case err := <-marker:
 			if err != nil {
@@ -430,6 +472,7 @@ func runDaemonLifetimeCase(parent context.Context, name string) error {
 			daemonOwned = false
 			return fmt.Errorf("daemon exited before holder marker: %v", err)
 		case <-ctx.Done():
+			ReportFailure("life_marker", ctx.Err())
 			return errors.New("lifetime holder marker deadline")
 		}
 		select {
@@ -440,6 +483,7 @@ func runDaemonLifetimeCase(parent context.Context, name string) error {
 		}
 	}
 
+	ReportStage("life_daemon_wait")
 	select {
 	case daemonErr := <-done:
 		daemonOwned = false
@@ -461,12 +505,17 @@ func runDaemonLifetimeCase(parent context.Context, name string) error {
 			return fmt.Errorf("wrong lifetime stage: stderr=%q want=%q", stderr.String(), expectedStage)
 		}
 	case <-ctx.Done():
+		ReportFailure("life_daemon_wait", ctx.Err())
 		return fmt.Errorf("outer context expired before daemon lifetime: %w", ctx.Err())
 	}
+	ReportDone("life_daemon_wait")
 	if holder != nil {
+		ReportStage("life_holder_wait")
 		if err := holderStillAlive(holder); err != nil {
+			ReportFailure("life_holder_wait", err)
 			return fmt.Errorf("holder did not survive daemon exit: %w", err)
 		}
+		ReportDone("life_holder_wait")
 	}
 	if _, err := os.Lstat(kernelSocket); !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("daemon socket remains after owned wait: %v", err)
