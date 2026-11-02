@@ -106,23 +106,33 @@ func approvedTask251(legacy map[string]inventory) map[string]string {
 	return approved
 }
 
+func task258BaselineReceipts() map[string]string {
+	return map[string]string{
+		"tools/checks/foundation/packaging/build-output.check.ts":     "1c5015bc4c6afac4744138357cffbf72376faafc",
+		"tools/checks/runtime/transport/remote/ssjack-client.check.ts": "3682aaf124ecf03f97e57c128711682c37bb5734",
+		"tools/checks/foundation/core/command/needs.check.ts":         "58bb72512f77f0162b44b71fa72fb4898ad1d05b",
+		"tools/checks/completeness/flags-matrix.check.ts":             "5975223e16394db0843efc9adfc734d05a9591b0",
+		"tools/checks/foundation/core/command/spec/effect.check.ts":   "45e1d90304f4b8c1c87986160fbe7a7624d96e64",
+	}
+}
+
 func task258CurrentReceipts() map[string]string {
 	return map[string]string{
-		"tools/checks/foundation/packaging/build-output.check.ts": "3708a8afdce4fd67c0503b767e0c93e28e1aa5f2",
-		"tools/checks/runtime/transport/remote/ssjack-client.check.ts": "e4d9a05f9dee8c068183e1f11136e5e3a24bd57b",
+		"tools/checks/foundation/packaging/build-output.check.ts":     "3708a8afdce4fd67c0503b767e0c93e28e1aa5f2",
+		"tools/checks/runtime/transport/remote/ssjack-client.check.ts": "a1b3a3c845b31245292acc54ca5b75982a1a78ae",
+		"tools/checks/foundation/core/command/needs.check.ts":         "7b56b335a05c91d45f73a18c628cf57f95dc956f",
+		"tools/checks/completeness/flags-matrix.check.ts":             "b4d0c05ed38e8ba840aa5a4230157ca7d3ab2b4e",
+		"tools/checks/foundation/core/command/spec/effect.check.ts":   "40e76bc2d879a919fe9e5841ff014535f825076f",
 	}
 }
 
 func approvedTask258(legacy map[string]inventory, currentReceipts map[string]string) map[string]string {
-	transitions := map[string]string{
-		"tools/checks/foundation/packaging/build-output.check.ts": "1c5015bc4c6afac4744138357cffbf72376faafc",
-		"tools/checks/runtime/transport/remote/ssjack-client.check.ts": "3682aaf124ecf03f97e57c128711682c37bb5734",
-	}
-	approved := make(map[string]string, len(transitions))
-	for path, baseline := range transitions {
+	baselines := task258BaselineReceipts()
+	approved := make(map[string]string, len(baselines))
+	for path, baseline := range baselines {
 		old, exists := legacy[path]
 		current := currentReceipts[path]
-		if exists && old.blob == baseline && current != "" {
+		if exists && baseline != "" && old.blob == baseline && current != "" {
 			approved[path] = current
 		}
 	}

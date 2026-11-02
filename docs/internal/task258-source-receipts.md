@@ -1,6 +1,6 @@
 # Task 258 source-receipts handoff
 
-**Producer-only acceptance:** producer source commit `275a5221e821a06133cbb25b61ea9164144b06d5` is accepted. Full CI run `41533475792` passed all eight checks; this is a run ID, not a commit. No Clawwright runtime or paired acceptance is established. Clawwright source and tests are authored, not run. Group B is unpublished; pair 260 is unaccepted.
+**Source-only status:** parent commit `d1db890cfdfa865759eb66816d4fb144b972c65a` is published. Tooling CI run `41542591278` passed; main CI run `41542591370` failed. The actual cause is documentation/tables/golden inventory and a Windows `O_NONBLOCK` undefined-platform mismatch, while the new command was absent from inventory snapshots and treated as a target-context unit, while the Windows fixture refused before opening a handle. The fixes are authored, not rerun: **AUTHORED-CI-FIXES-NOT-RERUN**. No Clawwright runtime or paired acceptance is established; the follow-up fixes remain unpublished and pair 260 is unaccepted.
 
 ## Final source layout
 
@@ -20,9 +20,22 @@ Parent metadata inspection after removal confirms directory counts: remote 7 (in
 
 ## Receipts and limits
 
-The two frozen TypeScript receipt paths are:
+The exact five-path policy overlay is:
 
 - `tools/checks/foundation/packaging/build-output.check.ts`
 - `tools/checks/runtime/transport/remote/ssjack-client.check.ts`
+- `tools/checks/foundation/core/command/needs.check.ts`
+- `tools/checks/completeness/flags-matrix.check.ts`
+- `tools/checks/foundation/core/command/spec/effect.check.ts`
 
-The parent reviewed the sources and filled exact current Git blob IDs from Git metadata: build-output `3708a8afdce4fd67c0503b767e0c93e28e1aa5f2`, client check `e4d9a05f9dee8c068183e1f11136e5e3a24bd57b`. Go policy retains the historical 79-row set plus a finite two-path overlay; immutable baseline `8eadbd4e8dcfac3d6e11fe5ee49525da5baa3482` is unchanged. CI selection, packaging, policy and runtime execution still require public CI. No general acceptance or full-completion claim is made.
+The parent reviewed the changed checks and reconciled all five immutable/current Git blob pairs from Git metadata. Historical 79-row transitions and immutable baseline `8eadbd4e8dcfac3d6e11fe5ee49525da5baa3482` remain unchanged.
+
+| Check | Immutable blob | Current reviewed blob |
+| --- | --- | --- |
+| build-output | `1c5015bc4c6afac4744138357cffbf72376faafc` | `3708a8afdce4fd67c0503b767e0c93e28e1aa5f2` |
+| ssjack-client | `3682aaf124ecf03f97e57c128711682c37bb5734` | `a1b3a3c845b31245292acc54ca5b75982a1a78ae` |
+| needs | `58bb72512f77f0162b44b71fa72fb4898ad1d05b` | `7b56b335a05c91d45f73a18c628cf57f95dc956f` |
+| flags-matrix | `5975223e16394db0843efc9adfc734d05a9591b0` | `b4d0c05ed38e8ba840aa5a4230157ca7d3ab2b4e` |
+| effect | `45e1d90304f4b8c1c87986160fbe7a7624d96e64` | `40e76bc2d879a919fe9e5841ff014535f825076f` |
+
+The parent restored the accidentally truncated command catalog from the published `d1db890cfdfa865759eb66816d4fb144b972c65a` bytes, supplied valid required arguments in the effect assertion, and inspected and removed the worker-created untracked `TEMP-deployrow`. Only reviewed source and expected snapshots belong in the candidate. Main CI run `41542591370` failed; Tooling CI run `41542591278` passed for the previous candidate. These follow-up fixes have not been rerun. No general acceptance or full-completion claim is made.

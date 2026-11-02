@@ -217,20 +217,24 @@ async function checkTextAdapter(): Promise<void> {
     lstat: async () => ({ ...stat, isFile: () => false }),
     open: async (_path, flags) => {
       opened++;
-      assert.notEqual(flags & constants.O_NONBLOCK, 0);
+      const nonblock = constants.O_NONBLOCK ?? 0;
+      if (process.platform === 'win32') assert.equal(flags & nonblock, 0);
+      else assert.notEqual(flags & nonblock, 0);
       throw new Error("unexpected open");
     },
   };
   await assert.rejects(readSsjackTextInputFrom("fifo", fifo), /SSJACK_TEXT_INPUT_FAILED/);
   assert.equal(opened, 0);
 
-  const fakeFile = (openedStat: typeof stat, data: Buffer) => {
+  const fakeFile = (openedStat: typeof stat, data: Buffer, expectedNonblock = process.platform !== 'win32') => {
     let readcalls = 0;
     let closed = false;
     const files: SsjackTextInputFiles = {
       lstat: async () => stat,
       open: async (_path, flags) => {
-        assert.notEqual(flags & constants.O_NONBLOCK, 0);
+        const nonblock = constants.O_NONBLOCK ?? 0;
+        if (expectedNonblock) assert.notEqual(flags & nonblock, 0);
+        else assert.equal(flags & nonblock, 0);
         return {
           stat: async () => openedStat,
           read: async (buffer, offset, length) => {
@@ -251,8 +255,8 @@ async function checkTextAdapter(): Promise<void> {
   for (const openedStat of [
     { ...stat, isFile: () => false }, { ...stat, dev: 2 }, { ...stat, ino: 3 },
   ]) {
-    const fixture = fakeFile(openedStat, Buffer.from(valid));
-    await assert.rejects(readSsjackTextInputFrom("changed", fixture.files), /SSJACK_TEXT_INPUT_FAILED/);
+    const fixture = fakeFile(openedStat, Buffer.from(valid), false);
+    await assert.rejects(readSsjackTextInputFrom("changed", fixture.files, "win32"), /SSJACK_TEXT_INPUT_FAILED/);
     assert.equal(fixture.readcalls(), 0);
     assert.equal(fixture.closed(), true);
   }
@@ -260,13 +264,31 @@ async function checkTextAdapter(): Promise<void> {
   assert.equal(await readSsjackTextInputFrom("same", sameIdentity.files), valid);
   assert.equal(sameIdentity.readcalls(), 2);
   assert.equal(sameIdentity.closed(), true);
+  // Windows lacks POSIX O_NONBLOCK; regular-file opens remain supported while
+  // the independent pre-stat and opened-handle identity checks stay mandatory.
+  const windowsFile = fakeFile(stat, Buffer.from(valid), false);
+  const windowsInput = {
+    ...windowsFile.files,
+    open: async (_path: string, flags: number) => {
+      assert.equal(flags & constants.O_NONBLOCK, 0);
+      return windowsFile.files.open(_path, flags);
+    },
+  } satisfies SsjackTextInputFiles;
+  assert.equal(await readSsjackTextInputFrom("same", windowsInput, "win32"), valid);
+  const windowsFifo: SsjackTextInputFiles = {
+    lstat: async () => ({ ...stat, isFile: () => false }),
+    open: async () => { throw new Error("non-regular path must not be opened"); },
+  };
+  await assert.rejects(readSsjackTextInputFrom("pipe", windowsFifo, "win32"), /SSJACK_TEXT_INPUT_FAILED/);
 
   let consumed = 0;
   let closed = false;
   const growing: SsjackTextInputFiles = {
     lstat: async () => stat,
     open: async (_path, flags) => {
-      assert.notEqual(flags & constants.O_NONBLOCK, 0);
+      const nonblock = constants.O_NONBLOCK ?? 0;
+      if (process.platform === 'win32') assert.equal(flags & nonblock, 0);
+      else assert.notEqual(flags & nonblock, 0);
       return {
         stat: async () => stat,
         read: async (buffer, offset, length) => {
@@ -487,7 +509,7 @@ async function checkTextAdapter(): Promise<void> {
         assert.equal(hydrateCount, beforeRefusals);
 
         process.env.SSJACK_TEXT_PROFILE = "human.profile";
-        const noRuntime = { dryRun: false, runtime: { runOneOff: async () => { throw new Error("generic runtime invoked"); } } };
+        const noRuntime = { dryRun: false, runtime: { runOneOff: async () => { throw new Error("UNEXPECTED_GENERIC_RUNTIME"); } } };
         assert.equal(await deployText(noRuntime as never, { file: "fixture.txt", template: valid, profile: "human.profile" }), "received");
         for (const status of ["unknown", "withheld"] as const) {
           wireStatus = status;

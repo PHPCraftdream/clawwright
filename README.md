@@ -157,6 +157,7 @@ Change:
   apply                Apply the plan, then confirm the instance *
   rollback             Restore the configuration an operation replaced *
   apply-config         Apply the deployment's desired-state.json *
+  deploy-text          Deploy a reference-only text template through SSJack
   memory               Declare, set up, inspect, index, verify memory *
   configure-provider   Configure model providers from target env vars
   secrets              Show required secrets and their state *

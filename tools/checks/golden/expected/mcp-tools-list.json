@@ -940,6 +940,32 @@
       }
     },
     {
+      "name": "deploy-text",
+      "description": "Deploy a reference-only text template through SSJack\nFull text: help command=deploy-text",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "Destination granted by the remote profile"
+          },
+          "template": {
+            "type": "string",
+            "description": "Local reference-only text template"
+          },
+          "profile": {
+            "type": "string",
+            "description": "Expected grant profile"
+          }
+        },
+        "required": [
+          "file",
+          "template",
+          "profile"
+        ]
+      }
+    },
+    {
       "name": "expose",
       "description": "Expose the gateway: SSH tunnel or tailscale (may require confirm)\nFull text: help command=expose",
       "inputSchema": {

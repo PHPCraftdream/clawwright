@@ -16,14 +16,17 @@ export interface SsjackTextInputFiles {
 }
 
 /** Read bounded UTF-8 through injected IO so race guards can be tested without timing. */
-export async function readSsjackTextInputFrom(path: string, files: SsjackTextInputFiles): Promise<string> {
+export async function readSsjackTextInputFrom(path: string, files: SsjackTextInputFiles, platform = process.platform): Promise<string> {
   let handle: Awaited<ReturnType<SsjackTextInputFiles["open"]>> | undefined;
   try {
     const before = await files.lstat(path);
     if (!before.isFile()) throw failure();
     if (before.size > MAX_INPUT_BYTES) throw failure();
-    if (typeof constants.O_NONBLOCK !== "number") throw failure();
-    const flags = constants.O_RDONLY | constants.O_NONBLOCK |
+    if (platform !== "win32" && typeof constants.O_NONBLOCK !== "number") throw failure();
+    // Windows Node does not expose O_NONBLOCK: ordinary file opens are synchronous
+    // handle opens there. Keep nonblocking FIFO protection on platforms that support it.
+    const flags = constants.O_RDONLY |
+      (platform === "win32" ? 0 : constants.O_NONBLOCK) |
       (typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0);
     handle = await files.open(path, flags);
     const stat = await handle.stat();
