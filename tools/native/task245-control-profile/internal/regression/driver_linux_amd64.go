@@ -207,6 +207,7 @@ func runCasePhaseKind(parent context.Context, active bool, phase, refusal string
 		_ = gate.Close()
 		return err
 	}
+	child.Stderr = &diagnosticFilter{out: os.Stderr}
 	if err = child.Start(); err != nil {
 		_ = gate.Close()
 		return fmt.Errorf("start harness: %w", err)

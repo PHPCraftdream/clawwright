@@ -58,45 +58,71 @@ func KernelLifetimeClient() error {
 }
 
 func KernelClient(active bool) error {
-	gate := make([]byte, 1)
-	if n, err := io.ReadFull(os.Stdin, gate); err != nil || n != 1 {
-		return fmt.Errorf("read notifier gate: %w", err)
+	if err := runClientDiagnostic("client_gate", func() error {
+		gate := make([]byte, 1)
+		if n, err := io.ReadFull(os.Stdin, gate); err != nil || n != 1 {
+			return fmt.Errorf("read notifier gate: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
-	if err := CheckFilteredDescriptors(true); err != nil {
-		return fmt.Errorf("filtered descriptors: %w", err)
+	if err := runClientDiagnostic("client_descriptors", func() error { return CheckFilteredDescriptors(true) }); err != nil {
+		return err
 	}
 	if !active {
-		fd, err := syscall.Open(clientCancelPath, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_TRUNC, 0600)
-		if err == nil {
-			_ = syscall.Close(fd)
-			return errors.New("inactive cancel acknowledgement unexpectedly opened")
-		}
-		if !errors.Is(err, syscall.EACCES) {
-			return fmt.Errorf("open inactive cancel acknowledgement: %w, want EACCES", err)
+		if err := runClientDiagnostic("client_inactive_ack", func() error {
+			fd, err := syscall.Open(clientCancelPath, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_TRUNC, 0600)
+			if err == nil {
+				_ = syscall.Close(fd)
+				return errors.New("inactive cancel acknowledgement unexpectedly opened")
+			}
+			if !errors.Is(err, syscall.EACCES) {
+				return fmt.Errorf("open inactive cancel acknowledgement: %w, want EACCES", err)
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
 	}
 	if active {
-		if _, err := readClientReceipt(); err != nil {
+		if err := runClientDiagnostic("client_receipt", func() error {
+			_, err := readClientReceipt()
+			return err
+		}); err != nil {
 			return err
 		}
-
-		fd, err := syscall.Open(clientCancelPath, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_TRUNC, 0600)
-		if err != nil {
-			return fmt.Errorf("open cancel acknowledgement: %w", err)
-		}
-		if fd != 1023 {
-			_ = syscall.Close(fd)
-			return fmt.Errorf("cancel acknowledgement fd: got %d, want 1023", fd)
-		}
-		if n, err := syscall.Write(fd, []byte("release")); err != nil || n != 7 {
-			_ = syscall.Close(fd)
-			return fmt.Errorf("write cancel acknowledgement: n=%d err=%v", n, err)
-		}
-		if err = syscall.Close(fd); err != nil {
-			return fmt.Errorf("close cancel acknowledgement: %w", err)
+		if err := runClientDiagnostic("client_active_ack", func() error {
+			fd, err := syscall.Open(clientCancelPath, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_TRUNC, 0600)
+			if err != nil {
+				return fmt.Errorf("open cancel acknowledgement: %w", err)
+			}
+			if fd != 1023 {
+				_ = syscall.Close(fd)
+				return fmt.Errorf("cancel acknowledgement fd: got %d, want 1023", fd)
+			}
+			if n, err := syscall.Write(fd, []byte("release")); err != nil || n != 7 {
+				_ = syscall.Close(fd)
+				return fmt.Errorf("write cancel acknowledgement: n=%d err=%v", n, err)
+			}
+			if err = syscall.Close(fd); err != nil {
+				return fmt.Errorf("close cancel acknowledgement: %w", err)
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
 	}
-	return runSameImageChild()
+	return runClientDiagnostic("client_identity", runSameImageChild)
+}
+
+
+func runClientDiagnostic(stage string, run func() error) error {
+	err := run()
+	if err != nil {
+		ReportFailure(stage, err)
+	}
+	return err
 }
 
 func runSameImageChild() error {
@@ -105,6 +131,7 @@ func runSameImageChild() error {
 	cmd.Env = []string{"PATH=/lab/bin", "LANG=C", "LC_ALL=C"}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
+	cmd.Stderr = &diagnosticFilter{out: os.Stderr}
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("same-image child: %w", err)
 	}
@@ -126,7 +153,7 @@ func SameImageChild(expectedPID int) error {
 	if gate[0] != 'I' {
 		return fmt.Errorf("root identity gate: got %q, want %q", gate[0], 'I')
 	}
-	return CheckFilteredDescriptors(false)
+	return runClientDiagnostic("client_same_image", func() error { return CheckFilteredDescriptors(false) })
 }
 
 func SamePIDExecClient(expectedPID int) error {
@@ -143,7 +170,7 @@ func SamePIDExecClient(expectedPID int) error {
 	if gate[0] != 'E' {
 		return fmt.Errorf("root exec gate: got %q, want %q", gate[0], 'E')
 	}
-	return CheckFilteredDescriptors(false)
+	return runClientDiagnostic("client_same_pid", func() error { return CheckFilteredDescriptors(false) })
 }
 
 func runExecChild() error {

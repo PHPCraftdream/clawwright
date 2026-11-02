@@ -33,6 +33,7 @@ func ioctl(fd int, request uintptr) syscall.Errno {
 
 func expectErr(op string, got error, want error) error {
 	if !errors.Is(got, want) {
+		ReportFailure("fd_expected_errno", got)
 		return fmt.Errorf("%s: got %v, want %v", op, got, want)
 	}
 	return nil
@@ -48,7 +49,7 @@ func rawSyscall(number, a1, a2, a3 uintptr) error {
 
 // CheckFilteredDescriptors checks the installed descriptor filter; it does not install it.
 func CheckFilteredDescriptors(original bool) error {
-	fail := func(op string, err error) error { return fmt.Errorf("%s: %w", op, err) }
+	fail := func(op string, err error) error { ReportFailure("fd_operation", err); return fmt.Errorf("%s: %w", op, err) }
 	var st syscall.Stat_t
 
 	if original {
@@ -64,6 +65,7 @@ func CheckFilteredDescriptors(original bool) error {
 		}
 		if string(buf[:n]) != "{}" {
 			_ = syscall.Close(fd)
+			ReportFailure("fd_state_contents", nil)
 			return fmt.Errorf("read state: got %q, want {}", buf[:n])
 		}
 		seals, errno := fcntl(fd, 1034, 0)
@@ -73,6 +75,7 @@ func CheckFilteredDescriptors(original bool) error {
 		}
 		if seals != 15 {
 			_ = syscall.Close(fd)
+			ReportFailure("fd_state_seals", nil)
 			return fmt.Errorf("F_GET_SEALS state: got %d, want 15", seals)
 		}
 		if err := syscall.Close(fd); err != nil {
@@ -82,6 +85,7 @@ func CheckFilteredDescriptors(original bool) error {
 		fd, err := syscall.Open(statePath, syscall.O_RDONLY, 0)
 		if err == nil {
 			_ = syscall.Close(fd)
+			ReportFailure("fd_state_denial", nil)
 			return fmt.Errorf("open state: succeeded, want EACCES")
 		}
 		if err = expectErr("open state", err, syscall.EACCES); err != nil {
@@ -171,6 +175,7 @@ func CheckFilteredDescriptors(original bool) error {
 	}
 	value, errno := fcntl(p[0], fGetFD, 0)
 	if errno != 0 || value&fdCloexec == 0 {
+		ReportFailure("fd_ioctl_set", errno)
 		return fmt.Errorf("F_GETFD after FIOCLEX: value=%d errno=%v", value, errno)
 	}
 	if errno = ioctl(p[0], fionclex); errno != 0 {
@@ -178,6 +183,7 @@ func CheckFilteredDescriptors(original bool) error {
 	}
 	value, errno = fcntl(p[0], fGetFD, 0)
 	if errno != 0 || value&fdCloexec != 0 {
+		ReportFailure("fd_ioctl_clear", errno)
 		return fmt.Errorf("F_GETFD after FIONCLEX: value=%d errno=%v", value, errno)
 	}
 	if err = expectErr("close_range", rawSyscall(436, fixedFD, fixedFD, 0), syscall.EPERM); err != nil {
