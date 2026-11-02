@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -35,6 +36,136 @@ type launchConfig struct {
 	LabScenario string `json:"LabScenario"`
 }
 
+func readStartupReply245(native *os.File, dst []byte) (int, error) {
+	if native == nil || len(dst) == 0 {
+		return 0, errLaunchDomain
+	}
+	raw, err := native.SyscallConn()
+	if err != nil {
+		return 0, errLaunchDomain
+	}
+	var n int
+	var readErr error
+	var controlErr error
+	err = raw.Read(func(fd uintptr) bool {
+		oob := make([]byte, syscall.CmsgSpace(4*16))
+		var oobn, flags int
+		n, oobn, flags, _, readErr = syscall.Recvmsg(int(fd), dst, oob, syscall.MSG_CMSG_CLOEXEC)
+		if readErr == syscall.EINTR {
+			readErr = nil
+			return false
+		}
+		if readErr == syscall.EAGAIN || readErr == syscall.EWOULDBLOCK {
+			readErr = nil
+			return false
+		}
+		if readErr != nil {
+			return true
+		}
+		msgs, parseErr := syscall.ParseSocketControlMessage(oob[:oobn])
+		if parseErr != nil {
+			controlErr = errLaunchDomain
+		} else {
+			for i := range msgs {
+				if msgs[i].Header.Level == syscall.SOL_SOCKET && msgs[i].Header.Type == syscall.SCM_RIGHTS {
+					fds, rightsErr := syscall.ParseUnixRights(&msgs[i])
+					for _, received := range fds { _ = syscall.Close(received) }
+					if rightsErr != nil { controlErr = errLaunchDomain }
+				}
+			}
+		}
+		if oobn != 0 || flags&(syscall.MSG_TRUNC|syscall.MSG_CTRUNC) != 0 {
+			controlErr = errLaunchDomain
+		}
+		return true
+	})
+	if err != nil || readErr != nil || controlErr != nil {
+		return 0, errLaunchDomain
+	}
+	return n, nil
+}
+
+func parseStartupFailure245(packet []byte, h [64]byte) (*startupFailure, bool) {
+	if len(packet) != 64 || !validSinkHeader245(h) || string(packet[:8]) != "OCSTART1" || string(packet[8:56]) != string(h[8:56]) {
+		return nil, false
+	}
+	stage := binary.BigEndian.Uint32(packet[56:60])
+	errno := binary.BigEndian.Uint32(packet[60:64])
+	if startupStageName(stage) == "" || errno > 4095 {
+		return nil, false
+	}
+	return &startupFailure{stage: stage, errno: errno}, true
+}
+
+func handleStartupFailure245(packet []byte, h [64]byte, c launchConfig) bool {
+	failure, ok := parseStartupFailure245(packet, h)
+	if !ok {
+		return false
+	}
+	if c.LabReceiptPath == "/var/lib/ssjack/synthetic/consumer-receipt" {
+		_ = writeSyntheticStartupFailure245(failure)
+	}
+	return true
+}
+
+func writeSyntheticStartupFailure245(failure *startupFailure) error {
+	bad := func() error { return errLaunchDomain }
+	if failure == nil || startupStageName(failure.stage) == "" || failure.errno > 4095 {
+		return bad()
+	}
+	if os.Geteuid() != 65534 {
+		return bad()
+	}
+	root, err := os.Lstat("/lab")
+	if err != nil || !root.IsDir() || root.Mode()&os.ModeSymlink != 0 {
+		return bad()
+	}
+	rootStat, ok := root.Sys().(*syscall.Stat_t)
+	if !ok || rootStat.Uid != 0 || rootStat.Mode&0022 != 0 {
+		return bad()
+	}
+	profile, err := os.Lstat("/lab/disposable-profile")
+	if err != nil || !profile.Mode().IsRegular() || profile.Mode()&os.ModeSymlink != 0 {
+		return bad()
+	}
+	profileStat, ok := profile.Sys().(*syscall.Stat_t)
+	if !ok || profileStat.Uid != 0 || profileStat.Nlink != 1 || profileStat.Mode&07777 != 0444 {
+		return bad()
+	}
+	parent, err := syscall.Open("/var/lib/ssjack/synthetic", syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return bad()
+	}
+	defer syscall.Close(parent)
+	var dir syscall.Stat_t
+	if syscall.Fstat(parent, &dir) != nil || dir.Mode&syscall.S_IFMT != syscall.S_IFDIR || dir.Uid != 65534 || dir.Mode&07777 != 0700 || dir.Nlink == 0 {
+		return bad()
+	}
+	fd, err := syscall.Openat(parent, "native-startup-failure", syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0600)
+	if err != nil {
+		return bad()
+	}
+	f := os.NewFile(uintptr(fd), "native-startup-failure")
+	if f == nil {
+		_ = syscall.Close(fd)
+		return bad()
+	}
+	defer f.Close()
+	var st syscall.Stat_t
+	if syscall.Fstat(fd, &st) != nil || st.Mode&syscall.S_IFMT != syscall.S_IFREG || st.Uid != 65534 || st.Nlink != 1 || st.Mode&07777 != 0600 || st.Size != 0 {
+		return bad()
+	}
+	var record [12]byte
+	copy(record[:8], "OCSF0001")
+	binary.BigEndian.PutUint16(record[8:10], uint16(failure.stage))
+	binary.BigEndian.PutUint16(record[10:12], uint16(failure.errno))
+	n, err := f.Write(record[:])
+	if err != nil || n != len(record) || f.Sync() != nil {
+		return bad()
+	}
+	return nil
+}
+
 func runIsolated(ctx context.Context,k *keeperSession)error{
 	bad:=func()error{return errLaunchDomain};if ctx==nil||k==nil||ctx.Err()!=nil{return bad()};c,e:=trustedLaunchConfig();if e!=nil||len(c.BrokerSHA256)!=64||strings.ToLower(c.BrokerSHA256)!=c.BrokerSHA256{return bad()};if _,e=hex.DecodeString(c.BrokerSHA256);e!=nil{return bad()};scenario:=c.LabScenario;if scenario!=""&&scenario!="partial-ack"&&scenario!="lost-ack"&&scenario!="cancel"&&scenario!="wrong-holder"&&scenario!="unexpected-exec"{return bad()};if scenario!=""&&verifyLabScenario(scenario)!=nil{return bad()}
 	if c.LabReceiptPath != "" && c.LabReceiptPath != "/var/lib/ssjack/synthetic/consumer-receipt" { return bad() }; labCheckpoint245(20); fd,e:=connectLabBroker(ctx,c.BrokerSHA256);if e!=nil{return bad()};req:=os.NewFile(uintptr(fd),"broker-request");defer req.Close()
@@ -43,7 +174,13 @@ func runIsolated(ctx context.Context,k *keeperSession)error{
 	labCheckpoint245(22); stype,e:=syscall.GetsockoptInt(nativeFD,syscall.SOL_SOCKET,syscall.SO_TYPE);if e!=nil||stype!=syscall.SOCK_SEQPACKET{return bad()};peer,e:=syscall.Getpeername(nativeFD);if e!=nil{return bad()};if _,ok:=peer.(*syscall.SockaddrUnix);!ok{return bad()};cred,e:=syscall.GetsockoptUcred(nativeFD,syscall.SOL_SOCKET,syscall.SO_PEERCRED);if e!=nil||cred.Uid!=0{return bad()}
 	dl,ok:=ctx.Deadline();if !ok||native.SetDeadline(dl)!=nil{return bad()};stop:=context.AfterFunc(ctx,func(){_ = req.Close();_ = native.Close()});defer stop()
 	labCheckpoint245(23); var h [64]byte;if k.readHeader(ctx,&h)!=nil{return bad()};if n,e=native.Write(h[:]);e!=nil||n!=len(h){return bad()}
-	labCheckpoint245(24); var sh [161]byte;n,e=native.Read(sh[:]);if e!=nil{return bad()};if n==64&&scenario!=""&&(scenario=="wrong-holder"||scenario=="unexpected-exec")&&string(sh[:8])=="OCLABNO1"&&string(sh[8:56])==string(h[8:56])&&((scenario=="wrong-holder"&&string(sh[56:64])=="BADWRITE")||(scenario=="unexpected-exec"&&string(sh[56:64])=="BADEXEC1")){if writeLabFault(scenario)!=nil{return bad()};return bad()};if n!=160||string(sh[:8])!="SSRDY001"{return bad()};targetHash:=sha256.Sum256([]byte(c.Target));revisionHash:=sha256.Sum256([]byte(c.Revision));purposeHash:=sha256.Sum256([]byte(c.Purpose));if string(sh[8:64])!=string(h[8:64])||string(sh[64:96])!=string(targetHash[:])||string(sh[96:128])!=string(revisionHash[:])||string(sh[128:160])!=string(purposeHash[:]){return bad()};if k.writeExact(ctx,sh[:160])!=nil{return bad()}
+	labCheckpoint245(24)
+	var sh [161]byte
+	n, e = readStartupReply245(native, sh[:])
+	if e != nil {
+		return bad()
+	}
+	if n == 64 && handleStartupFailure245(sh[:64], h, c) { return errLaunchDomain };if n==64&&scenario!=""&&(scenario=="wrong-holder"||scenario=="unexpected-exec")&&string(sh[:8])=="OCLABNO1"&&string(sh[8:56])==string(h[8:56])&&((scenario=="wrong-holder"&&string(sh[56:64])=="BADWRITE")||(scenario=="unexpected-exec"&&string(sh[56:64])=="BADEXEC1")){if writeLabFault(scenario)!=nil{return bad()};return bad()};if n!=160||string(sh[:8])!="SSRDY001"{return bad()};targetHash:=sha256.Sum256([]byte(c.Target));revisionHash:=sha256.Sum256([]byte(c.Revision));purposeHash:=sha256.Sum256([]byte(c.Purpose));if string(sh[8:64])!=string(h[8:64])||string(sh[64:96])!=string(targetHash[:])||string(sh[96:128])!=string(revisionHash[:])||string(sh[128:160])!=string(purposeHash[:]){return bad()};if k.writeExact(ctx,sh[:160])!=nil{return bad()}
 	labCheckpoint245(25); payload,digest,e:=k.readPayload(ctx,k.length);if e!=nil{return bad()};defer clear(payload);n,e=native.Write(payload);if e!=nil||n!=len(payload){return bad()}
 	var ack [97]byte;n,e=native.Read(ack[:]);if e!=nil||n!=96||string(ack[:8])!="SSACK001"||string(ack[8:64])!=string(h[8:64])||string(ack[64:96])!=string(digest[:]){return bad()};if scenario=="cancel"{if writeLabCancelOwner()!=nil{return bad()};if writeLabFault(scenario)!=nil{return bad()};if c.LabReceiptPath!=""&&recordLabReceipt(h)!=nil{return bad()};if awaitLabCancel(ctx)!=nil{return bad()};return bad()};if c.LabReceiptPath!=""||scenario=="partial-ack"||scenario=="lost-ack" { if recordLabReceipt(h)!=nil{return bad()} };if scenario=="partial-ack"||scenario=="lost-ack"{if writeLabFault(scenario)!=nil{return bad()};if scenario=="partial-ack"{_ = k.writeExact(ctx,ack[:48])};return bad()};if k.writeExact(ctx,ack[:96])!=nil{return bad()};return nil
 }

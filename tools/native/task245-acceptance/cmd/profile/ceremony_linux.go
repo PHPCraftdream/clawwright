@@ -17,6 +17,9 @@ import (
 )
 
 func runCeremony(scenario, supervisor, keeper, broker string) (result error) {
+	if _, err := os.Lstat("/var/lib/ssjack/synthetic/native-startup-failure"); err == nil || !errors.Is(err, os.ErrNotExist) {
+		return errors.New("startup diagnostic must be fresh")
+	}
 	var child, meta *service.Child
 	event, exit := "evidence", -1
 	cleaned := false
@@ -59,7 +62,7 @@ func runCeremony(scenario, supervisor, keeper, broker string) (result error) {
 	}
 	fail := func(err error) error {
 		cleanupErr := cleanup()
-		reportErr := diagnostics.ReportFailure(os.Stderr, true, diagnostics.Checkpoints(), child.DiagnosticBytes(), meta.DiagnosticBytes(), event, exit)
+		reportErr := diagnostics.ReportLabFailure(os.Stderr, true, diagnostics.Checkpoints(), child.DiagnosticBytes(), meta.DiagnosticBytes(), event, exit)
 		if cleanupErr != nil {
 			return cleanupErr
 		}

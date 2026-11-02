@@ -147,6 +147,41 @@ func TestReportFailureReservesMainFailureRecord(t *testing.T) {
 	}
 }
 
+func TestStartupFailurePriorityBudget(t *testing.T) {
+	var broker Capture
+	for i := 0; i < 32; i++ {
+		line := "task245-broker: lifecycle=peer_eof errno=" + strconv.Itoa(i) + "\n"
+		if _, err := io.WriteString(&broker, line); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	const startup = "task245-worker: startup=node errno=2"
+	var got bytes.Buffer
+	if err := reportFailure(&got, true, "task245-profile: checkpoints=1", broker.Bytes(), nil, "command_failed", 1, startup); err != nil {
+		t.Fatal(err)
+	}
+	output := got.String()
+	if strings.Count(output, "task245-profile: "+startup+"\n") != 1 {
+		t.Fatalf("canonical startup record missing or duplicated: %q", output)
+	}
+	if got.Len() > maxCapture {
+		t.Fatalf("profile output exceeds budget: %d", got.Len())
+	}
+	if records := Records("profile", got.Bytes()); len(records) == 0 {
+		t.Fatalf("profile output was rejected: %q", output)
+	}
+
+	const secret = "arbitrary startup secret"
+	got.Reset()
+	if err := reportFailure(&got, true, "task245-profile: checkpoints=1", broker.Bytes(), nil, "command_failed", 1, secret); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got.String(), secret) {
+		t.Fatalf("unsafe startup input leaked: %q", got.String())
+	}
+}
+
 func TestNoOutputWhenSuccessful(t *testing.T) {
 	var b bytes.Buffer
 	if err := ReportFailure(&b, false, "bad", nil, nil, "bad", 999); err != nil || b.Len() != 0 {

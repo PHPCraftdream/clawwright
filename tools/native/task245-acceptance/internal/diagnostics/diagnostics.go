@@ -300,6 +300,10 @@ func ForwardFailure(w io.Writer, failed bool, raw []byte) error {
 }
 
 func ReportFailure(w io.Writer, failed bool, checkpoint string, broker, metadata []byte, event string, exit int) error {
+	return reportFailure(w, failed, checkpoint, broker, metadata, event, exit, "")
+}
+
+func reportFailure(w io.Writer, failed bool, checkpoint string, broker, metadata []byte, event string, exit int, startup string) error {
 	if !failed {
 		return nil
 	}
@@ -313,6 +317,11 @@ func ReportFailure(w io.Writer, failed bool, checkpoint string, broker, metadata
 		return nil
 	}
 	profile = append(profile, "task245-profile: "+conductor)
+	if startup != "" {
+		for _, record := range Records("worker", []byte(startup+"\n")) {
+			profile = append(profile, "task245-profile: "+record)
+		}
+	}
 	if len(metadata) > 0 {
 		if record, ok := parseRecord("metadata", "metadata-daemon: event=stderr"); ok {
 			profile = append(profile, "task245-profile: "+record)

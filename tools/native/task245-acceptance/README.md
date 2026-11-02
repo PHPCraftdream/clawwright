@@ -46,4 +46,16 @@ Cause remains undetermined: worker exit cannot be distinguished from peer EOF or
 
 The source workflow additionally selects TestStartupDiagnostics and TestStartGatewayDiagnosticsFailures from ./task245-native-supervisor. Existing kernel cases and deadlines are unchanged. Current finite service code/role/case and worker startup stage/errno diagnostics are authored for the next parent public run, not execution evidence.
 
-Run 41397094959 on 17d9a45f reports connected stage=service_preflight. Wrong-holder reports worker wait exit 101; the other four negatives report peer EOF followed by SIGKILL 9. Cleanup is a possible source of that signal, not an established initiating cause. No intended scenario outcome or root cause is established. These follow-up changes are NOT RUN.
+Run `41397094959` on `17d9a45f` reports connected `stage=service_preflight`. Wrong-holder reports worker wait exit 101; the other four negatives report peer EOF followed by SIGKILL 9. Cleanup is a possible source of that signal, not an established initiating cause. No intended scenario outcome or root cause is established. These follow-up changes are NOT RUN.
+
+## Task 250 connected preflight and Rust startup refusal follow-up (source-only; NOT RUN)
+
+Run `41399012497` records a connected `preflight-not-fresh` failure. The freshness refusal is observed, but the stale filesystem path is not named by the log. Source review found that `publishKernelProof` used `MkdirAll` for `/run/task245-services`, removing proof but not the directory. The new profile uses exclusive, owned acquisition and same-inode empty-directory cleanup to restore freshness without waiving the guard. This is source coverage, not execution evidence.
+
+Rust worker stdio deliberately remains null on fd 0–2. The ineffective stderr-only diagnostic is replaced by a fixed 64-byte correlated startup-refusal message sent on the existing seqpacket control channel before `SSRDY`. Its finite 13-value enum and errno convey startup refusal only; the message is never readiness, a fault, or a secret grant. A source integration test authors coverage for actual Rust with suppressed stdio. It was NOT RUN; the next parent CI run is required. No claim is made that this explains the known gateway failure.
+
+No commands, tests, or execution were run for this update. No raw log or private paths are included; no PASS or acceptance is claimed.
+
+## Task 250 Rust startup refusal transport correction (source-only; NOT RUN)
+
+The Go worker under the Rust bootstrap sends a fixed 64-byte `OCSTART1` message over fd 4, which the consumer parses. The pinned product deliberately discards consumer stderr (as observed by the parent), so the consumer instead writes a fixed 12-byte `OCSF0001` stage/errno record to an owned synthetic file. The root profile's `ReportLabFailure` reads, validates, and reconstructs that record into the existing `ReportFailure` filter; the actual outer `applicationResult` is filtered as `ContainerFailure`. Rust and pinned product sources are unchanged. An `io.Discard` consumer-subprocess regression is authored but NOT RUN. Initiating cause remains unresolved; no acceptance is claimed.

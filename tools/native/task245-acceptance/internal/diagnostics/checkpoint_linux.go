@@ -5,12 +5,77 @@ package diagnostics
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 )
 
 const checkpointAbsent = "task245-profile: checkpoints=absent"
+const startupFailurePath = "/var/lib/ssjack/synthetic/native-startup-failure"
+
+var startupStages = [...]string{"context", "node", "stub", "provider", "packet", "gate_pipe", "args_pipe", "fork", "tracker", "args_write", "args_close", "gate_write", "gate_close"}
+
+func StartupFailure() string {
+	return startupFailureFile(startupFailurePath)
+}
+
+func startupFailureFile(path string) string {
+	parent, name := filepath.Split(path)
+	if parent == "" || name != "native-startup-failure" {
+		return ""
+	}
+	dfd, err := syscall.Open(strings.TrimSuffix(parent, "/"), syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return ""
+	}
+	defer syscall.Close(dfd)
+
+	var dir syscall.Stat_t
+	if syscall.Fstat(dfd, &dir) != nil || dir.Mode&syscall.S_IFMT != syscall.S_IFDIR || dir.Uid != 65534 || dir.Nlink == 0 || dir.Mode&07777 != 0700 {
+		return ""
+	}
+	fd, err := syscall.Openat(dfd, name, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return ""
+	}
+	f := os.NewFile(uintptr(fd), name)
+	if f == nil {
+		_ = syscall.Close(fd)
+		return ""
+	}
+	defer f.Close()
+
+	var before syscall.Stat_t
+	if syscall.Fstat(fd, &before) != nil || before.Mode&syscall.S_IFMT != syscall.S_IFREG || before.Uid != 65534 || before.Mode&07777 != 0600 || before.Nlink != 1 || before.Size != 12 {
+		return ""
+	}
+	data, err := io.ReadAll(io.LimitReader(f, 13))
+	var after syscall.Stat_t
+	if err != nil || len(data) != 12 || syscall.Fstat(fd, &after) != nil || !sameCheckpointStat(&before, &after) {
+		return ""
+	}
+	if string(data[:8]) != "OCSF0001" {
+		return ""
+	}
+	stage, errno := int(data[8])<<8|int(data[9]), int(data[10])<<8|int(data[11])
+	if stage < 1 || stage > len(startupStages) || errno > 4095 {
+		return ""
+	}
+	line := "task245-worker: startup=" + startupStages[stage-1] + " errno=" + strconv.Itoa(errno) + "\n"
+	records := Records("worker", []byte(line))
+	if len(records) != 1 {
+		return ""
+	}
+	return records[0]
+}
+
+func ReportLabFailure(w io.Writer, failed bool, checkpoint string, broker, metadata []byte, event string, exit int) error {
+	if !failed {
+		return nil
+	}
+	return reportFailure(w, failed, checkpoint, broker, metadata, event, exit, StartupFailure())
+}
 
 func Checkpoints() string {
 	return checkpointFile("/var/lib/ssjack/synthetic/native-checkpoints")

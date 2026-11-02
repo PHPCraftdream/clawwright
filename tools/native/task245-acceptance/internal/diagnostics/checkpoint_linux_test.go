@@ -12,6 +12,137 @@ import (
 	"testing"
 )
 
+func TestStartupFailureFileValidation(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("requires root to create UID 65534 fixtures")
+	}
+	dir := t.TempDir()
+	if err := os.Chown(dir, 65534, 65534); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "native-startup-failure")
+	data := []byte("OCSF0001\x00\x01\x00\x02")
+	write := func(b []byte) {
+		t.Helper()
+		if err := os.WriteFile(path, b, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chown(path, 65534, 65534); err != nil {
+			t.Fatal(err)
+		}
+		if err := syscall.Chmod(path, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(data)
+	if got := startupFailureFile(path); got != "task245-worker: startup=context errno=2" {
+		t.Fatalf("unexpected startup record: %q", got)
+	}
+
+	for _, tc := range []struct {
+		name string
+		data []byte
+	}{
+		{name: "magic", data: []byte("BADMAGIC\x00\x01\x00\x02")},
+		{name: "stage-zero", data: []byte("OCSF0001\x00\x00\x00\x02")},
+		{name: "stage-over", data: []byte("OCSF0001\x00\x0e\x00\x02")},
+		{name: "errno-over", data: []byte("OCSF0001\x00\x01\x10\x00")},
+		{name: "short", data: data[:11]},
+		{name: "long", data: append(append([]byte(nil), data...), 0)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			write(tc.data)
+			if got := startupFailureFile(path); got != "" {
+				t.Fatalf("malformed record accepted: %q", got)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name string
+		uid  int
+		mode uint32
+	}{
+		{name: "wrong-owner", uid: 0, mode: 0600},
+		{name: "mode-0640", uid: 65534, mode: 0640},
+		{name: "mode-04600", uid: 65534, mode: 04600},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			write(data)
+			if err := os.Chown(path, tc.uid, tc.uid); err != nil {
+				t.Fatal(err)
+			}
+			if err := syscall.Chmod(path, tc.mode); err != nil {
+				t.Fatal(err)
+			}
+			if got := startupFailureFile(path); got != "" {
+				t.Fatalf("invalid file at %q accepted: %q", path, got)
+			}
+		})
+	}
+
+	write(data)
+	if err := os.Link(path, path+"-link"); err != nil {
+		t.Fatal(err)
+	}
+	if got := startupFailureFile(path); got != "" {
+		t.Fatalf("hard-linked record at %q accepted: %q", path, got)
+	}
+	if err := os.Remove(path + "-link"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/etc/passwd", path); err != nil {
+		t.Fatal(err)
+	}
+	if got := startupFailureFile(path); got != "" {
+		t.Fatalf("symlink at %q accepted: %q", path, got)
+	}
+}
+
+func TestStartupFailureRejectsUnprotectedParent(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("requires root")
+	}
+
+	for _, tc := range []struct {
+		name string
+		uid  int
+		mode uint32
+	}{
+		{name: "wrong-owner", uid: 0, mode: 0700},
+		{name: "wrong-mode", uid: 65534, mode: 0755},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.Chown(dir, tc.uid, tc.uid); err != nil {
+				t.Fatal(err)
+			}
+			if err := syscall.Chmod(dir, tc.mode); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(dir, "native-startup-failure")
+			if err := os.WriteFile(path, []byte("OCSF0001\x00\x01\x00\x02"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chown(path, 65534, 65534); err != nil {
+				t.Fatal(err)
+			}
+			if err := syscall.Chmod(path, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if got := startupFailureFile(path); got != "" {
+				t.Fatalf("file with unprotected parent %q accepted: %q", path, got)
+			}
+		})
+	}
+}
+
 func checkpointFixture(t *testing.T, data []byte) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "checkpoint")

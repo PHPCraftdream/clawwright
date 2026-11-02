@@ -145,7 +145,11 @@ func runProfile(scenario string) (result error) {
 
 	if scenario == "" {
 		stage = "metadata_preflight"
-		if err = profilePreflightMetadata(); err != nil {
+		owner, ownerErr := ownedProfileFixture()
+		if ownerErr != nil {
+			return ownerErr
+		}
+		if err = owner.run(profilePreflightMetadata); err != nil {
 			return err
 		}
 	}

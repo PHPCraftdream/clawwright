@@ -113,7 +113,7 @@ jobs:
         run: |
           set -euo pipefail
           go test -run='Test(EncodeLaunchPacket|ParseKeeperConfig|ParseServiceProof245|KeeperInheritedPipes)' ./task245-native-supervisor
-          go test -run='^(TestStartupDiagnostics|TestStartGatewayDiagnosticsFailures)$' ./task245-native-supervisor
+          go test -run='^(TestStartupDiagnostics|TestStartGatewayDiagnosticsFailures|TestStartupControlProtocol)$' ./task245-native-supervisor
           go test ./task245-native-content ./task240-native-policy ./task240-native-provider ./task245-lab-broker
           go test ./task245-control-profile/cmd/control-profile ./task245-control-profile/cmd/control-probe ./task245-control-profile/cmd/native-metadata ./task245-control-profile/cmd/metadata-regression ./task245-control-profile/internal/proof ./task245-control-profile/internal/regression
           go test ./task245-acceptance/fixtures/gateway ./task245-acceptance/fixtures/release ./task245-acceptance/internal/runner ./task245-acceptance/internal/service ./task245-acceptance/internal/diagnostics ./task245-acceptance/cmd/acceptance ./task245-acceptance/cmd/profile
@@ -135,6 +135,8 @@ jobs:
           go build -o "$RUNNER_TEMP/native-gateway" ./task245-acceptance/fixtures/gateway
           go build -o "$RUNNER_TEMP/native-release-fixture" ./task245-acceptance/fixtures/release
           go test -c -o "$RUNNER_TEMP/service-startup-test" ./task245-acceptance/internal/service
+          go test -c -o "$RUNNER_TEMP/native-supervisor-test" ./task245-native-supervisor
+          go test -c -o "$RUNNER_TEMP/runner-startup-test" ./task245-acceptance/internal/runner
       - name: Run public control metadata kernel suite
         shell: bash
         run: |
@@ -146,10 +148,13 @@ jobs:
           cp "$RUNNER_TEMP/metadata-regression" "$RUNNER_TEMP/control-metadata-input/metadata-regression"
           cp "$RUNNER_TEMP/control-probe" "$RUNNER_TEMP/control-metadata-input/probe"
           cp "$RUNNER_TEMP/service-startup-test" "$RUNNER_TEMP/control-metadata-input/service-startup-test"
-          chmod 0555 "$RUNNER_TEMP/control-metadata-input/control-profile" "$RUNNER_TEMP/control-metadata-input/control-installer" "$RUNNER_TEMP/control-metadata-input/native-metadata" "$RUNNER_TEMP/control-metadata-input/metadata-regression" "$RUNNER_TEMP/control-metadata-input/probe" "$RUNNER_TEMP/control-metadata-input/service-startup-test"
+          cp "$RUNNER_TEMP/native-supervisor-test" "$RUNNER_TEMP/control-metadata-input/native-supervisor-test"
+          cp "$RUNNER_TEMP/runner-startup-test" "$RUNNER_TEMP/control-metadata-input/runner-startup-test"
+          chmod 0555 "$RUNNER_TEMP/control-metadata-input/control-profile" "$RUNNER_TEMP/control-metadata-input/control-installer" "$RUNNER_TEMP/control-metadata-input/native-metadata" "$RUNNER_TEMP/control-metadata-input/metadata-regression" "$RUNNER_TEMP/control-metadata-input/probe" "$RUNNER_TEMP/control-metadata-input/service-startup-test" "$RUNNER_TEMP/control-metadata-input/native-supervisor-test" "$RUNNER_TEMP/control-metadata-input/runner-startup-test"
           docker run --rm --network none --cap-drop ALL --cap-add SETUID --cap-add SETGID --cap-add KILL --cap-add SYS_PTRACE --security-opt no-new-privileges --pids-limit 256 --memory 1g --env GITHUB_ACTIONS=true --mount "type=bind,src=$RUNNER_TEMP/control-metadata-input,dst=/input,readonly" --entrypoint /input/metadata-regression python:3.13-slim --initial-identity-suite
           docker run --rm --network none --cap-drop ALL --cap-add SETUID --cap-add SETGID --security-opt no-new-privileges --pids-limit 256 --memory 1g --env GITHUB_ACTIONS=true --mount "type=bind,src=$RUNNER_TEMP/control-metadata-input,dst=/input,readonly" --entrypoint /input/metadata-regression python:3.13-slim --owned-cleanup-refusal
           docker run --rm --network none --cap-drop ALL --cap-add SETUID --cap-add SETGID --security-opt no-new-privileges --pids-limit 256 --memory 1g --env GITHUB_ACTIONS=true --env TASK245_STARTUP_REFUSAL=1 --mount "type=bind,src=$RUNNER_TEMP/control-metadata-input,dst=/input,readonly" --entrypoint /input/service-startup-test python:3.13-slim -test.run=^TestStartupCleanupKillRefusal$ -test.timeout=10s -test.v
+          docker run --rm --network none --cap-drop ALL --cap-add CHOWN --cap-add SETUID --cap-add SETGID --cap-add DAC_OVERRIDE --security-opt no-new-privileges --pids-limit 256 --memory 1g --env TASK245_STARTUP_PIPELINE=1 --env TASK245_STARTUP_CONSUMER=/input/native-supervisor-test --mount "type=bind,src=$RUNNER_TEMP/control-metadata-input,dst=/input,readonly" --entrypoint /input/runner-startup-test python:3.13-slim -test.run=^TestStartupFailureSuppressedConsumerPipeline$ -test.timeout=20s -test.v
           docker run --rm --network none --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --cap-add SETUID --cap-add SETGID --cap-add SYS_PTRACE --cap-add SYS_ADMIN --cap-add KILL --security-opt no-new-privileges --security-opt apparmor=unconfined --pids-limit 256 --memory 1g --env GITHUB_ACTIONS=true --mount "type=bind,src=$RUNNER_TEMP/control-metadata-input,dst=/input,readonly" --entrypoint /input/metadata-regression python:3.13-slim --kernel-suite
           docker run --rm --network none --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --cap-add SETUID --cap-add SETGID --cap-add SYS_PTRACE --cap-add SYS_ADMIN --security-opt no-new-privileges --security-opt apparmor=unconfined --pids-limit 256 --memory 1g --env GITHUB_ACTIONS=true --mount "type=bind,src=$RUNNER_TEMP/control-metadata-input,dst=/input,readonly" --entrypoint /input/metadata-regression python:3.13-slim --confinement-suite
 

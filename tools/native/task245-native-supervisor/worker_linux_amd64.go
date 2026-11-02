@@ -23,6 +23,68 @@ import (
  admission "clawforge/tools/native/task240-native/task240-native-admission"
 )
 
+var errDomainWorker = errors.New("domain worker authentication rejected")
+
+// domainWorkerMain authenticates the C bootstrap's inherited descriptors and
+// the worker's placement in the private namespace before accepting any protocol.
+func domainWorkerMain() error {
+	domainExit245 = 81
+	if len(os.Args) != 2 || os.Args[1] != "--task245-domain-worker" || len(os.Environ()) != 0 || os.Geteuid() == 0 || os.Getpid() != 2 || os.Getppid() != 1 {
+		return errDomainWorker
+	}
+	domainExit245 = 82
+	var image, sock, metadata syscall.Stat_t
+	if syscall.Fstat(3, &image) != nil || image.Mode&syscall.S_IFMT != syscall.S_IFREG || image.Size <= 0 || image.Uid != 0 || image.Mode&0022 != 0 {
+		return errDomainWorker
+	}
+	domainExit245 = 83
+	seals, _, errno := syscall.Syscall(syscall.SYS_FCNTL, 3, 1034, 0)
+	if errno != 0 || seals&0xf != 0xf {
+		return errDomainWorker
+	}
+	domainExit245 = 84
+	if syscall.Fstat(4, &sock) != nil || sock.Mode&syscall.S_IFMT != syscall.S_IFSOCK || syscall.Fstat(6, &metadata) != nil || metadata.Mode&syscall.S_IFMT != syscall.S_IFREG || metadata.Uid != 0 || metadata.Size <= 0 || metadata.Size > 16384 {
+		return errDomainWorker
+	}
+	domainExit245 = 85
+	metaSeals, _, errno := syscall.Syscall(syscall.SYS_FCNTL, 6, 1034, 0)
+	if errno != 0 || metaSeals&0xf != 0xf {
+		return errDomainWorker
+	}
+	domainExit245 = 86
+	var pid, mnt, netns syscall.Stat_t
+	if syscall.Stat("/proc/self/ns/pid", &pid) != nil || syscall.Stat("/proc/1/ns/pid", &mnt) != nil || pid.Ino != mnt.Ino || syscall.Stat("/proc/self/ns/mnt", &mnt) != nil || syscall.Stat("/proc/1/ns/mnt", &netns) != nil || mnt.Ino != netns.Ino {
+		return errDomainWorker
+	}
+	domainExit245 = 87
+	b, err := os.ReadFile("/proc/self/mountinfo")
+	if err != nil || len(b) == 0 || len(b) > 4<<20 || !hasExpectedPrivateMounts(string(b)) {
+		return errDomainWorker
+	}
+	return runConnectedWorker()
+}
+
+func hasExpectedPrivateMounts(data string) bool {
+	proc, run := false, false
+	for _, line := range strings.Split(data, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		f := strings.Fields(line)
+		if len(f) < 10 { return false }
+		sep := -1
+		for i := 6; i < len(f); i++ { if f[i] == "-" { sep = i; break } }
+		if sep < 0 || len(f) <= sep+2 { return false }
+		if f[4] == "/proc" && f[sep+1] == "proc" { proc = true }
+		if f[4] == "/run" && f[sep+1] == "tmpfs" { run = true }
+	}
+	return proc && run
+}
+
+// Fixed response framing: callers must not interpret this as a general grant.
+var domainReadyRecord = [8]byte{'S','S','R','D','Y','0','0','1'}
+var domainAckRecord = [8]byte{'S','S','A','C','K','0','0','1'}
+
 func runConnectedWorker() error {
  bad:=func()error{return errDomainWorker}
  if len(os.Args)!=2||os.Args[1]!="--task245-domain-worker"||len(os.Environ())!=0||os.Geteuid()==0||os.Getpid()!=2||os.Getppid()!=1{return bad()}
@@ -53,7 +115,7 @@ func runConnectedWorker() error {
  if c.SocketPath!="/run/clawwright-native.sock"{return bad()};_ = os.Remove(c.SocketPath);addr:=&net.UnixAddr{Name:c.SocketPath,Net:"unix"};l,e:=net.ListenUnix("unix",addr);if e!=nil{return bad()};defer l.Close();defer os.Remove(c.SocketPath);if l.SetDeadline(time.Now().Add(30*time.Second))!=nil{return bad()}
  wc:=workerConfig{Node:c.Node,Stub:c.Stub,Provider:c.Provider,ConfigPath:c.ConfigPath,SocketPath:c.SocketPath,CaptureEvidence:c.CaptureEvidence,GatewayArgv:c.GatewayArgv,BrokerArgv:c.BrokerArgv,NodeSHA256:c.NodeSHA256,StubSHA256:c.StubSHA256,ProviderSHA256:c.ProviderSHA256,Target:c.Target,Revision:c.Revision,Purpose:c.Purpose,LabScenario:c.LabScenario,registry:&execRegistry245{roles:map[int]string{}}}
  domainExit245 = 101
- tracker,gatewayPID,e:=startGateway(ctx,wc);if e!=nil{return bad()};defer tracker.Close()
+ tracker,gatewayPID,e:=startGatewayControl(ctx,wc,control,header);if e!=nil{return bad()};defer tracker.Close()
  domainExit245 = 102
  var conn *net.UnixConn
  for {if ctx.Err()!=nil{return bad()};if l.SetDeadline(time.Now().Add(100*time.Millisecond))!=nil{return bad()};conn,e=l.AcceptUnix();if e==nil{break};if ne,ok:=e.(net.Error);!ok||!ne.Timeout(){return bad()};if c.LabScenario=="unexpected-exec"&&wc.registry.wasRejectedExec(){if sendLabRefusal(control,header,"BADEXEC1")!=nil{return bad()};return bad()}}
@@ -80,10 +142,114 @@ func startGateway(ctx context.Context, c workerConfig) (*admission.TraceTracker,
 	return startGatewayDiagnostics(ctx, c, os.Stderr)
 }
 
+type startupFailure struct {
+	stage uint32
+	errno uint32
+}
+
+func (e *startupFailure) Error() string {
+	return "task245-worker: startup failure"
+}
+
+func (e *startupFailure) Unwrap() error {
+	return errDomainWorker
+}
+
+var startupStages245 = []string{
+	"context", "node", "stub", "provider", "packet", "gate_pipe", "args_pipe",
+	"fork", "tracker", "args_write", "args_close", "gate_write", "gate_close",
+}
+
+func startupStageName(stage uint32) string {
+	if stage == 0 || stage > uint32(len(startupStages245)) {
+		return ""
+	}
+	return startupStages245[stage-1]
+}
+
+func startupStageCode(name string) uint32 {
+	for i, stage := range startupStages245 {
+		if name == stage {
+			return uint32(i + 1)
+		}
+	}
+	return 0
+}
+
+func startupErrno(err error) uint32 {
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		code := uintptr(errno)
+		if code <= 4095 {
+			return uint32(code)
+		}
+	}
+	return 0
+}
+
+func sendStartupFailure(control *os.File, header [64]byte, failure *startupFailure) error {
+	if control == nil || failure == nil || !validSinkHeader245(header) ||
+		startupStageName(failure.stage) == "" || failure.errno > 4095 {
+		return errDomainWorker
+	}
+
+	var packet [64]byte
+	copy(packet[:8], "OCSTART1")
+	copy(packet[8:56], header[8:56])
+	binary.BigEndian.PutUint32(packet[56:60], failure.stage)
+	binary.BigEndian.PutUint32(packet[60:64], failure.errno)
+
+	n, err := control.Write(packet[:])
+	if err != nil || n != len(packet) {
+		return errDomainWorker
+	}
+	return nil
+}
+
+func validSinkHeader245(header [64]byte) bool {
+	if string(header[:8]) != "SSINK001" {
+		return false
+	}
+	if binary.BigEndian.Uint64(header[56:64]) == 0 || binary.BigEndian.Uint64(header[56:64]) > 16384 {
+		return false
+	}
+
+	nonceNonzero := false
+	for _, b := range header[8:24] {
+		if b != 0 {
+			nonceNonzero = true
+			break
+		}
+	}
+	bindingNonzero := false
+	for _, b := range header[24:56] {
+		if b != 0 {
+			bindingNonzero = true
+			break
+		}
+	}
+	return nonceNonzero && bindingNonzero
+}
+
 func startGatewayDiagnostics(ctx context.Context, c workerConfig, w io.Writer) (*admission.TraceTracker, int, error) {
-	bad := func(stage string, err error) (*admission.TraceTracker, int, error) {
+	return startGatewayOwned(ctx, c, w, nil)
+}
+
+func startGatewayControl(ctx context.Context, c workerConfig, control *os.File, header [64]byte) (*admission.TraceTracker, int, error) {
+	return startGatewayOwned(ctx, c, os.Stderr, func(failure *startupFailure) { _ = sendStartupFailure(control, header, failure) })
+}
+
+func startGatewayOwned(ctx context.Context, c workerConfig, w io.Writer, onFailure func(*startupFailure)) (*admission.TraceTracker, int, error) {
+	diagnosticFailure := func(stage string, err error) *startupFailure {
 		writeStartupDiagnostic(w, stage, err)
-		return nil, 0, errDomainWorker
+		failure := &startupFailure{stage: startupStageCode(stage), errno: startupErrno(err)}
+		if onFailure != nil {
+			onFailure(failure)
+		}
+		return failure
+	}
+	bad := func(stage string, err error) (*admission.TraceTracker, int, error) {
+		return nil, 0, diagnosticFailure(stage, err)
 	}
 	if ctx == nil || ctx.Err() != nil {
 		return bad("context", errDomainWorker)
@@ -160,16 +326,16 @@ func startGatewayDiagnostics(ctx context.Context, c workerConfig, w io.Writer) (
  }
 	tracker, e := admission.NewGuardedTraceTracker(ctx, pid, guard)
 	if e != nil {
-		writeStartupDiagnostic(w, "tracker", e)
+		failure := diagnosticFailure("tracker", e)
 		_ = syscall.Kill(pid, syscall.SIGKILL)
 		var ws syscall.WaitStatus
 		_, _ = syscall.Wait4(pid, &ws, 0, nil)
-		return nil, 0, errDomainWorker
+		return nil, 0, failure
 	}
 	fail := func(stage string, err error) (*admission.TraceTracker, int, error) {
-		writeStartupDiagnostic(w, stage, err)
+		failure := diagnosticFailure(stage, err)
 		tracker.Close()
-		return nil, 0, errDomainWorker
+		return nil, 0, failure
 	}
 	if e = writeAll(argsW, packet); e != nil {
 		return fail("args_write", e)

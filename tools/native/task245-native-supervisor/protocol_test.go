@@ -302,6 +302,8 @@ func domainWorkerProbe245() int {
 	if syscall.Fstat(3, &a) != nil || syscall.Stat("/proc/self/exe", &b) != nil || a.Dev != b.Dev || a.Ino != b.Ino {
 		return 36
 	}
+	var metadata syscall.Stat_t
+	startupProbe := syscall.Fstat(6, &metadata) == nil && metadata.Size == 25
 	if !domainFreshNamespaces245() {
 		return 40
 	}
@@ -318,6 +320,9 @@ func domainWorkerProbe245() int {
 				}
 			}
 		}
+	}
+	if startupProbe {
+		return startupControlProbe245()
 	}
 	if _, err = syscall.Write(4, []byte("domain-worker-ready")); err != nil {
 		return 38

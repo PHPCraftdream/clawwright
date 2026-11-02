@@ -2,10 +2,18 @@ package runner
 
 import (
 	"bytes"
+	"context"
+	"encoding/binary"
 	"errors"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"clawforge/tools/native/task240-native/task245-acceptance/internal/diagnostics"
 )
@@ -236,8 +244,127 @@ func TestApplicationResultFailureClassification(t *testing.T) {
 	}
 }
 
+func TestStartupFailureSuppressedConsumerPipeline(t *testing.T) {
+	if runtime.GOOS != "linux" || os.Getenv("TASK245_STARTUP_PIPELINE") != "1" {
+		t.Skip("requires disposable Linux root startup pipeline")
+	}
+	consumer := os.Getenv("TASK245_STARTUP_CONSUMER")
+	if consumer == "" {
+		t.Fatal("TASK245_STARTUP_CONSUMER required")
+	}
+	if os.Geteuid() != 0 {
+		t.Fatal("root CI container required")
+	}
+	if _, err := os.Stat(consumer); err != nil {
+		t.Fatal(err)
+	}
+	lab := "/lab"
+	if err := os.Mkdir(lab, 0755); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(lab, "disposable-profile")
+	if err := os.WriteFile(marker, []byte("fixture\n"), 0444); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(marker, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	base := "/var/lib/ssjack"
+	if err := os.Mkdir(base, 0755); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(base, "synthetic")
+	if err := os.Mkdir(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(dir, 65534, 65534); err != nil {
+		t.Fatal(err)
+	}
 
-func TestApplicationKernelFailureTransport(t *testing.T) {
+	cases := []struct {
+		name, wantRecord string
+		status, errno    uint32
+		wantExit         int
+	}{
+		{name: "crossbinding", status: 2, errno: 13, wantExit: 102},
+		{name: "valid", status: 2, errno: 2, wantExit: 101, wantRecord: "task245-worker: startup=node errno=2"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_SEQPACKET|syscall.SOCK_CLOEXEC, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parent := os.NewFile(uintptr(fds[0]), "parent-control")
+			child := os.NewFile(uintptr(fds[1]), "child-control")
+			defer parent.Close()
+			defer child.Close()
+			var header [64]byte
+			copy(header[:8], "SSINK001")
+			copy(header[8:24], "0123456789abcdef")
+			copy(header[24:56], strings.Repeat("b", 32))
+			binary.BigEndian.PutUint64(header[56:], 8192)
+			if n, e := syscall.SendmsgN(fds[0], header[:], nil, nil, syscall.MSG_NOSIGNAL); e != nil || n != len(header) {
+				t.Fatalf("send header: n=%d err=%v", n, e)
+			}
+			var refusal [64]byte
+			copy(refusal[:8], "OCSTART1")
+			copy(refusal[8:56], header[8:56])
+			binary.BigEndian.PutUint32(refusal[56:60], tc.status)
+			binary.BigEndian.PutUint32(refusal[60:64], tc.errno)
+			if tc.name == "crossbinding" {
+				refusal[8] ^= 1
+			}
+			if n, e := syscall.SendmsgN(fds[0], refusal[:], nil, nil, syscall.MSG_NOSIGNAL); e != nil || n != len(refusal) {
+				t.Fatalf("send refusal: n=%d err=%v", n, e)
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, consumer, "--task245-startup-consumer-probe")
+			cmd.Env = []string{}
+			cmd.ExtraFiles = []*os.File{child}
+			cmd.Stderr = io.Discard
+			var stdout bytes.Buffer
+			cmd.Stdout = &stdout
+			cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 65534, Gid: 65534}}
+			err = cmd.Run()
+			var exit *exec.ExitError
+			if !errors.As(err, &exit) || exit.ExitCode() != tc.wantExit {
+				t.Fatalf("consumer exit=%v want=%d", err, tc.wantExit)
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("consumer wrote unexpected stdout (%d bytes)", stdout.Len())
+			}
+
+			gotStartup := diagnostics.StartupFailure()
+			var profile bytes.Buffer
+			if e := diagnostics.ReportLabFailure(&profile, true, diagnostics.Checkpoints(), []byte("private secret marker\n"), nil, "command_failed", 1); e != nil {
+				t.Fatal(e)
+			}
+			var outer bytes.Buffer
+			image, resultStdout, pipelineErr := applicationResult(Result{Code: 1, Stderr: profile.Bytes()}, errors.New("private command error"), Result{Stdout: []byte(`[{"Image":"fixture","State":{"ExitCode":1}}]`)}, nil, &outer)
+			if pipelineErr == nil || image != "" || resultStdout != nil {
+				t.Fatalf("unexpected result: image=%q stdout=%q err=%v", image, resultStdout, pipelineErr)
+			}
+			if tc.wantRecord == "" {
+				if gotStartup != "" || strings.Contains(outer.String(), "task245-worker") {
+					t.Fatalf("crossbinding exposed startup record: startup=%q output=%q", gotStartup, outer.String())
+				}
+			} else {
+				want := "task245-container: command_exit=1 container_exit=1\ntask245-profile: checkpoints=absent\ntask245-profile: task245-conductor: event=command_failed exit=1\ntask245-profile: task245-worker: startup=node errno=2\n"
+				if gotStartup != tc.wantRecord || outer.String() != want {
+					t.Fatalf("startup=%q output=%q want startup=%q output=%q", gotStartup, outer.String(), tc.wantRecord, want)
+				}
+			}
+			if strings.Contains(outer.String(), "private secret marker") {
+				t.Fatalf("raw broker line forwarded: %q", outer.String())
+			}
+		})
+	}
+}
+
+func TestKernelFailureDiagnosticPipeline(t *testing.T) {
 	const validFrame = "    protocol_test.go:51: namespace helper failed diagnostic=between-write_rejection_or_context_failure (output length 23)\n"
 	const header = "task245-container: command_exit=1 container_exit=1\n"
 
