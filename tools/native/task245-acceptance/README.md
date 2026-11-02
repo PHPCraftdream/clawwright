@@ -63,3 +63,12 @@ The Go worker under the Rust bootstrap sends a fixed 64-byte `OCSTART1` message 
 ## Task 250 constructor evidence follow-up (source-only; NOT RUN)
 
 Authorized log `41410639372` records `connected`, `lost-ack`, and `wrong-holder` as ceremony failures with `startup=tracker errno=0`; `partial-ack`, `unexpected-exec`, and `cancel` have no startup record. The `connected` case progressed past `service_preflight` to ceremony. EOF and SIGKILL are cleanup observations, not established initiating causes. Parent source information indicates the constructor collapses failures to errno 0; no EPERM is assumed. Current source changes add closed constructor stages and wrapped errno through the already-proven 64-byte/12-byte path. No framing, authority, or custody changes are made, and no source-proven runtime fix is claimed. Missing-PID and real second-seize regressions plus pipeline subtype coverage are authored but NOT RUN; parent public CI is required. No acceptance is claimed.
+
+
+## Task 250 init-to-tracker evidence follow-up (source-only; NOT RUN)
+
+Log `41413183671` records `connected` and `unexpected-exec` with tracker `seize` returning `EPERM`; `lost-ack` records tracker `wait` returning `ECHILD` (10). This is not proof of a live process or of the cause. Init source waits for the specific worker, not `waitany`. The stdio fd contract does not reject null on fds 0–2. No source-proven bootstrap fix is claimed.
+
+A regression is authored for actual init → non-root Go → exact stub → guarded tracker using read-only root and valid root-owned executable fixtures. It observes the role-exec guard, then performs finite cleanup. It is NOT RUN.
+
+Finite pre-supervisor-kill nonblocking-wait correlation now distinguishes pending, exit 111, exited, signaled, no child, and observe error subtype, retaining constructor errno through the existing path. Post-constructor cleanup may affect the wait case and therefore does not prove cause. No Rust or product changes were made. No acceptance is claimed until parent CI.

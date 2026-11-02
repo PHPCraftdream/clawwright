@@ -278,6 +278,11 @@ func init() {
 	if len(os.Args) == 2 && os.Args[0] == "native-supervisor" && os.Args[1] == "--task245-domain-worker" {
 		os.Exit(domainWorkerProbe245())
 	}
+	if len(os.Args) == 2 && os.Args[1] == "--task245-bootstrap-target" {
+		for {
+			time.Sleep(time.Hour)
+		}
+	}
 }
 
 func domainWorkerProbe245() int {
@@ -304,6 +309,7 @@ func domainWorkerProbe245() int {
 	}
 	var metadata syscall.Stat_t
 	startupProbe := syscall.Fstat(6, &metadata) == nil && metadata.Size == 25
+	bootstrapProbe := syscall.Fstat(6, &metadata) == nil && metadata.Size == 26
 	if !domainFreshNamespaces245() {
 		return 40
 	}
@@ -323,6 +329,9 @@ func domainWorkerProbe245() int {
 	}
 	if startupProbe {
 		return startupControlProbe245()
+	}
+	if bootstrapProbe {
+		return bootstrapTrackerProbe245()
 	}
 	if _, err = syscall.Write(4, []byte("domain-worker-ready")); err != nil {
 		return 38

@@ -42,6 +42,11 @@ func TestStartupFailureFileValidation(t *testing.T) {
 		t.Fatalf("unexpected tracker startup record: %q", got)
 	}
 
+	write([]byte("OCSF0001\x00\x21\x00\x0a"))
+	if got := startupFailureFile(path); got != "task245-worker: startup=tracker_wait_nochild errno=10" {
+		t.Fatalf("unexpected tracker wait startup record: %q", got)
+	}
+
 	write(data)
 	if got := startupFailureFile(path); got != "task245-worker: startup=context errno=2" {
 		t.Fatalf("unexpected startup record: %q", got)
@@ -53,7 +58,7 @@ func TestStartupFailureFileValidation(t *testing.T) {
 	}{
 		{name: "magic", data: []byte("BADMAGIC\x00\x01\x00\x02")},
 		{name: "stage-zero", data: []byte("OCSF0001\x00\x00\x00\x02")},
-		{name: "stage-twentythree", data: []byte("OCSF0001\x00\x17\x00\x02")},
+		{name: "stage-invalid", data: []byte("OCSF0001\x00\x23\x00\x02")},
 		{name: "errno-over", data: []byte("OCSF0001\x00\x01\x10\x00")},
 		{name: "short", data: data[:11]},
 		{name: "long", data: append(append([]byte(nil), data...), 0)},

@@ -160,6 +160,8 @@ var startupStages245 = []string{
 	"fork", "tracker", "args_write", "args_close", "gate_write", "gate_close",
 	"tracker_context", "tracker_guard", "tracker_identity", "tracker_tasks",
 	"tracker_seize", "tracker_interrupt", "tracker_wait", "tracker_recheck", "tracker_resume",
+	"tracker_seize_pending", "tracker_seize_exit111", "tracker_seize_exited", "tracker_seize_signaled", "tracker_seize_nochild", "tracker_seize_observe_error",
+	"tracker_wait_pending", "tracker_wait_exit111", "tracker_wait_exited", "tracker_wait_signaled", "tracker_wait_nochild", "tracker_wait_observe_error",
 }
 
 func startupStageName(stage uint32) string {
@@ -328,14 +330,24 @@ func startGatewayOwned(ctx context.Context, c workerConfig, w io.Writer, onFailu
  }
 	tracker, e := admission.NewGuardedTraceTracker(ctx, pid, guard)
 	if e != nil {
+		ctor, _, typed := admission.TraceConstructorFailure(e)
 		stage := "tracker"
-		if ctor, _, ok := admission.TraceConstructorFailure(e); ok {
+		if typed {
 			stage = "tracker_" + ctor
 		}
-		failure := diagnosticFailure(stage, e)
-		_ = syscall.Kill(pid, syscall.SIGKILL)
-		var ws syscall.WaitStatus
-		_, _ = syscall.Wait4(pid, &ws, 0, nil)
+		failureStage := stage
+		reaped := false
+		if typed && (ctor == "seize" || ctor == "wait") {
+			suffix, wasReaped := observeStartupRoot245(pid)
+			failureStage = "tracker_" + ctor + "_" + suffix
+			reaped = wasReaped
+		}
+		failure := diagnosticFailure(failureStage, e)
+		if !reaped {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+			var ws syscall.WaitStatus
+			_, _ = syscall.Wait4(pid, &ws, 0, nil)
+		}
 		return nil, 0, failure
 	}
 	fail := func(stage string, err error) (*admission.TraceTracker, int, error) {
@@ -357,9 +369,37 @@ func startGatewayOwned(ctx context.Context, c workerConfig, w io.Writer, onFailu
 	}
 	return tracker, pid, nil
 }
+func observeStartupRoot245(pid int) (suffix string, reaped bool) {
+	var ws syscall.WaitStatus
+	got, err := syscall.Wait4(pid, &ws, syscall.WNOHANG, nil)
+	if err == syscall.ECHILD {
+		return "nochild", false
+	}
+	if err != nil {
+		return "observe_error", false
+	}
+	if got == 0 {
+		return "pending", false
+	}
+	if got != pid {
+		return "observe_error", false
+	}
+	if ws.Exited() {
+		if ws.ExitStatus() == 111 {
+			return "exit111", true
+		}
+		return "exited", true
+	}
+	if ws.Signaled() {
+		return "signaled", true
+	}
+	return "observe_error", false
+}
+
 func writeStartupDiagnostic(w io.Writer, stage string, err error) {
 	switch stage {
-	case "context", "node", "stub", "provider", "packet", "gate_pipe", "args_pipe", "fork", "tracker", "args_write", "args_close", "gate_write", "gate_close", "tracker_context", "tracker_guard", "tracker_identity", "tracker_tasks", "tracker_seize", "tracker_interrupt", "tracker_wait", "tracker_recheck", "tracker_resume":
+	case "context", "node", "stub", "provider", "packet", "gate_pipe", "args_pipe", "fork", "tracker", "args_write", "args_close", "gate_write", "gate_close", "tracker_context", "tracker_guard", "tracker_identity", "tracker_tasks", "tracker_seize", "tracker_interrupt", "tracker_wait", "tracker_recheck", "tracker_resume",
+		"tracker_seize_pending", "tracker_seize_exit111", "tracker_seize_exited", "tracker_seize_signaled", "tracker_seize_nochild", "tracker_seize_observe_error", "tracker_wait_pending", "tracker_wait_exit111", "tracker_wait_exited", "tracker_wait_signaled", "tracker_wait_nochild", "tracker_wait_observe_error":
 	default:
 		return
 	}
