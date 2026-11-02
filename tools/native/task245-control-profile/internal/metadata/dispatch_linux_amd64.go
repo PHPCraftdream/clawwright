@@ -102,7 +102,7 @@ func (s *service) openCancel(request notification) response {
 		result.Errno = -int32(errnoNumber(err))
 		return result
 	}
-	_, _, errno := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), uintptr(fcntlAddSeals), uintptr(14))
+	_, _, errno := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), uintptr(fcntlAddSeals), uintptr(7))
 	if errno != 0 {
 		_ = syscall.Close(fd)
 		result.Errno = -int32(errnoNumber(errno))
