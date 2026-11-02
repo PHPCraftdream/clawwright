@@ -7,9 +7,47 @@ export const SSJACK_ENV = {
   pin: "SSJACK_APP_CERTIFICATE_SHA256",
 } as const;
 
+export const SSJACK_TEXT_ENV = {
+  endpoint: "SSJACK_TEXT_ENDPOINT",
+  token: "SSJACK_TEXT_TOKEN",
+  pin: "SSJACK_TEXT_CERTIFICATE_SHA256",
+  profile: "SSJACK_TEXT_PROFILE",
+} as const;
+
+/** Explicitly convert the dedicated serving bootstrap; never used by ordinary transport selection. */
+export function ssjackTextEnvironment(env: Readonly<Record<string, string | undefined>>): Record<string, string | undefined> {
+  const result = { ...env };
+  const markerKeys = Object.keys(env).filter((name) => name.toLowerCase() === "ssjack_text_launch");
+  if (markerKeys.length === 0) return result;
+  if (markerKeys.length !== 1 || env[markerKeys[0]] !== "1") throw new UserError("SSJACK_TEXT_CONTEXT_INVALID");
+
+  const appNames = Object.values(SSJACK_ENV);
+  const textNames = [SSJACK_TEXT_ENV.endpoint, SSJACK_TEXT_ENV.token, SSJACK_TEXT_ENV.pin];
+  const findKeys = (expected: string): string[] => Object.keys(env).filter((name) => name.toLowerCase() === expected.toLowerCase());
+  const appKeys = appNames.map(findKeys);
+  const appValues = appKeys.map((keys) => keys.length === 1 ? env[keys[0]] : undefined);
+  const profileKeys = findKeys(SSJACK_TEXT_ENV.profile);
+  const profile = profileKeys.length === 1 ? env[profileKeys[0]] : undefined;
+  const hasTextCredential = Object.keys(env).some((name) => textNames.some((textName) => name.toLowerCase() === textName.toLowerCase()));
+  if (appKeys.some((keys) => keys.length !== 1) || appValues.some((value) => typeof value !== "string" || value.length === 0) || hasTextCredential || profileKeys.length !== 1 || typeof profile !== "string" || profile.length === 0) {
+    throw new UserError("SSJACK_TEXT_CONTEXT_INVALID");
+  }
+
+  result[SSJACK_TEXT_ENV.endpoint] = appValues[0];
+  result[SSJACK_TEXT_ENV.token] = appValues[1];
+  result[SSJACK_TEXT_ENV.pin] = appValues[2];
+  result[SSJACK_TEXT_ENV.profile] = profile;
+  for (const name of Object.keys(result)) {
+    if (name.toLowerCase() === "ssjack_text_launch" || appNames.some((appName) => name.toLowerCase() === appName.toLowerCase())) {
+      delete result[name];
+    }
+  }
+  return result;
+}
+
 /** Scrub only the supplied environment copy, including stale case variants on every OS. */
 export function clearSsjackEnvironment(environment: Record<string, string | undefined>): void {
-  const names = new Set(Object.values(SSJACK_ENV).map((name) => name.toLowerCase()));
+  const names = new Set([...Object.values(SSJACK_ENV), ...Object.values(SSJACK_TEXT_ENV), "SSJACK_TEXT_LAUNCH"].map((name) => name.toLowerCase()));
   for (const name of Object.keys(environment)) {
     if (names.has(name.toLowerCase())) delete environment[name];
   }

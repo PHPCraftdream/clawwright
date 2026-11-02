@@ -51,6 +51,9 @@ func check(root string) (report, error) {
 		return lineCount(data), nil
 	}
 	approved := approvedTask251(legacy)
+	for path, blob := range approvedTask258(legacy, task258CurrentReceipts()) {
+		approved[path] = blob
+	}
 	for path, blob := range approvedLicenseCallers(legacy) {
 		approved[path] = blob
 	}

@@ -5,7 +5,7 @@
 import type { AppCommand } from "#src/core/app.ts";
 import { materializeCommands } from "#src/core/command/index.ts";
 
-import { APPLY_CONFIG } from "#src/commands/orchestration/config.ts";
+import { APPLY_CONFIG, SSJACK_TEXT } from "#src/commands/orchestration/config.ts";
 import { INSPECT, DOCTOR } from "#src/commands/orchestration/inspect/gather.ts";
 import { PLAN } from "#src/commands/orchestration/plan.ts";
 import { APPLY } from "#src/commands/orchestration/apply.ts";
@@ -246,5 +246,11 @@ export const orchestrationCommands: Record<string, AppCommand> = materializeComm
       "Kept separate from `apply`: its {--dry-run} really validates against the target (lockless, " +
       "even before the instance is healthy), and {--dump} {--force} deliberately overwrites an " +
       "existing declaration — `apply` does neither.",
+  },
+  "deploy-text": {
+    summary: "Deploy a reference-only text template through SSJack",
+    group: "change",
+    ...SSJACK_TEXT,
+    details: "Submits the local UTF-8 template literally through the explicitly selected text-hydrate profile. This does not support structured desired-state config or recipe placeholders.",
   },
 });

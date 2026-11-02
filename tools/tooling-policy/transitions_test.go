@@ -133,6 +133,94 @@ func TestControlRunnerRejectsTamperingAndNearMisses(t *testing.T) {
 	}
 }
 
+func TestTask258TransitionsRequireExactPathBaselineAndReceipt(t *testing.T) {
+	const (
+		buildPath = "tools/checks/foundation/packaging/build-output.check.ts"
+		clientPath = "tools/checks/runtime/transport/remote/ssjack-client.check.ts"
+		buildOld = "1c5015bc4c6afac4744138357cffbf72376faafc"
+		clientOld = "3682aaf124ecf03f97e57c128711682c37bb5734"
+		buildCurrent = "fixture-build-output-current"
+		clientCurrent = "fixture-ssjack-client-current"
+	)
+	legacy := map[string]inventory{
+		buildPath: {mode: "100644", blob: buildOld},
+		clientPath: {mode: "100644", blob: clientOld},
+	}
+	receipts := map[string]string{buildPath: buildCurrent, clientPath: clientCurrent}
+	approved := approvedTask258(legacy, receipts)
+	if len(approved) != 2 || approved[buildPath] != buildCurrent || approved[clientPath] != clientCurrent {
+		t.Fatalf("exact receipts not approved: %v", approved)
+	}
+	check := func(name, path, blob string, old map[string]inventory, receipt map[string]string, wantViolation bool) {
+		t.Helper()
+		got := evaluateWithTransitions(map[string]inventory{path: {mode: "100644", blob: blob}}, old, func(inventory) (int, error) { return 1, nil }, approvedTask258(old, receipt))
+		if violated := len(got.Violations) != 0; violated != wantViolation {
+			t.Errorf("%s: violations=%v want=%t", name, got.Violations, wantViolation)
+		}
+	}
+	if got := approvedTask258(legacy, nil); len(got) != 0 {
+		t.Fatalf("empty task258 receipts were not fail-closed: %v", got)
+	}
+	check("approved build", buildPath, buildCurrent, legacy, receipts, false)
+	check("approved client", clientPath, clientCurrent, legacy, receipts, false)
+	check("tampered build current", buildPath, "tampered-current", legacy, receipts, true)
+	check("tampered client current", clientPath, "tampered-current", legacy, receipts, true)
+	check("wrong path", "tools/checks/other.check.ts", buildCurrent, legacy, receipts, true)
+	check("wrong build baseline", buildPath, buildCurrent, map[string]inventory{buildPath: {mode: "100644", blob: "wrong-baseline"}}, receipts, true)
+	check("wrong client baseline", clientPath, clientCurrent, map[string]inventory{clientPath: {mode: "100644", blob: "wrong-baseline"}}, receipts, true)
+	check("build receipt on client path", clientPath, buildCurrent, legacy, receipts, true)
+	check("client receipt on build path", buildPath, clientCurrent, legacy, receipts, true)
+	missingReceipt := map[string]string{buildPath: buildCurrent}
+	if got := approvedTask258(legacy, missingReceipt); len(got) != 1 || got[clientPath] != "" {
+		t.Fatalf("missing current receipt was not fail-closed: %v", got)
+	}
+}
+
+func TestTask258CurrentReceiptsMatchReviewedSource(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const (
+		buildPath = "tools/checks/foundation/packaging/build-output.check.ts"
+		clientPath = "tools/checks/runtime/transport/remote/ssjack-client.check.ts"
+		buildOld = "1c5015bc4c6afac4744138357cffbf72376faafc"
+		clientOld = "3682aaf124ecf03f97e57c128711682c37bb5734"
+	)
+	baselines := map[string]string{buildPath: buildOld, clientPath: clientOld}
+	receipts := task258CurrentReceipts()
+	if len(receipts) != len(baselines) {
+		t.Fatalf("expected current receipts for both task258 paths; got %v", receipts)
+	}
+	for path, oldReceipt := range baselines {
+		receipt := receipts[path]
+		if len(receipt) != 40 {
+			t.Errorf("%s current receipt missing or not a full 40-character blob ID: %q", path, receipt)
+			continue
+		}
+		for _, c := range receipt {
+			if !strings.ContainsRune("0123456789abcdef", c) {
+				t.Errorf("%s current receipt is not lowercase hexadecimal: %q", path, receipt)
+				break
+			}
+		}
+		baselineBytes, err := git(root, "show", baseline+":"+path)
+		if err != nil {
+			t.Fatalf("read immutable baseline %s: %v", path, err)
+		}
+		if got := gitBlobID(baselineBytes); got != oldReceipt {
+			t.Errorf("%s immutable baseline blob=%s, expected reviewed old blob=%s", path, got, oldReceipt)
+		}
+		currentBytes, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil {
+			t.Fatalf("read current source %s: %v", path, err)
+		}
+		if got := gitBlobID(currentBytes); got != receipt {
+			t.Errorf("%s current source blob=%s, receipt=%s", path, got, receipt)
+		}
+	}
+}
+
 func TestTask251TransitionsAreExactAndPathBound(t *testing.T) {
 	root, err := filepath.Abs("../..")
 	if err != nil {
@@ -145,6 +233,10 @@ func TestTask251TransitionsAreExactAndPathBound(t *testing.T) {
 	legacy := make(map[string]inventory, len(transitions))
 	current := make(map[string]inventory, len(transitions))
 	for path, pair := range transitions {
+		if receipt := task258CurrentReceipts()[path]; receipt != "" {
+			pair.current = receipt
+			transitions[path] = pair
+		}
 		baselineBytes, err := git(root, "show", baseline+":"+path)
 		if err != nil {
 			t.Fatalf("read immutable baseline %s: %v", path, err)
@@ -163,6 +255,9 @@ func TestTask251TransitionsAreExactAndPathBound(t *testing.T) {
 		current[path] = inventory{mode: "100644", blob: pair.current}
 	}
 	approved := approvedTask251(legacy)
+	for path, blob := range approvedTask258(legacy, task258CurrentReceipts()) {
+		approved[path] = blob
+	}
 	if len(approved) != len(transitions) {
 		t.Fatalf("approved %d of %d exact transitions", len(approved), len(transitions))
 	}

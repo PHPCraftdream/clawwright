@@ -84,8 +84,11 @@ export async function createTransport(config: TransportConfig = {}): Promise<Tra
   const distro = config.wslDistro ?? DEFAULT_WSL_DISTRO;
   const platform = config.platform ?? hostPlatform.current;
 
+  const textLaunchPresent = Object.keys(process.env).some((name) => name.toLowerCase() === "ssjack_text_launch");
+  if (textLaunchPresent) throw new UserError("SSJACK_TEXT_CONTEXT_NOT_TRANSPORT");
+
   if (location === "auto" || location === "ssjack") {
-    const bootstrap = ssjackBootstrap();
+    const bootstrap = ssjackBootstrap(process.env);
     if (bootstrap !== undefined) {
       const client = new SsjackClient(bootstrap);
       const info = await client.info();

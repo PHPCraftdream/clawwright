@@ -106,6 +106,29 @@ func approvedTask251(legacy map[string]inventory) map[string]string {
 	return approved
 }
 
+func task258CurrentReceipts() map[string]string {
+	return map[string]string{
+		"tools/checks/foundation/packaging/build-output.check.ts": "3708a8afdce4fd67c0503b767e0c93e28e1aa5f2",
+		"tools/checks/runtime/transport/remote/ssjack-client.check.ts": "e4d9a05f9dee8c068183e1f11136e5e3a24bd57b",
+	}
+}
+
+func approvedTask258(legacy map[string]inventory, currentReceipts map[string]string) map[string]string {
+	transitions := map[string]string{
+		"tools/checks/foundation/packaging/build-output.check.ts": "1c5015bc4c6afac4744138357cffbf72376faafc",
+		"tools/checks/runtime/transport/remote/ssjack-client.check.ts": "3682aaf124ecf03f97e57c128711682c37bb5734",
+	}
+	approved := make(map[string]string, len(transitions))
+	for path, baseline := range transitions {
+		old, exists := legacy[path]
+		current := currentReceipts[path]
+		if exists && old.blob == baseline && current != "" {
+			approved[path] = current
+		}
+	}
+	return approved
+}
+
 func approvedControlProfile(b []byte) ([]byte, error) {
 	pairs := [][2]string{
 		{`    mount(MS_BIND | MS_REMOUNT | MS_RDONLY)

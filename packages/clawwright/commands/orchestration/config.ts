@@ -20,6 +20,12 @@ import type { RecipePathOwner } from "#src/set/ownership/recipe-paths.ts";
 import type { ArgumentSpec, ParsedCall } from "#src/core/command/spec.ts";
 import { commandBody, parseCall, specShape } from "#src/core/command/index.ts";
 import { BREAK_FOREIGN_LOCK_ARGUMENT } from "#src/commands/interface/groups/shared-arguments.ts";
+import { UserError } from "#src/core/io/log.ts";
+import { text } from "#src/core/values/kinds.ts";
+import { readSsjackTextInput } from "#src/runtime/transport/remote/text/input.ts";
+import { parseCanonicalTextReferences } from "#src/runtime/transport/remote/text/canonical.ts";
+import { ssjackTextEnvironment } from "#src/runtime/transport/remote/ssjack-contract.ts";
+import { ssjackTextBootstrap, SsjackTextClient, type SsjackTextStatus } from "#src/runtime/transport/remote/text/client.ts";
 
 export const APPLY_CONFIG_ARGUMENTS = [
   { name: "dry-run", summary: "Validate without writing", description: "Validate the apply without writing; refused together with --dump", kind: "flag", effect: "read" },
@@ -303,3 +309,45 @@ async function dumpDesiredState(ctx: Context, force: boolean, jsonOnly = false):
   info(RECOVERED_VALUES_NOTE);
   info("recipes are not part of desired-state.json, so there is nothing to recover them into");
 }
+
+const ssjackTextFailure = (): UserError => new UserError("SSJACK_TEXT_OPERATION_FAILED");
+
+export async function deploySsjackText(
+  input: { file: string; template: string; profile: string },
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): Promise<SsjackTextStatus> {
+  try {
+    parseCanonicalTextReferences(input.template);
+    const bootstrap = ssjackTextBootstrap(ssjackTextEnvironment(env));
+    if (bootstrap === undefined || bootstrap.profile !== input.profile) throw ssjackTextFailure();
+    const client = new SsjackTextClient(bootstrap);
+    return await client.textHydrate(input.file, input.template);
+  } catch {
+    throw ssjackTextFailure();
+  }
+}
+
+async function selectedSsjackText(file: string, templatePath: string, profile: string): Promise<SsjackTextStatus> {
+  try {
+    const template = await readSsjackTextInput(templatePath);
+    return await deploySsjackText({ file, template, profile }, process.env);
+  } catch {
+    throw ssjackTextFailure();
+  }
+}
+
+export const SSJACK_TEXT = commandBody({
+  effect: "change",
+  needs: "nothing",
+  arguments: [
+    { name: "file", description: "Destination granted by the remote profile", kind: "option", valueName: "PATH", required: true, value: text("a granted destination path", { leadingDash: "allow" }) },
+    { name: "template", description: "Local reference-only text template", kind: "option", valueName: "PATH", required: true, value: text("a reference-only template path", { leadingDash: "allow" }) },
+    { name: "profile", description: "Expected grant profile", kind: "option", valueName: "NAME", required: true, value: text("an expected text profile", { leadingDash: "allow" }) },
+  ],
+  prepare: async (call) => ({ file: call.values.file, template: call.values.template, profile: call.values.profile }),
+  run: async (_scope, plan) => {
+    const status = await selectedSsjackText(plan.file, plan.template, plan.profile);
+    emit(`${JSON.stringify({ status })}\n`);
+    return status === "received" ? 0 : 1;
+  },
+});

@@ -1,5 +1,8 @@
 import { curlQuote, parseResponse, STATUS_TRAILER } from "./curl.ts";
 import { bytes, cap, deadline, limit, requestValue, sanitize } from "./safety.ts";
+import { parseCanonicalTextReferences } from "#src/runtime/transport/remote/text/canonical.ts";
+import { ssjackTextEnvironment } from "#src/runtime/transport/remote/ssjack-contract.ts";
+import { ssjackTextBootstrap, SsjackTextClient } from "#src/runtime/transport/remote/text/client.ts";
 import { DEFAULT_OUTPUT_BYTES_MAX, DEFAULT_TIMEOUT_MS, RecipeKitRefusal, REQUEST_BYTES_MAX } from "./types.ts";
 import type { ConsumerRequest, ConsumerResponse, RecipeContext } from "./types.ts";
 
@@ -76,4 +79,26 @@ export async function consumerFetch(ctx: RecipeContext, request: ConsumerRequest
   }
   const body = redact(parsed.body);
   return { status: parsed.status, headers, body: cap(body, max), truncated: bytes(body) > max };
+}
+
+export interface DeployTextInput {
+  file: string;
+  template: string;
+  profile: string;
+}
+
+/** Hydrate reference-only text through the dedicated SSJack text capability. */
+export async function deployText(
+  ctx: RecipeContext,
+  input: DeployTextInput,
+): Promise<"withheld" | "received" | "unknown"> {
+  if (ctx.dryRun === true) throw new RecipeKitRefusal("invalid-request");
+  try {
+    parseCanonicalTextReferences(input.template);
+    const bootstrap = ssjackTextBootstrap(ssjackTextEnvironment(process.env));
+    if (bootstrap === undefined || bootstrap.profile !== input.profile) throw new Error();
+    return await new SsjackTextClient(bootstrap).textHydrate(input.file, input.template);
+  } catch {
+    throw new RecipeKitRefusal("transport");
+  }
 }

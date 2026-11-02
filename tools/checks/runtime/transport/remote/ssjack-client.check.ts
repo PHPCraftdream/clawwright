@@ -1,5 +1,15 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { parseCanonicalTextReferences } from "#framework/runtime/transport/remote/text/canonical.ts";
+import { readSsjackTextInput, readSsjackTextInputFrom, type SsjackTextInputFiles } from "#framework/runtime/transport/remote/text/input.ts";
+import { SsjackTextClient } from "#framework/runtime/transport/remote/text/client.ts";
+import { executeCommand } from "#framework/core/command/execute.ts";
+import { orchestrationCommands } from "#framework/commands/interface/groups/openclawCommands.orchestration.ts";
+import { withOutputSink } from "#framework/core/io/output.ts";
+import { deployText } from "#framework/recipe-kit/index.ts";
 import assert from "node:assert/strict";
 import { createHash, X509Certificate } from "node:crypto";
+import { constants } from "node:fs";
 import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { createServer } from "node:https";
 import { tmpdir } from "node:os";
@@ -7,6 +17,7 @@ import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { spawnLocal, createTransport, SsjackTransport } from "#framework/runtime/transport/transport.ts";
 import { SSJACK_ENV, SsjackClient, ssjackBootstrap, validateBootstrap } from "#framework/runtime/transport/remote/ssjack-client.ts";
+import { ssjackTextEnvironment } from "#framework/runtime/transport/remote/ssjack-contract.ts";
 import { maskSecrets } from "#framework/core/io/log.ts";
 
 const token = "a".repeat(64);
@@ -43,7 +54,7 @@ try {
   const cert = await readFile(certFile);
   const actualPin = createHash("sha256").update(new X509Certificate(cert).raw).digest("hex");
   let count = 0;
-  let mode: "normal" | "incompatible" | "redirect" | "oversize" | "invalid-utf8" | "wrong-id" | "tool-error" = "normal";
+  let mode: "normal" | "incompatible" | "redirect" | "oversize" | "invalid-utf8" | "wrong-id" | "wrong-jsonrpc" | "missing-result" | "tool-error" = "normal";
   const info = { protocol: 1, profile: "dev.profile", commit: "fixture", chunk_size: 16384, capabilities: ["exec", "stdin", "binary", "backpressure", "cancel"], cancellation: "connection-only" };
   const binary = Buffer.from([0, 255, 128, 10, 195, 169]);
   const server = createServer({ key, cert, minVersion: "TLSv1.3" }, async (req, res) => {
@@ -61,7 +72,13 @@ try {
     const result = message.method === "initialize"
       ? { protocolVersion: "2025-06-18", serverInfo: { name: "fixture", version: "1" }, capabilities: { tools: {} } }
       : { structuredContent: message.params?.name === "transport_info" ? { ...info, protocol: mode === "incompatible" ? 2 : 1 } : { stream: "stdout", data: binary.toString("base64"), done: false, exit_code: -1 }, ...(mode === "tool-error" ? { isError: true } : {}) };
-    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ jsonrpc: "2.0", id: mode === "wrong-id" && message.method !== "initialize" && message.params?.name !== "transport_info" ? -1 : message.id, result }));
+    const replyId = mode === "wrong-id" && message.method !== "initialize" && message.params?.name !== "transport_info" ? -1 : message.id;
+    const envelope = {
+      jsonrpc: mode === "wrong-jsonrpc" ? "1.0" : "2.0",
+      id: replyId,
+      ...(mode === "missing-result" ? {} : { result }),
+    };
+    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(envelope));
   });
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
   const endpoint = `https://127.0.0.1:${(server.address() as AddressInfo).port}/mcp`;
@@ -114,6 +131,7 @@ try {
     for (const [failureMode, expected] of [
       ["redirect", /SSJACK_HTTP_REJECTED/], ["oversize", /SSJACK_RESPONSE_TOO_LARGE/],
       ["invalid-utf8", /SSJACK_RESPONSE_INVALID/], ["wrong-id", /SSJACK_RPC_REJECTED/],
+      ["wrong-jsonrpc", /SSJACK_RPC_REJECTED/], ["missing-result", /SSJACK_RPC_REJECTED/],
       ["tool-error", /SSJACK_TOOL_REJECTED/],
     ] as const) {
       const current = client();
@@ -138,3 +156,364 @@ try {
 } finally {
   await rm(scratch, { recursive: true, force: true });
 }
+
+async function checkTextAdapter(): Promise<void> {
+  // Independent immutable Go-canonical byte vector. Keep field order as the Go
+  // producer emits it; IDs intentionally differ so field swaps cannot pass.
+  const objectId = "0123456789abcdef0123456789abcdef";
+  const snapshotId = "1123456789abcdef0123456789abcdef";
+  const storeId = "2123456789abcdef0123456789abcdef";
+  const versionId = "3123456789abcdef0123456789abcdef";
+  const valid = `{"$ssjack":{"format":"ssjack-secret-ref-v1","object_id":"${objectId}","snapshot_id":"${snapshotId}","store_id":"${storeId}","version_id":"${versionId}"}}`;
+  const second = (n: string) => {
+    const id = Number.parseInt(n, 16).toString(16).padStart(32, "0");
+    return `{"$ssjack":{"format":"ssjack-secret-ref-v1","object_id":"${id}","snapshot_id":"${snapshotId}","store_id":"${storeId}","version_id":"${id}"}}`;
+  };
+  assert.equal(parseCanonicalTextReferences(`prefix ${valid} suffix`)[0].store_id, storeId);
+  assert.deepEqual(parseCanonicalTextReferences(`${valid} ${valid}`).length, 1, "identical references deduplicate");
+  assert.equal(parseCanonicalTextReferences(Array.from({ length: 16 }, (_, i) => i === 0 ? valid : second((i + 1).toString(16))).join(" ")).length, 16);
+  const duplicateKey = `{"$ssjack":{"format":"ssjack-secret-ref-v1","object_id":"${objectId}","object_id":"${objectId}","snapshot_id":"${snapshotId}","store_id":"${storeId}","version_id":"${versionId}"}}`;
+  const malformedId = valid.replace(objectId, "not-a-32-hex-id");
+  for (const invalid of [
+    duplicateKey,
+    malformedId,  valid.replace('"object_id":"' + objectId + '","snapshot_id":"' + snapshotId, '"snapshot_id":"' + snapshotId + '","object_id":"' + objectId),
+    valid.replace('"object_id":"' + objectId, '"object_id": "' + objectId),
+    valid.replace('"object_id":"' + objectId, '"object_id":"' + "0".repeat(32)),
+    valid.replace('"store_id":"' + storeId, '"store_id":"' + "0".repeat(32)),
+    valid.replace('"$ssjack":', '"$ssjack": '),
+    valid.replace('"$ssjack"', '"\\u0024ssjack"'),
+    `${valid} ${"x".repeat(32768)}`,
+    `${valid}\ud800`,
+    Array.from({ length: 17 }, (_, i) => i === 0 ? valid : second((i + 1).toString(16))).join(" "),
+    `${valid} ${second("4").replace(snapshotId, "4".repeat(32))}`,
+    `${valid} ${second("5").replace(storeId, "5".repeat(32))}`,
+  ]) assert.throws(() => parseCanonicalTextReferences(invalid), /SSJACK_TEXT_TEMPLATE_INVALID/);
+
+  const validTextEnvironment = {
+    SSJACK_TEXT_LAUNCH: "1",
+    SSJACK_TEXT_PROFILE: "human.profile",
+    SSJACK_APP_ENDPOINT: "https://127.0.0.1:12345/mcp",
+    SSJACK_APP_TOKEN: "a".repeat(64),
+    SSJACK_APP_CERTIFICATE_SHA256: "b".repeat(64),
+  };
+  const mappedTextEnvironment = ssjackTextEnvironment(validTextEnvironment);
+  assert.equal(mappedTextEnvironment.SSJACK_TEXT_ENDPOINT, validTextEnvironment.SSJACK_APP_ENDPOINT);
+  assert.equal(mappedTextEnvironment.SSJACK_TEXT_PROFILE, validTextEnvironment.SSJACK_TEXT_PROFILE);
+  assert.equal(mappedTextEnvironment.SSJACK_TEXT_TOKEN, validTextEnvironment.SSJACK_APP_TOKEN);
+  assert.equal(mappedTextEnvironment.SSJACK_TEXT_CERTIFICATE_SHA256, validTextEnvironment.SSJACK_APP_CERTIFICATE_SHA256);
+  assert.equal(mappedTextEnvironment.SSJACK_APP_ENDPOINT, undefined);
+  assert.equal(validTextEnvironment.SSJACK_APP_ENDPOINT, 'https://127.0.0.1:12345/mcp');
+  for (const invalidEnvironment of [
+    { ...validTextEnvironment, SSJACK_TEXT_LAUNCH: "2" },
+    { ...validTextEnvironment, SSJACK_APP_TOKEN: undefined },
+    { ...validTextEnvironment, ssjack_text_launch: "1" },
+    { ...validTextEnvironment, ssjack_app_endpoint: "https://127.0.0.1:12345/mcp" },
+    { ...validTextEnvironment, SSJACK_TEXT_TOKEN: "c".repeat(64) },
+  ]) assert.throws(() => ssjackTextEnvironment(invalidEnvironment), /SSJACK_TEXT_CONTEXT_INVALID/);
+
+  let opened = 0;
+  const stat = { size: 1, dev: 1, ino: 2, isFile: () => true };
+  const fifo: SsjackTextInputFiles = {
+    lstat: async () => ({ ...stat, isFile: () => false }),
+    open: async (_path, flags) => {
+      opened++;
+      assert.notEqual(flags & constants.O_NONBLOCK, 0);
+      throw new Error("unexpected open");
+    },
+  };
+  await assert.rejects(readSsjackTextInputFrom("fifo", fifo), /SSJACK_TEXT_INPUT_FAILED/);
+  assert.equal(opened, 0);
+
+  const fakeFile = (openedStat: typeof stat, data: Buffer) => {
+    let readcalls = 0;
+    let closed = false;
+    const files: SsjackTextInputFiles = {
+      lstat: async () => stat,
+      open: async (_path, flags) => {
+        assert.notEqual(flags & constants.O_NONBLOCK, 0);
+        return {
+          stat: async () => openedStat,
+          read: async (buffer, offset, length) => {
+            readcalls++;
+            const bytesRead = Math.min(length, data.length);
+            data.copy(buffer, offset, 0, bytesRead);
+            data = data.subarray(bytesRead);
+            return { bytesRead };
+          },
+          close: async () => {
+            closed = true;
+          },
+        };
+      },
+    };
+    return { files, readcalls: () => readcalls, closed: () => closed };
+  };
+  for (const openedStat of [
+    { ...stat, isFile: () => false }, { ...stat, dev: 2 }, { ...stat, ino: 3 },
+  ]) {
+    const fixture = fakeFile(openedStat, Buffer.from(valid));
+    await assert.rejects(readSsjackTextInputFrom("changed", fixture.files), /SSJACK_TEXT_INPUT_FAILED/);
+    assert.equal(fixture.readcalls(), 0);
+    assert.equal(fixture.closed(), true);
+  }
+  const sameIdentity = fakeFile(stat, Buffer.from(valid));
+  assert.equal(await readSsjackTextInputFrom("same", sameIdentity.files), valid);
+  assert.equal(sameIdentity.readcalls(), 2);
+  assert.equal(sameIdentity.closed(), true);
+
+  let consumed = 0;
+  let closed = false;
+  const growing: SsjackTextInputFiles = {
+    lstat: async () => stat,
+    open: async (_path, flags) => {
+      assert.notEqual(flags & constants.O_NONBLOCK, 0);
+      return {
+        stat: async () => stat,
+        read: async (buffer, offset, length) => {
+          const bytesRead = Math.min(length, 65536 - consumed);
+          buffer.fill(120, offset, offset + bytesRead);
+          consumed += bytesRead;
+          return { bytesRead };
+        },
+        close: async () => {
+          closed = true;
+        },
+      };
+    },
+  };
+  await assert.rejects(readSsjackTextInputFrom("grow", growing), /SSJACK_TEXT_INPUT_FAILED/);
+  assert.equal(consumed, 32769);
+  assert.equal(closed, true);
+
+  const scratch = await mkdtemp(join(tmpdir(), "ssjack-text-input-check-"));
+  try {
+    const normal = join(scratch, "template.txt");
+    await writeFile(normal, valid, "utf8");
+    assert.equal(await readSsjackTextInput(normal), valid);
+    const oversized = join(scratch, "oversized.txt");
+    await writeFile(oversized, `${valid}${"x".repeat(32769)}`);
+    await assert.rejects(readSsjackTextInput(oversized), /SSJACK_TEXT_INPUT_FAILED/);
+    const badUtf8 = join(scratch, "invalid-utf8.txt");
+    await writeFile(badUtf8, Buffer.from([0xc3, 0x28]));
+    await assert.rejects(readSsjackTextInput(badUtf8), /SSJACK_TEXT_INPUT_FAILED/);
+    const bom = join(scratch, "bom.txt");
+    await writeFile(bom, Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(valid)]));
+    assert.equal((await readSsjackTextInput(bom)).charCodeAt(0), 0xfeff);
+    await assert.rejects(readSsjackTextInput(scratch), /SSJACK_TEXT_INPUT_FAILED/);
+    assert.ok((await readFile(normal, "utf8")).includes(objectId));
+
+    // Generate a synthetic certificate when this check runs in CI.
+    const openssl = promisify(execFile);
+    const certPath = join(scratch, "cert.pem");
+    const keyPath = join(scratch, "key.pem");
+    await openssl("openssl", [
+      "req",
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-nodes",
+      "-keyout",
+      keyPath,
+      "-out",
+      certPath,
+      "-days",
+      "1",
+      "-subj",
+      "/CN=127.0.0.1",
+      "-addext",
+      "subjectAltName=IP:127.0.0.1",
+    ]);
+    const cert = await readFile(certPath, "utf8");
+    const key = await readFile(keyPath, "utf8");
+    const pin = createHash("sha256").update(new X509Certificate(cert).raw).digest("hex");
+    const server = createServer({ cert, key });
+  let replymode:
+    | "normal"
+    | "statusinvalid"
+    | "wrongid"
+    | "missingstructured"
+    | "extra-key"
+    | "drop"
+    | "malformed-json"
+    | "wrong-jsonrpc"
+    | "missing-result" = "normal";
+  let wireStatus: "received" | "withheld" | "unknown" = "received";
+    let capabilities = ["text_hydrate"];
+    let advertisedProfile = "human.profile";
+    let hydrateCount = 0;
+    let captured: Record<string, unknown> | undefined;
+    server.on("request", (request, response) => {
+      assert.equal(request.headers.authorization, `Bearer ${"a".repeat(64)}`);
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk: Buffer) => chunks.push(chunk));
+      request.on("end", () => {
+        const message = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { id: number; method: string; params?: { name: string; arguments: Record<string, unknown> } };
+        if (message.method === "notifications/initialized") {
+          response.writeHead(202).end();
+          return;
+        }
+        const { id, method, params } = message;
+        let result: unknown;
+        if (method === "initialize") result = { protocolVersion: "2025-06-18" };
+        else if (method === "tools/call" && params?.name === "transport_info") {
+          result = { structuredContent: { protocol: 1, profile: advertisedProfile, capabilities } };
+        } else {
+          hydrateCount++;
+          captured = params?.arguments;
+          if (replymode === "malformed-json") {
+            response.writeHead(200, { "Content-Type": "application/json" });
+            response.end("{");
+            return;
+          }
+          if (replymode === "drop") {
+            response.destroy();
+            return;
+          }
+          if (replymode === "missingstructured") result = {};
+          else if (replymode === "extra-key") result = { structuredContent: { status: wireStatus, extra: true } };
+          else result = { structuredContent: { status: replymode === "statusinvalid" ? "bogus" : wireStatus } };
+        }
+        const replyId = params?.name === "text_hydrate" && replymode === "wrongid" ? id + 1 : id;
+        const hydration = params?.name === "text_hydrate";
+        const envelope = { jsonrpc: hydration && replymode === "wrong-jsonrpc" ? "1.0" : "2.0", id: replyId, ...(hydration && replymode === "missing-result" ? {} : { result }) };
+        response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(envelope));
+      });
+    });
+    server.listen(0, "127.0.0.1");
+    await new Promise<void>((resolve) => server.once("listening", resolve));
+    const endpoint = `https://127.0.0.1:${(server.address() as AddressInfo).port}/mcp`;
+    const client = () => new SsjackTextClient({
+      endpoint,
+      token: "a".repeat(64),
+      pin,
+      profile: "human.profile",
+    });
+    try {
+      for (const mode of ["normal", "statusinvalid", "wrongid", "missingstructured", "extra-key", "drop", "malformed-json", "wrong-jsonrpc", "missing-result"] as const) {
+        replymode = mode;
+        wireStatus = "received";
+        const before = hydrateCount;
+        const current = client();
+        const expected = mode === "normal" ? "received" : "unknown";
+        assert.equal(await current.textHydrate("fixture.txt", valid, { timeoutMs: 3000 }), expected);
+        assert.equal(hydrateCount, before + 1);
+        assert.deepEqual(Object.keys(captured!).sort(), ["file", "mode", "operation_id", "template"]);
+        assert.equal(captured!.file, "fixture.txt");
+        assert.equal(captured!.mode, "hydrate-v1");
+        assert.equal(captured!.template, valid);
+        assert.match(captured!.operation_id as string, /^[A-Za-z0-9_-]{22}$/);
+        assert.equal(Buffer.from(captured!.operation_id as string, "base64url").length, 16);
+        await assert.rejects(current.textHydrate("fixture.txt", valid), /SSJACK_TEXT_OPERATION_FAILED/);
+      }
+      replymode = "normal";
+      for (const status of ["received", "withheld", "unknown"] as const) {
+        wireStatus = status;
+        const current = client();
+        const before = hydrateCount;
+        assert.equal(await current.textHydrate("fixture.txt", valid, { timeoutMs: 3000 }), status);
+        assert.equal(hydrateCount, before + 1);
+        await assert.rejects(current.textHydrate("fixture.txt", valid), /SSJACK_TEXT_OPERATION_FAILED/);
+      }
+      wireStatus = "received";
+      const before = hydrateCount;
+      advertisedProfile = "other.profile";
+      await assert.rejects(client().textHydrate("fixture.txt", valid, { timeoutMs: 3000 }), /SSJACK_TEXT_OPERATION_FAILED/);
+      assert.equal(hydrateCount, before);
+      advertisedProfile = "human.profile";
+      capabilities = ["text_hydrate", "exec"];
+      const unsupported = client();
+      await assert.rejects(unsupported.textHydrate("fixture.txt", valid, { timeoutMs: 3000 }), /SSJACK_TEXT_OPERATION_FAILED/);
+      assert.equal(hydrateCount, before);
+      capabilities = ["text_hydrate"];
+      // Invalid input is also rejected before dispatching a hydrate operation.
+      await assert.rejects(client().textHydrate("", valid, { timeoutMs: 3000 }), /SSJACK_TEXT_OPERATION_FAILED/);
+      assert.equal(hydrateCount, before);
+      const priorEnvironment = new Map<string, string | undefined>();
+      const contextNames = ["SSJACK_TEXT_LAUNCH", "SSJACK_APP_ENDPOINT", "SSJACK_APP_TOKEN", "SSJACK_APP_CERTIFICATE_SHA256", "SSJACK_TEXT_ENDPOINT", "SSJACK_TEXT_TOKEN", "SSJACK_TEXT_CERTIFICATE_SHA256", "SSJACK_TEXT_PROFILE"];
+      for (const name of contextNames) {
+        priorEnvironment.set(name, process.env[name]);
+        delete process.env[name];
+      }
+      try {
+        process.env.SSJACK_TEXT_LAUNCH = "1";
+        process.env.SSJACK_APP_ENDPOINT = endpoint;
+        process.env.SSJACK_APP_TOKEN = "a".repeat(64);
+        process.env.SSJACK_APP_CERTIFICATE_SHA256 = pin;
+        process.env.SSJACK_TEXT_PROFILE = "human.profile";
+        const app = { name: "fixture", description: "fixture", commands: orchestrationCommands };
+        const invoke = (argv: string[]) => executeCommand(app, "deploy-text", { kind: "argv", argv }, { surface: "terminal" });
+        const call = async (argv: string[]) => {
+          const output: string[] = [];
+          const result = await withOutputSink((chunk) => {
+            output.push(chunk);
+          }, () => invoke(argv));
+          return { result, output: output.join("") };
+        };
+        const liveContext = new Map(contextNames.map((name) => [name, process.env[name]]));
+        for (const name of contextNames) delete process.env[name];
+        const beforeUnavailable = hydrateCount;
+        const unavailable = await call(["--file", "fixture.txt", "--template", normal, "--profile", "human.profile"]);
+        assert.equal(unavailable.result.reachedRun, true);
+        assert.ok(unavailable.result.error);
+        assert.equal(hydrateCount, beforeUnavailable);
+        for (const [name, value] of liveContext) {
+          if (value === undefined) delete process.env[name];
+          else process.env[name] = value;
+        }
+        replymode = "normal";
+        wireStatus = "received";
+        const validCall = await call(["--file", "fixture.txt", "--template", normal, "--profile", "human.profile"]);
+        assert.equal(validCall.result.reachedRun, true);
+        assert.equal(validCall.result.error, undefined);
+        assert.equal(validCall.output, '{"status":"received"}\n');
+        for (const status of ["unknown", "withheld"] as const) {
+          wireStatus = status;
+          const outcome = await call(["--file", "fixture.txt", "--template", normal, "--profile", "human.profile"]);
+          assert.equal(outcome.result.reachedRun, true);
+          assert.equal(outcome.result.exitCode, 1);
+          assert.equal(outcome.output, `{"status":"${status}"}\n`);
+        }
+        wireStatus = "received";
+        const beforeRefusals = hydrateCount;
+        const missing = await call(["--file", "fixture.txt", "--template", normal]);
+        assert.equal(missing.result.stage, "parse");
+        const unknown = await executeCommand(app, "apply-config", { kind: "argv", argv: ["--text-template", normal] }, { surface: "terminal" });
+        assert.equal(unknown.stage, "parse");
+        assert.equal(hydrateCount, beforeRefusals);
+        delete process.env.SSJACK_TEXT_PROFILE;
+        const partial = await call(["--file", "fixture.txt", "--template", normal, "--profile", "human.profile"]);
+        assert.equal(partial.result.reachedRun, true);
+        assert.ok(partial.result.error);
+        assert.equal(hydrateCount, beforeRefusals);
+
+        process.env.SSJACK_TEXT_PROFILE = "human.profile";
+        const noRuntime = { dryRun: false, runtime: { runOneOff: async () => { throw new Error("generic runtime invoked"); } } };
+        assert.equal(await deployText(noRuntime as never, { file: "fixture.txt", template: valid, profile: "human.profile" }), "received");
+        for (const status of ["unknown", "withheld"] as const) {
+          wireStatus = status;
+          assert.equal(await deployText(noRuntime as never, { file: "fixture.txt", template: valid, profile: "human.profile" }), status);
+        }
+        wireStatus = "received";
+        await assert.rejects(deployText({ ...noRuntime, dryRun: true } as never, { file: "fixture.txt", template: valid, profile: "human.profile" }));
+        for (const location of ["auto", "local", "wsl", "ssh", "ssjack"]) {
+          await assert.rejects(createTransport({ location, platform: "linux", sshHost: "fixture@host" }), /SSJACK_TEXT_CONTEXT_NOT_TRANSPORT/);
+        }
+        for (const name of contextNames) delete process.env[name];
+        const ordinaryLocal = await createTransport({ location: "local", platform: "linux" });
+        assert.ok(ordinaryLocal);
+      } finally {
+        for (const [name, value] of priorEnvironment) {
+          if (value === undefined) delete process.env[name];
+          else process.env[name] = value;
+        }
+      }
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
+await checkTextAdapter();
