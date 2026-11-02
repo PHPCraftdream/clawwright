@@ -113,6 +113,7 @@ jobs:
         run: |
           set -euo pipefail
           go test -run='Test(EncodeLaunchPacket|ParseKeeperConfig|ParseServiceProof245|KeeperInheritedPipes)' ./task245-native-supervisor
+          go test -run='^(TestStartupDiagnostics|TestStartGatewayDiagnosticsFailures)$' ./task245-native-supervisor
           go test ./task245-native-content ./task240-native-policy ./task240-native-provider ./task245-lab-broker
           go test ./task245-control-profile/cmd/control-profile ./task245-control-profile/cmd/control-probe ./task245-control-profile/cmd/native-metadata ./task245-control-profile/cmd/metadata-regression ./task245-control-profile/internal/proof ./task245-control-profile/internal/regression
           go test ./task245-acceptance/fixtures/gateway ./task245-acceptance/fixtures/release ./task245-acceptance/internal/runner ./task245-acceptance/internal/service ./task245-acceptance/internal/diagnostics ./task245-acceptance/cmd/acceptance ./task245-acceptance/cmd/profile

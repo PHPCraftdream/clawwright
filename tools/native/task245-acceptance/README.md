@@ -41,3 +41,9 @@ Direct-kernel release-test failure stdout is bounded and filtered to finite cano
 Authorized log run `41395624886` on `8d0b32d` recorded a connected generic app failure with no inner-stage result. Five negative cases reached checkpoint 24 through stages 1–3, then stage 4; the lost-ack child reported 101 and the other four reported 255. The log contains a failure excerpt only. Confinement/source success is parent-reported and is not established by that log. Earlier component CI `41395542057` success and policy/feature success are also parent-reported; neither changes the published migration evidence nor establishes this current, unexecuted follow-up.
 
 Cause remains undetermined: worker exit cannot be distinguished from peer EOF or context stop. Worker exit 101 marks startGateway, not proof of cause; 255 may reflect a signaled wait and is not a generic diagnosis. Current changes add finite profile-stage and broker-wait-kind, signal, lifecycle-reason and errno diagnostics for the next public run; they do not claim a cause fix. Owning source-authored tests and the next CI run remain required. Readback NOT RUN.
+
+## Task 250 startup diagnostics follow-up (source-only; NOT RUN)
+
+The source workflow additionally selects TestStartupDiagnostics and TestStartGatewayDiagnosticsFailures from ./task245-native-supervisor. Existing kernel cases and deadlines are unchanged. Current finite service code/role/case and worker startup stage/errno diagnostics are authored for the next parent public run, not execution evidence.
+
+Run 41397094959 on 17d9a45f reports connected stage=service_preflight. Wrong-holder reports worker wait exit 101; the other four negatives report peer EOF followed by SIGKILL 9. Cleanup is a possible source of that signal, not an established initiating cause. No intended scenario outcome or root cause is established. These follow-up changes are NOT RUN.

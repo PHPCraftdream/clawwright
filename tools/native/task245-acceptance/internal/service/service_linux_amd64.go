@@ -27,6 +27,14 @@ const authDir = "/run/task245-services"
 
 type Error struct{ Code string }
 
+type PreflightError struct {
+	Role, Case string
+	Cause      error
+}
+
+func (e *PreflightError) Error() string { return "service preflight failed" }
+func (e *PreflightError) Unwrap() error { return e.Cause }
+
 func (e *Error) Error() string { return "service attestation: " + e.Code }
 func fail(code string) error  { return &Error{Code: code} }
 

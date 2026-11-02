@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"clawforge/tools/native/task240-native/task245-acceptance/internal/diagnostics"
+	"clawforge/tools/native/task240-native/task245-acceptance/internal/service"
 )
 
 const lab = "/lab"
@@ -222,9 +223,30 @@ func reportProfileFailure(w io.Writer, err error) error {
 		return nil
 	}
 	var failure profileFailure
+	var serviceErr *service.Error
+	var preflightErr *service.PreflightError
+	hasServiceErr := errors.As(err, &serviceErr)
+	hasPreflightErr := errors.As(err, &preflightErr)
+	isServiceFailure := hasServiceErr || hasPreflightErr
 	if errors.As(err, &failure) && diagnostics.ProfileStage(failure.stage) {
 		if _, writeErr := fmt.Fprintln(w, "task245-profile: stage="+failure.stage); writeErr != nil {
 			return writeErr
+		}
+	}
+	if isServiceFailure || (errors.As(err, &failure) && failure.stage == "service_preflight") {
+		role, scenario, code := "unknown", "unknown", "unknown"
+		if preflightErr != nil {
+			role = preflightErr.Role
+			scenario = preflightErr.Case
+			if scenario == "" {
+				scenario = "setup"
+			}
+		}
+		if serviceErr != nil && serviceErr.Code != "" {
+			code = serviceErr.Code
+		}
+		if err := diagnostics.ServiceFailure(w, true, role, scenario, code); err != nil {
+			return err
 		}
 	}
 	_, writeErr := fmt.Fprintln(w, "task245-profile: failed")

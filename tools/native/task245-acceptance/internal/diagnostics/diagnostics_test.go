@@ -9,6 +9,84 @@ import (
 	"testing"
 )
 
+func TestServiceFailureForwarding(t *testing.T) {
+	var got bytes.Buffer
+	if err := ServiceFailure(&got, true, "metadata", "setup", "probe-status"); err != nil {
+		t.Fatal(err)
+	}
+	var container bytes.Buffer
+	if err := ContainerFailure(&container, true, 7, 0, got.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	want := "task245-container: command_exit=7 container_exit=0\ntask245-profile: service role=metadata case=setup code=probe-status\n"
+	if container.String() != want {
+		t.Fatalf("got %q, want %q", container.String(), want)
+	}
+
+	got.Reset()
+	if err := ServiceFailure(&got, false, "metadata", "setup", "probe-status"); err != nil || got.Len() != 0 {
+		t.Fatalf("successful service emitted %q: %v", got.String(), err)
+	}
+}
+
+func TestServiceFailureSanitizesAndStrictlyParses(t *testing.T) {
+	var got bytes.Buffer
+	if err := ServiceFailure(&got, true, "malicious-role", "malicious-case", "malicious-code"); err != nil {
+		t.Fatal(err)
+	}
+	const want = "task245-profile: service role=unknown case=unknown code=unknown\n"
+	if got.String() != want || strings.Contains(got.String(), "malicious") {
+		t.Fatalf("got %q, want %q", got.String(), want)
+	}
+	for _, raw := range []string{
+		"task245-profile: service role=unexpected case=setup code=probe-status\n",
+		"task245-profile: service role=metadata case=unexpected code=probe-status\n",
+		"task245-profile: service role=metadata case=setup code=unexpected\n",
+		"task245-profile: service role=metadata case=setup code=probe-status trailing\n",
+	} {
+		if records := Records("profile", []byte(raw)); len(records) != 0 {
+			t.Errorf("accepted %q as %q", raw, records)
+		}
+	}
+}
+
+func TestWorkerStartupForwardingChain(t *testing.T) {
+	var capture Capture
+	_, _ = io.WriteString(&capture, "task245-worker: startup=tracker errno=1\n")
+	var report bytes.Buffer
+	if err := ReportFailure(&report, true, "task245-profile: checkpoints=1", capture.Bytes(), nil, "command_failed", 7); err != nil {
+		t.Fatal(err)
+	}
+	var container bytes.Buffer
+	if err := ContainerFailure(&container, true, 7, 0, report.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	want := "task245-container: command_exit=7 container_exit=0\ntask245-profile: checkpoints=1\ntask245-profile: task245-conductor: event=command_failed exit=7\ntask245-profile: task245-worker: startup=tracker errno=1\n"
+	if container.String() != want {
+		t.Fatalf("got %q, want %q", container.String(), want)
+	}
+}
+
+func TestWorkerMalformedRecordsFiltered(t *testing.T) {
+	for _, raw := range []string{
+		"task245-worker: startup=unknown errno=1\n",
+		"task245-worker: startup=tracker errno=1 trailingsecret\n",
+		"task245-worker: startup=tracker errno=01\n",
+		"task245-worker: startup=tracker errno=4096\n",
+		"task245-worker: startup=tracker errno=x\n",
+	} {
+		var capture Capture
+		_, _ = io.WriteString(&capture, raw)
+		var report bytes.Buffer
+		if err := ReportFailure(&report, true, "task245-profile: checkpoints=1", capture.Bytes(), nil, "command_failed", 7); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(report.String(), "task245-worker:") || !strings.Contains(report.String(), "task245-conductor: event=command_failed exit=7") {
+			t.Fatalf("bad worker filtering/status: %q", report.String())
+		}
+	}
+}
+
 func TestReportFailureSanitizesAndOrdersCapture(t *testing.T) {
 	var broker, metadata Capture
 	for _, p := range []string{"task245-broker: stage=2\ntask245-init: checkpoint=110 ", "errno=7\ntask245-broker: child=3\npassword=hunter2\n"} {

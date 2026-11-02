@@ -158,6 +158,18 @@ func parseRecord(source, line string) (string, bool) {
 		}
 		n, ok := number(strings.TrimPrefix(fields[2], "exit="), -1, 255)
 		return "task245-conductor: " + fields[1] + " exit=" + strconv.Itoa(n), ok
+	case "worker":
+		if len(fields) != 3 || fields[0] != "task245-worker:" || !strings.HasPrefix(fields[1], "startup=") || !strings.HasPrefix(fields[2], "errno=") {
+			return "", false
+		}
+		startup := strings.TrimPrefix(fields[1], "startup=")
+		switch startup {
+		case "context", "node", "stub", "provider", "packet", "gate_pipe", "args_pipe", "fork", "tracker", "args_write", "args_close", "gate_write", "gate_close":
+		default:
+			return "", false
+		}
+		errno, ok := number(strings.TrimPrefix(fields[2], "errno="), 0, 4095)
+		return "task245-worker: startup=" + startup + " errno=" + strconv.Itoa(errno), ok
 	case "profile":
 		return parseProfile(line)
 	}
@@ -194,7 +206,7 @@ func parseProfile(line string) (string, bool) {
 	if body == "checkpoints=absent" {
 		return prefix + body, true
 	}
-	for _, source := range []string{"broker", "metadata", "conductor", "init"} {
+	for _, source := range []string{"broker", "metadata", "conductor", "init", "worker"} {
 		if safe, ok := parseRecord(source, body); ok {
 			return prefix + safe, true
 		}
@@ -215,7 +227,64 @@ func parseProfile(line string) (string, bool) {
 		}
 		return prefix + cp + strings.Join(values, "-"), true
 	}
+	if strings.HasPrefix(body, "service ") {
+		fields := strings.Split(body, " ")
+		if len(fields) != 4 || fields[0] != "service" || !strings.HasPrefix(fields[1], "role=") || !strings.HasPrefix(fields[2], "case=") || !strings.HasPrefix(fields[3], "code=") {
+			return "", false
+		}
+		role := strings.TrimPrefix(fields[1], "role=")
+		scenario := strings.TrimPrefix(fields[2], "case=")
+		code := strings.TrimPrefix(fields[3], "code=")
+		if !validServiceRole(role) || !validServiceCase(scenario) || !validServiceCode(code) {
+			return "", false
+		}
+		return prefix + "service role=" + role + " case=" + scenario + " code=" + code, true
+	}
 	return "", false
+}
+
+func validServiceRole(s string) bool {
+	switch s {
+	case "unknown", "metadata", "broker":
+		return true
+	default:
+		return false
+	}
+}
+
+func validServiceCase(s string) bool {
+	switch s {
+	case "unknown", "setup", "good", "bad_pid", "bad_start", "bad_exe_inode", "bad_socket_inode", "malformed_hash", "malformed_record", "unprivileged_record", "unprivileged_socket", "wrong_service":
+		return true
+	default:
+		return false
+	}
+}
+
+func validServiceCode(s string) bool {
+	switch s {
+	case "unknown", "attestation-directory", "attestation-exists", "auth-dir-cleanup", "bad-proof-fixture", "child-stop", "ci-required", "control-harness-hash", "directory", "executable-file", "executable-size", "file-open", "file-size", "forged-listener-handoff", "forged-listener-timeout", "fresh-root-ci-required", "harness-replace", "harness-restore", "harness-restore-hash", "kill-refused", "lab-not-readonly", "listener", "listener-owner", "listener-table", "malformed-hash", "malformed-record", "preflight-not-fresh", "preflight-path", "preflight-timeout", "process", "process-changed", "process-executable", "process-exited", "process-fds", "process-stat", "probe-status", "probe-timeout", "profile-marker", "proof-mutate", "proof-read", "publish", "publish-write", "readiness-timeout", "reap-timeout", "remove", "role", "role-path", "root-required", "runtime-dir", "runtime-dir-changed", "runtime-dir-cleanup", "scenario", "scenario-changed", "scenario-cleanup", "socket", "socket-changed", "socket-chown", "socket-cleanup", "start", "synthetic-dir", "synthetic-parent", "synthetic-root", "wrong-executable-accepted", "wrong-role-proof":
+		return true
+	default:
+		return false
+	}
+}
+
+func ServiceFailure(w io.Writer, failed bool, role, scenario, code string) error {
+	if !failed {
+		return nil
+	}
+	if !validServiceRole(role) {
+		role = "unknown"
+	}
+	if !validServiceCase(scenario) {
+		scenario = "unknown"
+	}
+	if !validServiceCode(code) {
+		code = "unknown"
+	}
+	record := "task245-profile: service role=" + role + " case=" + scenario + " code=" + code + "\n"
+	return ForwardFailure(w, true, []byte(record))
 }
 
 func ForwardFailure(w io.Writer, failed bool, raw []byte) error {
@@ -252,7 +321,7 @@ func ReportFailure(w io.Writer, failed bool, checkpoint string, broker, metadata
 	for _, pair := range []struct {
 		source string
 		raw    []byte
-	}{{"broker", broker}, {"init", broker}, {"metadata", metadata}} {
+	}{{"broker", broker}, {"init", broker}, {"metadata", metadata}, {"worker", broker}} {
 		for _, record := range Records(pair.source, pair.raw) {
 			profile = append(profile, "task245-profile: "+record)
 		}

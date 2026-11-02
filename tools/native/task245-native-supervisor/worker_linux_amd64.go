@@ -76,17 +76,72 @@ func(r *execRegistry245)wasRejectedExec()bool{if r==nil{return false};r.mu.Lock(
 func(r *execRegistry245)record(pid int,role string)error{if r==nil||pid<=0||role==""{return errDomainWorker};r.mu.Lock();defer r.mu.Unlock();if _,ok:=r.roles[pid];ok{return errDomainWorker};r.roles[pid]=role;return nil}
 func(r *execRegistry245)brokerIDs()[]int{if r==nil{return nil};r.mu.Lock();defer r.mu.Unlock();ids:=make([]int,0);for pid,role:=range r.roles{if role=="broker"{ids=append(ids,pid)}};sort.Ints(ids);return ids}
 func(r *execRegistry245)isProvider(pid int)bool{if r==nil{return false};r.mu.Lock();defer r.mu.Unlock();return r.roles[pid]=="provider"}
-func startGateway(ctx context.Context,c workerConfig)(*admission.TraceTracker,int,error){
- bad:=func()(*admission.TraceTracker,int,error){return nil,0,errDomainWorker}
- if ctx==nil||ctx.Err()!=nil { return bad() }; if _,ok:=ctx.Deadline();!ok{return bad()}
- node,e:=openPinnedExec(c.Node,c.NodeSHA256);if e!=nil{return bad()};defer node.Close()
- stub,e:=openPinnedExec(c.Stub,c.StubSHA256);if e!=nil{return bad()};defer stub.Close()
- provider,e:=openPinnedExec(c.Provider,c.ProviderSHA256);if e!=nil{return bad()};defer provider.Close()
- packet,e:=encodeLaunchPacket(c.GatewayArgv,c.ConfigPath,c.SocketPath);if e!=nil{return bad()}
- gateR,gateW,e:=os.Pipe();if e!=nil{return bad()};defer gateR.Close();defer gateW.Close()
- argsR,argsW,e:=os.Pipe();if e!=nil{return bad()};defer argsR.Close();defer argsW.Close()
- pid,e:=syscall.ForkExec(c.Stub,[]string{c.Stub},&syscall.ProcAttr{Dir:"/",Env:[]string{},Files:[]uintptr{0,1,2,node.Fd(),gateR.Fd(),argsR.Fd()},Sys:&syscall.SysProcAttr{}});if e!=nil{return bad()};_ = gateR.Close();_ = argsR.Close()
- root:=pid
+func startGateway(ctx context.Context, c workerConfig) (*admission.TraceTracker, int, error) {
+	return startGatewayDiagnostics(ctx, c, os.Stderr)
+}
+
+func startGatewayDiagnostics(ctx context.Context, c workerConfig, w io.Writer) (*admission.TraceTracker, int, error) {
+	bad := func(stage string, err error) (*admission.TraceTracker, int, error) {
+		writeStartupDiagnostic(w, stage, err)
+		return nil, 0, errDomainWorker
+	}
+	if ctx == nil || ctx.Err() != nil {
+		return bad("context", errDomainWorker)
+	}
+	if _, ok := ctx.Deadline(); !ok {
+		return bad("context", errDomainWorker)
+	}
+
+	node, e := openPinnedExec(c.Node, c.NodeSHA256)
+	if e != nil {
+		return bad("node", e)
+	}
+	defer node.Close()
+
+	stub, e := openPinnedExec(c.Stub, c.StubSHA256)
+	if e != nil {
+		return bad("stub", e)
+	}
+	defer stub.Close()
+
+	provider, e := openPinnedExec(c.Provider, c.ProviderSHA256)
+	if e != nil {
+		return bad("provider", e)
+	}
+	defer provider.Close()
+
+	packet, e := encodeLaunchPacket(c.GatewayArgv, c.ConfigPath, c.SocketPath)
+	if e != nil {
+		return bad("packet", e)
+	}
+
+	gateR, gateW, e := os.Pipe()
+	if e != nil {
+		return bad("gate_pipe", e)
+	}
+	defer gateR.Close()
+	defer gateW.Close()
+
+	argsR, argsW, e := os.Pipe()
+	if e != nil {
+		return bad("args_pipe", e)
+	}
+	defer argsR.Close()
+	defer argsW.Close()
+
+	pid, e := syscall.ForkExec(c.Stub, []string{c.Stub}, &syscall.ProcAttr{
+		Dir:  "/",
+		Env:  []string{},
+		Files: []uintptr{0, 1, 2, node.Fd(), gateR.Fd(), argsR.Fd()},
+		Sys:  &syscall.SysProcAttr{},
+	})
+	if e != nil {
+		return bad("fork", e)
+	}
+	_ = gateR.Close()
+	_ = argsR.Close()
+
+	root := pid
  guard:=func(tid int,generation uint64)error{
   if tid<=0{return errDomainWorker}
   exe,e:=os.Open("/proc/"+strconv.Itoa(tid)+"/exe");if e!=nil{return errDomainWorker};defer exe.Close()
@@ -103,11 +158,48 @@ func startGateway(ctx context.Context,c workerConfig)(*admission.TraceTracker,in
   fields:=strings.Split(string(b[:len(b)-1]),"\x00");if len(fields)!=len(argv){return errDomainWorker};for i:=range argv{if fields[i]!=argv[i]{return errDomainWorker}}
   tgid,e:=getTaskTGID(tid);if e!=nil{return errDomainWorker};return c.registry.record(tgid,role)
  }
- tracker,e:=admission.NewGuardedTraceTracker(ctx,pid,guard);if e!=nil{_ = syscall.Kill(pid,syscall.SIGKILL);var ws syscall.WaitStatus;_,_=syscall.Wait4(pid,&ws,0,nil);return bad()}
- fail:=func()(*admission.TraceTracker,int,error){tracker.Close();return nil,0,errDomainWorker}
- if e=writeAll(argsW,packet);e!=nil{return fail()};if e=argsW.Close();e!=nil{return fail()}
- if e=writeAll(gateW,[]byte{0xa5});e!=nil{return fail()};if e=gateW.Close();e!=nil{return fail()}
- return tracker,pid,nil
+	tracker, e := admission.NewGuardedTraceTracker(ctx, pid, guard)
+	if e != nil {
+		writeStartupDiagnostic(w, "tracker", e)
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+		var ws syscall.WaitStatus
+		_, _ = syscall.Wait4(pid, &ws, 0, nil)
+		return nil, 0, errDomainWorker
+	}
+	fail := func(stage string, err error) (*admission.TraceTracker, int, error) {
+		writeStartupDiagnostic(w, stage, err)
+		tracker.Close()
+		return nil, 0, errDomainWorker
+	}
+	if e = writeAll(argsW, packet); e != nil {
+		return fail("args_write", e)
+	}
+	if e = argsW.Close(); e != nil {
+		return fail("args_close", e)
+	}
+	if e = writeAll(gateW, []byte{0xa5}); e != nil {
+		return fail("gate_write", e)
+	}
+	if e = gateW.Close(); e != nil {
+		return fail("gate_close", e)
+	}
+	return tracker, pid, nil
+}
+func writeStartupDiagnostic(w io.Writer, stage string, err error) {
+	switch stage {
+	case "context", "node", "stub", "provider", "packet", "gate_pipe", "args_pipe", "fork", "tracker", "args_write", "args_close", "gate_write", "gate_close":
+	default:
+		return
+	}
+	var errno syscall.Errno
+	code := 0
+	if errors.As(err, &errno) {
+		code = int(errno)
+	}
+	if code < 0 || code > 4095 {
+		code = 0
+	}
+	_, _ = io.WriteString(w, "task245-worker: startup="+stage+" errno="+strconv.Itoa(code)+"\n")
 }
 func getTaskTGID(tid int)(int,error){f:=mustOpenProc(tid,"status");if f==nil{return 0,errDomainWorker};defer f.Close();b,e:=io.ReadAll(io.LimitReader(f,1<<20));if e!=nil{return 0,e};for _,line:=range strings.Split(string(b),"\n"){if strings.HasPrefix(line,"Tgid:"){n,e:=strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line,"Tgid:")));if e==nil&&n>0{return n,nil};return 0,errDomainWorker}};return 0,errDomainWorker}
 func mustOpenProc(pid int,name string)*os.File{f,e:=os.Open("/proc/"+strconv.Itoa(pid)+"/"+name);if e!=nil{return nil};return f}

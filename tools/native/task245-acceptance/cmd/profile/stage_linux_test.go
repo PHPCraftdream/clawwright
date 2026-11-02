@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"clawforge/tools/native/task240-native/task245-acceptance/internal/diagnostics"
+	"clawforge/tools/native/task240-native/task245-acceptance/internal/service"
 )
 
 func TestReportProfileFailureNestedStage(t *testing.T) {
@@ -42,6 +43,62 @@ func TestReportProfileFailureUnknownStageIsFiltered(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "secret") {
 		t.Fatalf("report leaked secret: %q", out.String())
+	}
+}
+
+func TestReportProfileFailureServicePreflightMetadata(t *testing.T) {
+	err := atProfileStage("service_preflight", &service.PreflightError{
+		Role: "metadata",
+		Case: "good",
+		Cause: &service.Error{Code: "probe-status"},
+	})
+	var direct bytes.Buffer
+	if err := reportProfileFailure(&direct, err); err != nil {
+		t.Fatal(err)
+	}
+	var outer bytes.Buffer
+	if err := diagnostics.ContainerFailure(&outer, true, 7, 0, direct.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	want := "task245-container: command_exit=7 container_exit=0\ntask245-profile: stage=service_preflight\ntask245-profile: service role=metadata case=good code=probe-status\n"
+	if outer.String() != want {
+		t.Fatalf("outer diagnostics = %q, want %q", outer.String(), want)
+	}
+}
+
+func TestReportProfileFailureServicePreflightUnknownCause(t *testing.T) {
+	err := atProfileStage("service_preflight", &service.PreflightError{
+		Cause: errors.New("private cause"),
+	})
+	var direct bytes.Buffer
+	if err := reportProfileFailure(&direct, err); err != nil {
+		t.Fatal(err)
+	}
+	var outer bytes.Buffer
+	if err := diagnostics.ContainerFailure(&outer, true, 7, 0, direct.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	want := "task245-container: command_exit=7 container_exit=0\ntask245-profile: stage=service_preflight\ntask245-profile: service role=unknown case=setup code=unknown\n"
+	if outer.String() != want {
+		t.Fatalf("outer diagnostics = %q, want %q", outer.String(), want)
+	}
+	if strings.Contains(outer.String(), "private") {
+		t.Fatalf("report leaked private cause: %q", outer.String())
+	}
+}
+
+func TestReportProfileFailureServicePreflightUnsafeValuesFallback(t *testing.T) {
+	err := atProfileStage("service_preflight", &service.PreflightError{
+		Role: "private-role",
+		Case: "private-case",
+		Cause: &service.Error{Code: "private-code"},
+	})
+	var direct bytes.Buffer
+	if err := reportProfileFailure(&direct, err); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := direct.String(), "task245-profile: stage=service_preflight\ntask245-profile: service role=unknown case=unknown code=unknown\ntask245-profile: failed\n"; got != want {
+		t.Fatalf("report = %q, want %q", got, want)
 	}
 }
 

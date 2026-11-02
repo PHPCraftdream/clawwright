@@ -277,7 +277,7 @@ func CheckServices(ctx context.Context) (result error) {
 				}
 			}
 			if err = serveCase(role, tc, brokerHash); err != nil {
-				return err
+				return &PreflightError{Role: role, Case: tc, Cause: err}
 			}
 		}
 	}

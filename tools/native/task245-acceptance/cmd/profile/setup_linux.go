@@ -321,7 +321,7 @@ func runProfile(scenario string) (result error) {
 	defer cancel()
 	stage = "service_preflight"
 	if err = service.CheckServices(ctx); err != nil {
-		return errors.New("service preflight failed")
+		return err
 	}
 	stage = "ceremony"
 	return runCeremony(scenario, supervisor, keeper, broker)

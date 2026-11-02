@@ -85,6 +85,54 @@ var ready [160]byte;if n,x:=r.Read(ready[:]);x!=nil||n!=160||string(ready[:8])!=
 
 }
 
+func TestStartupDiagnostics(t *testing.T) {
+	var output bytes.Buffer
+	writeStartupDiagnostic(&output, "invalid", syscall.EACCES)
+	if output.Len() != 0 {
+		t.Fatal("invalid startup stage emitted a diagnostic")
+	}
+	writeStartupDiagnostic(&output, "node", errors.Join(errors.New("wrapped"), syscall.EACCES))
+	if got, want := output.String(), "task245-worker: startup=node errno=13\n"; got != want {
+		t.Fatalf("diagnostic = %q, want %q", got, want)
+	}
+}
+
+func TestStartGatewayDiagnosticsFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name, stage string
+		ctx func() (context.Context, context.CancelFunc)
+		config func(*testing.T) workerConfig
+		want string
+	}{
+		{
+			name: "missing node", stage: "node",
+			ctx: func() (context.Context, context.CancelFunc) { return context.WithTimeout(context.Background(), time.Second) },
+			config: func(t *testing.T) workerConfig {
+				return workerConfig{Node: filepath.Join(t.TempDir(), "missing-node")}
+			},
+			want: "task245-worker: startup=node errno=2\n",
+		},
+		{
+			name: "canceled context", stage: "context",
+			ctx: func() (context.Context, context.CancelFunc) { ctx, cancel := context.WithCancel(context.Background()); cancel(); return ctx, cancel },
+			config: func(*testing.T) workerConfig { return workerConfig{} },
+			want: "task245-worker: startup=context errno=0\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			ctx, cancel := tc.ctx()
+			defer cancel()
+			_, pid, err := startGatewayDiagnostics(ctx, tc.config(t), &output)
+			if pid != 0 || !errors.Is(err, errDomainWorker) {
+				t.Fatalf("startGatewayDiagnostics returned pid=%d err=%v", pid, err)
+			}
+			if got := output.String(); got != tc.want {
+				t.Fatalf("diagnostic = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
 func TestEncodeLaunchPacketHasFixedBigEndianLength(t *testing.T) {
 	got, err := encodeLaunchPacket([]string{"serve", "--safe"}, "/etc/native/config", "/run/native.sock")
 	if err != nil { t.Fatal("encodeLaunchPacket rejected valid fields") }
