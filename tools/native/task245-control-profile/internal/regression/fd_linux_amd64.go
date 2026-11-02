@@ -3,9 +3,16 @@
 package regression
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"time"
 	"syscall"
+
+	"clawforge/tools/native/task240-native/task245-control-profile/internal/metadata"
 )
 
 const (
@@ -208,6 +215,194 @@ func CheckFilteredDescriptors(original bool) error {
 	_, err = syscall.Pwrite(fixedFD, []byte("release"), 0)
 	if err = expectErr("pwrite protected", err, syscall.EPERM); err != nil {
 		return err
+	}
+	return nil
+}
+
+func InitialIdentityChild(executed bool) error {
+	if os.Getuid() != 65534 || os.Geteuid() != 65534 || os.Getenv("GITHUB_ACTIONS") != "true" {
+		return syscall.EACCES
+	}
+	marker := "READY\n"
+	if executed {
+		marker = "EXEC\n"
+	}
+	if _, err := io.WriteString(os.Stdout, marker); err != nil {
+		return err
+	}
+	var gate [1]byte
+	_, err := io.ReadFull(os.Stdin, gate[:])
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if executed || gate[0] != 'E' {
+		return syscall.EINVAL
+	}
+	return syscall.Exec("/lab/bin/harness", []string{"/lab/bin/harness", "--initial-identity-exec"}, []string{"GITHUB_ACTIONS=true", "LANG=C", "LC_ALL=C"})
+}
+
+func runInitialIdentityCase(executable string, transition bool) (retErr error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	defer cancel()
+	cmd := exec.Command(executable, "--initial-identity-child")
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{
+			Uid:         65534,
+			Gid:         65534,
+			Groups:      []uint32{},
+			NoSetGroups: true,
+		},
+	}
+	cmd.Env = []string{"GITHUB_ACTIONS=true", "LANG=C", "LC_ALL=C"}
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		_ = stdin.Close()
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		_ = stdin.Close()
+		_ = stdout.Close()
+		return err
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+	owned := true
+	var start uint64
+	defer func() {
+		_ = stdin.Close()
+		_ = stdout.Close()
+		if owned {
+			wasConsumed, cleanupErr := terminateOwnedCmd(cmd, start, done, ctx, "life_kill_holder", "life_holder_wait")
+			if wasConsumed {
+				owned = false
+			}
+			retErr = errors.Join(retErr, cleanupErr)
+		}
+	}()
+	if start, err = procStartTicks(cmd.Process.Pid); err != nil {
+		return err
+	}
+	readMarker := func(want string) error {
+		type resultType struct {
+			data []byte
+			err  error
+		}
+		result := make(chan resultType, 1)
+		go func() {
+			data := make([]byte, len(want))
+			_, readErr := io.ReadFull(stdout, data)
+			result <- resultType{data, readErr}
+		}()
+		select {
+		case got := <-result:
+			if got.err != nil {
+				return got.err
+			}
+			if string(got.data) != want {
+				return fmt.Errorf("unexpected initial identity marker %q", got.data)
+			}
+			return nil
+		case waitErr := <-done:
+			owned = false
+			return fmt.Errorf("initial identity child exited before %q: %w", want, waitErr)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	if err := readMarker("READY\n"); err != nil {
+		return err
+	}
+	changed := false
+	identityErr := metadata.InitialPeerIdentityRegression(cmd.Process.Pid, start, func(stage int) error {
+		if stage != 3 || !transition {
+			return nil
+		}
+		if _, err := stdin.Write([]byte{'E'}); err != nil {
+			return err
+		}
+		if err := readMarker("EXEC\n"); err != nil {
+			return err
+		}
+		changed = true
+		return nil
+	})
+	if transition {
+		if identityErr != nil {
+			return identityErr
+		}
+		if !changed {
+			return errors.New("initial identity regression did not observe exec transition")
+		}
+		exeInfo, err := os.Stat(fmt.Sprintf("/proc/%d/exe", cmd.Process.Pid))
+		if err != nil {
+			return err
+		}
+		harnessInfo, err := os.Stat("/lab/bin/harness")
+		if err != nil {
+			return err
+		}
+		controlInfo, err := os.Stat("/lab/control-profile")
+		if err != nil {
+			return err
+		}
+		exeStat, ok := exeInfo.Sys().(*syscall.Stat_t)
+		if !ok {
+			return errors.New("cannot inspect process executable identity")
+		}
+		harnessStat, ok := harnessInfo.Sys().(*syscall.Stat_t)
+		if !ok {
+			return errors.New("cannot inspect harness identity")
+		}
+		controlStat, ok := controlInfo.Sys().(*syscall.Stat_t)
+		if !ok {
+			return errors.New("cannot inspect control profile identity")
+		}
+		if exeStat.Dev != harnessStat.Dev || exeStat.Ino != harnessStat.Ino {
+			return errors.New("process executable does not match /lab/bin/harness device/inode")
+		}
+		if exeStat.Dev == controlStat.Dev && exeStat.Ino == controlStat.Ino {
+			return errors.New("process executable still matches /lab/control-profile device/inode")
+		}
+		if err := verifyProcessIdentity(cmd.Process.Pid, start); err != nil {
+			return err
+		}
+	} else {
+		if !errors.Is(identityErr, syscall.EACCES) {
+			return fmt.Errorf("unchanged identity result %v, want EACCES", identityErr)
+		}
+		if err := verifyProcessIdentity(cmd.Process.Pid, start); err != nil {
+			return err
+		}
+		if err := holderStillAlive(cmd); err != nil {
+			return err
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+	}
+	if err := stdin.Close(); err != nil {
+		return err
+	}
+	select {
+	case waitErr := <-done:
+		owned = false
+		if waitErr != nil {
+			return fmt.Errorf("initial identity child exit: %w", waitErr)
+		}
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 	return nil
 }

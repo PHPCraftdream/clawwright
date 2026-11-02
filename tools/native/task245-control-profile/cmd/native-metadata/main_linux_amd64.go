@@ -5,9 +5,25 @@ package main
 import (
 	"fmt"
 	"os"
+	"errors"
+	"syscall"
 
 	"clawforge/tools/native/task240-native/task245-control-profile/internal/metadata"
 )
+
+func canceledFailure(err error) {
+	stage := "unknown"
+	switch metadata.FailureStage(err) {
+	case "peer_credential", "peer_start", "peer_identity", "root_open", "registration", "listener_probe", "notifier_loop":
+		stage = metadata.FailureStage(err)
+	}
+	var errno syscall.Errno
+	n := 0
+	if errors.As(err, &errno) && errno <= 4095 {
+		n = int(errno)
+	}
+	fmt.Fprintf(os.Stderr, "metadata-regression: stage=daemon_%s class=error errno=%d exit=0 signal=0\n", stage, n)
+}
 
 func main() {
 	if len(os.Args) != 2 {
@@ -33,7 +49,7 @@ func main() {
 		}
 	case "--owning-regression-daemon-canceled":
 		if err := metadata.ServeCanceledRegression(); err != nil {
-			fmt.Fprintln(os.Stderr, "metadata-daemon:", err)
+			canceledFailure(err)
 			os.Exit(1)
 		}
 	case "--owning-regression-daemon-fsync":

@@ -61,6 +61,50 @@ func artifact(path string) (inode, error) {
 	return inode{Device: uint64(st.Dev), Number: st.Ino}, nil
 }
 
+func initialPeerIdentity(peer processIdentity, observe func(index int) error) (inode, error) {
+	if !sameProcess(peer, peer) {
+		return inode{}, syscall.EACCES
+	}
+	st, err := statPath(fmt.Sprintf("/proc/%d/exe", peer.PID))
+	if err != nil {
+		return inode{}, err
+	}
+	if st.Mode&syscall.S_IFMT != syscall.S_IFREG {
+		return inode{}, syscall.EACCES
+	}
+	actual := inode{Device: uint64(st.Dev), Number: st.Ino}
+	if !sameProcess(peer, peer) {
+		return inode{}, syscall.EACCES
+	}
+	paths := [...]string{"/lab/harness", "/lab/bin/harness", "/lab/bin/control-installer", "/lab/control-profile"}
+	for index, path := range paths {
+		if observe != nil {
+			if err := observe(index); err != nil {
+				return inode{}, err
+			}
+		}
+		expected, err := artifact(path)
+		if err == nil && actual == expected {
+			if !sameProcess(peer, peer) {
+				return inode{}, syscall.EACCES
+			}
+			return actual, nil
+		}
+	}
+	return inode{}, syscall.EACCES
+}
+
+func InitialPeerIdentityRegression(pid int, start uint64, observe func(int) error) error {
+	if os.Geteuid() != 0 || os.Getenv("GITHUB_ACTIONS") != "true" {
+		return syscall.EACCES
+	}
+	if pid <= 1 || start == 0 {
+		return syscall.EACCES
+	}
+	_, err := initialPeerIdentity(processIdentity{PID: pid, Start: start}, observe)
+	return err
+}
+
 func identityAt(pid int, path string) (inode, error) {
 	st, err := statPath(fmt.Sprintf("/proc/%d/exe", pid))
 	if err != nil {

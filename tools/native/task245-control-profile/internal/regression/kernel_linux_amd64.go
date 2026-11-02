@@ -225,6 +225,32 @@ func runKernelSuite(stageConfinement bool) error {
 	return nil
 }
 
+func RunInitialIdentityRegression() error {
+	if os.Geteuid() != 0 || os.Getenv("GITHUB_ACTIONS") != "true" {
+		return errors.New("initial identity regression requires root in GitHub Actions")
+	}
+	if _, err := os.Lstat("/lab"); err == nil {
+		return errors.New("initial identity regression prerequisite: /lab must be absent")
+	} else if !errors.Is(err, syscall.ENOENT) {
+		return err
+	}
+	if err := os.Mkdir("/lab", 0755); err != nil {
+		return err
+	}
+	if err := os.Mkdir("/lab/bin", 0755); err != nil {
+		return err
+	}
+	for _, dest := range [5]string{"/lab/harness", "/lab/bin/harness", "/lab/bin/control-installer", "/lab/control-profile", clientMetadataExe} {
+		if err := stageKernelBinary("/input/metadata-regression", dest); err != nil {
+			return err
+		}
+	}
+	if err := runInitialIdentityCase("/lab/control-profile", true); err != nil {
+		return err
+	}
+	return runInitialIdentityCase(clientMetadataExe, false)
+}
+
 func stageKernelBinary(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {

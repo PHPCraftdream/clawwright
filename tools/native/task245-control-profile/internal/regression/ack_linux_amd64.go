@@ -68,7 +68,7 @@ func ReportDone(stage string) {
 
 func diagnosticStage(stage string) string {
 	switch stage {
-	case "suite_ack", "suite_driver", "observer_positive", "observer_negative", "lifetime_cases", "service_proofs", "inactive", "active", "fault_write", "fault_fsync", "fault_close", "refusal_receipt", "refusal_fault", "fifo", "life_no_client", "life_handoff", "life_listener", "life_canceled", "life_hash", "life_start", "life_socket", "life_proof", "life_holder", "life_marker", "life_daemon_wait", "life_holder_wait", "life_kill_daemon", "life_kill_holder", "life_cleanup", "client_gate", "client_descriptors", "client_inactive_ack", "client_receipt", "client_active_ack", "client_identity", "client_same_image", "client_same_pid", "fd_state_contents", "fd_state_seals", "fd_state_denial", "fd_ioctl_set", "fd_ioctl_clear", "fd_operation", "fd_expected_errno":
+	case "suite_ack", "suite_driver", "observer_positive", "observer_negative", "lifetime_cases", "service_proofs", "inactive", "active", "fault_write", "fault_fsync", "fault_close", "refusal_receipt", "refusal_fault", "fifo", "life_no_client", "life_handoff", "life_listener", "life_canceled", "life_hash", "life_start", "life_socket", "life_proof", "life_holder", "life_marker", "life_daemon_wait", "life_holder_wait", "life_kill_daemon", "life_kill_holder", "life_cleanup", "daemon_peer_credential", "daemon_peer_start", "daemon_peer_identity", "daemon_root_open", "daemon_registration", "daemon_listener_probe", "daemon_notifier_loop", "daemon_unknown", "client_gate", "client_descriptors", "client_inactive_ack", "client_receipt", "client_active_ack", "client_identity", "client_same_image", "client_same_pid", "fd_state_contents", "fd_state_seals", "fd_state_denial", "fd_ioctl_set", "fd_ioctl_clear", "fd_operation", "fd_expected_errno":
 		return stage
 	default:
 		return "unknown"
@@ -86,14 +86,17 @@ func RunDiagnosticRegression() error {
 		"metadata-regression: stage=fifo class=deadline errno=0 exit=0 signal=0\n" +
 		"metadata-regression: stage=client_gate class=error errno=13 exit=0 signal=0\n" +
 		"metadata-regression: stage=client_same_pid class=error errno=13 exit=0 signal=0\n" +
-		"metadata-regression: stage=fd_state_contents class=error errno=0 exit=0 signal=0\n"
+		"metadata-regression: stage=fd_state_contents class=error errno=0 exit=0 signal=0\n" +
+		"metadata-regression: stage=daemon_peer_identity class=error errno=13 exit=0 signal=0\n"
 	for i := 0; i < len(valid); i += 3 {
 		end := min(i+3, len(valid))
 		_, _ = filter.Write([]byte(valid[i:end]))
 	}
 
 	invalid := []string{
-		"metadata-regression: stage=unknownstage class=error errno=0 exit=0 signal=0\n",
+		"metadata-regression: stage=unknownstage class=error errno=13 exit=0 signal=0\n",
+		"metadata-regression: stage=daemon_anything class=error errno=13 exit=0 signal=0\n",
+		"metadata-regression: stage=daemon_peer_identity class=error errno=13 exit=0 signal=0 trailingsecret\n",
 		"metadata-regression: stage=client_gatex class=error errno=13 exit=0 signal=0\n",
 		"metadata-regression: stage=client_gate class=error errno=13 exit=0 signal=0 payload=secret\n",
 		"metadata-regression: stage=client_gate class=error errno=13 exit=0 signal=0 trailing\n",
@@ -120,6 +123,7 @@ func RunDiagnosticRegression() error {
 		"metadata-regression: stage=client_gate class=error errno=13 exit=0 signal=0\n" +
 		"metadata-regression: stage=client_same_pid class=error errno=13 exit=0 signal=0\n" +
 		"metadata-regression: stage=fd_state_contents class=error errno=0 exit=0 signal=0\n" +
+		"metadata-regression: stage=daemon_peer_identity class=error errno=13 exit=0 signal=0\n" +
 		"metadata-regression: stage=active event=done\n"
 
 	if got.String() != want {

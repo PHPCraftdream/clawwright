@@ -13,6 +13,30 @@ import (
 
 var errDaemonTimeout = errors.New("metadata daemon lifetime expired")
 
+type serviceStageError struct {
+	stage string
+	err   error
+}
+
+func (e serviceStageError) Error() string { return e.err.Error() }
+func (e serviceStageError) Unwrap() error { return e.err }
+
+func FailureStage(err error) string {
+	var staged serviceStageError
+	if errors.As(err, &staged) {
+		switch staged.stage {
+		case "peer_credential", "peer_start", "peer_identity", "root_open", "registration", "listener_probe", "notifier_loop":
+			return staged.stage
+		}
+	}
+	return "unknown"
+}
+
+func stageError(stage string, err error) error {
+	if err == nil { return nil }
+	return serviceStageError{stage: stage, err: err}
+}
+
 func waitSocketUntil(fd int, deadline time.Time) error {
 	for {
 		remaining := time.Until(deadline)
@@ -162,36 +186,23 @@ func serveWithACKFaultDeadline(phase string, lifetime time.Duration) error {
 		0,
 	)
 	if errno != 0 {
-		return errno
+		return stageError("peer_credential", errno)
 	}
 	if credential.Uid != 65534 {
-		return syscall.EACCES
+		return stageError("peer_credential", syscall.EACCES)
 	}
 	peerStart, err := startTime(int(credential.Pid))
 	if err != nil {
-		return err
+		return stageError("peer_start", err)
 	}
 	peer := processIdentity{PID: int(credential.Pid), Start: peerStart}
-	identityPaths := []string{
-		"/lab/harness",
-		"/lab/bin/harness",
-		"/lab/bin/control-installer",
-		"/lab/control-profile",
-	}
-	matchedIdentity := false
-	for _, path := range identityPaths {
-		if _, identityErr := identityAt(peer.PID, path); identityErr == nil {
-			matchedIdentity = true
-			break
-		}
-	}
-	if !matchedIdentity {
-		return syscall.EACCES
+	if _, err := initialPeerIdentity(peer, nil); err != nil {
+		return stageError("peer_identity", err)
 	}
 
 	root, err := openMetadataRoot()
 	if err != nil {
-		return err
+		return stageError("root_open", err)
 	}
 	defer syscall.Close(root)
 
@@ -201,7 +212,7 @@ func serveWithACKFaultDeadline(phase string, lifetime time.Duration) error {
 	for {
 		if !time.Now().Before(deadline) {
 			closeRights(oob)
-			return fmt.Errorf("metadata registration timeout: %w", errDaemonTimeout)
+			return stageError("registration", fmt.Errorf("metadata registration timeout: %w", errDaemonTimeout))
 		}
 		n, on, flags, _, err = syscall.Recvmsg(client, message, oob, syscall.MSG_DONTWAIT)
 		if err == syscall.EINTR {
@@ -211,9 +222,9 @@ func serveWithACKFaultDeadline(phase string, lifetime time.Duration) error {
 			if waitErr := waitSocketUntil(client, deadline); waitErr != nil {
 				closeRights(oob)
 				if errors.Is(waitErr, errDaemonTimeout) {
-					return fmt.Errorf("metadata registration timeout: %w", waitErr)
+					return stageError("registration", fmt.Errorf("metadata registration timeout: %w", waitErr))
 				}
-				return fmt.Errorf("metadata registration poll: %w", waitErr)
+				return stageError("registration", fmt.Errorf("metadata registration poll: %w", waitErr))
 			}
 			continue
 		}
@@ -221,21 +232,21 @@ func serveWithACKFaultDeadline(phase string, lifetime time.Duration) error {
 	}
 	if err != nil {
 		closeRights(oob)
-		return err
+		return stageError("registration", err)
 	}
 	control, parseErr := syscall.ParseSocketControlMessage(oob[:on])
 	fds := collectRights(control)
 	if flags&(syscall.MSG_CTRUNC|syscall.MSG_TRUNC) != 0 || n != 8 ||
 		string(message) != "OCMETA01" || parseErr != nil || len(control) != 1 || len(fds) != 1 {
 		closeFDs(fds)
-		return errors.New("invalid notifier registration")
+		return stageError("registration", errors.New("invalid notifier registration"))
 	}
 	notifier := fds[0]
 	defer syscall.Close(notifier)
 	probe := uint64(0)
 	_, probeErr := ioctl(notifier, ioctlValid, unsafe.Pointer(&probe))
 	if probeErr != nil && probeErr != syscall.ENOENT {
-		return fmt.Errorf("invalid seccomp listener: %w", probeErr)
+		return stageError("listener_probe", fmt.Errorf("invalid seccomp listener: %w", probeErr))
 	}
 
 	svc := &service{
@@ -303,10 +314,10 @@ func serveWithACKFaultDeadline(phase string, lifetime time.Duration) error {
 		}
 	}()
 	if err := svc.loop(); err != nil {
-		return fmt.Errorf("metadata notifier lifecycle: %w", err)
+		return stageError("notifier_loop", fmt.Errorf("metadata notifier lifecycle: %w", err))
 	}
 	if phase == "canceled" && svc.canceledReceives == 0 {
-		return errors.New("canceled notification ENOENT not observed")
+		return stageError("notifier_loop", errors.New("canceled notification ENOENT not observed"))
 	}
 	if phase != "" && phase != "canceled" && (faultCalls != 1 || !errors.Is(faultErr, syscall.EBADF)) {
 		return errors.New("ACK syscall fault was not observed")

@@ -15,6 +15,18 @@ import (
 
 func main() {
 	args := os.Args[1:]
+	if len(args) == 1 && args[0] == "--initial-identity-child" {
+		if err := regression.InitialIdentityChild(false); err != nil {
+			runtimeError("metadata initial identity child", err)
+		}
+		return
+	}
+	if len(args) == 1 && args[0] == "--initial-identity-exec" {
+		if err := regression.InitialIdentityChild(true); err != nil {
+			runtimeError("metadata initial identity exec", err)
+		}
+		return
+	}
 	if len(args) == 1 && args[0] == "--proof-readiness-child" {
 		if err := regression.ProofReadinessChild(); err != nil {
 			runtimeError("metadata proof readiness child", err)
@@ -84,6 +96,11 @@ func main() {
 	}
 
 	switch args[0] {
+	case "--initial-identity-suite":
+		if err := regression.RunInitialIdentityRegression(); err != nil {
+			runtimeError("metadata initial identity regression", err)
+		}
+		fmt.Println("metadata initial identity regression: PASS")
 	case "--owned-cleanup-refusal":
 		if err := regression.RunOwnedCleanupRefusal(); err != nil {
 			runtimeError("metadata owned cleanup refusal", err)

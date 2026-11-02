@@ -196,7 +196,7 @@ func RunCanceledNotificationCase(parent context.Context) (retErr error) {
 	var stderr bytes.Buffer
 	daemon := exec.CommandContext(ctx, "/lab/bin/native-metadata", "--owning-regression-daemon-canceled")
 	daemon.Env = append(os.Environ(), "GITHUB_ACTIONS=true")
-	daemon.Stderr = &stderr
+	daemon.Stderr = io.MultiWriter(&stderr, &diagnosticFilter{out: os.Stderr})
 	control, err := daemon.StdinPipe()
 	if err != nil {
 		return err
