@@ -280,6 +280,76 @@ func runACKObserverRegression() error {
 	return nil
 }
 
+func terminateOwnedCmd(cmd *exec.Cmd, start uint64, done <-chan error, ctx context.Context, killStage, waitStage string) (consumed bool, cleanupErr error) {
+	select {
+	case waitErr := <-done:
+		ReportDone(waitStage)
+		return true, unexpectedOwnedWaitError(waitErr)
+	default:
+	}
+	if cmd == nil || cmd.Process == nil || cmd.Process.Pid <= 1 || start == 0 {
+		err := errors.New("invalid owned process identity")
+		ReportFailure(killStage, err)
+		return false, err
+	}
+	current, err := procStartTicks(cmd.Process.Pid)
+	if err != nil {
+		if os.IsNotExist(err) {
+			select {
+			case waitErr := <-done:
+				ReportDone(waitStage)
+				return true, unexpectedOwnedWaitError(waitErr)
+			case <-ctx.Done():
+				cleanupErr := errors.Join(err, ctx.Err())
+				ReportFailure(waitStage, cleanupErr)
+				return false, cleanupErr
+			}
+		}
+		ReportFailure(killStage, err)
+		return false, err
+	}
+	if current != start {
+		err = errors.New("owned process identity changed")
+		ReportFailure(killStage, err)
+		return false, err
+	}
+	ReportStage(killStage)
+	if err = cmd.Process.Kill(); err != nil {
+		ReportFailure(killStage, err)
+		if !errors.Is(err, os.ErrProcessDone) {
+			return false, err
+		}
+	} else {
+		ReportDone(killStage)
+	}
+	ReportStage(waitStage)
+	select {
+	case waitErr := <-done:
+		ReportDone(waitStage)
+		if err != nil {
+			return true, unexpectedOwnedWaitError(waitErr)
+		}
+		return true, expectedKilledWaitError(waitErr)
+	case <-ctx.Done():
+		cleanupErr := errors.Join(err, ctx.Err())
+		ReportFailure(waitStage, cleanupErr)
+		return false, cleanupErr
+	}
+}
+
+func unexpectedOwnedWaitError(err error) error {
+	return expectedKilledWaitError(err)
+}
+
+func expectedKilledWaitError(err error) error {
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() && status.Signal() == syscall.SIGKILL {
+			return nil
+		}
+	}
+	return err
+}
+
 func RunServicePeer() error {
 	if os.Getenv("GITHUB_ACTIONS") != "true" {
 		return errors.New("service peer regression requires GitHub Actions")

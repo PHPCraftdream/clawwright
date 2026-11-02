@@ -3,12 +3,14 @@
 package regression
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"syscall"
+	"time"
 
 	"clawforge/tools/native/task240-native/task245-control-profile/internal/proof"
 )
@@ -303,4 +305,125 @@ func KernelExecClient() error {
 		return err
 	}
 	return nil
+}
+
+func RunOwnedCleanupRefusal() (result error) {
+	if os.Geteuid() != 0 || os.Getenv("GITHUB_ACTIONS") != "true" {
+		return errors.New("life_cleanup: refusal fixture requires root in GitHub Actions")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	defer cancel()
+	executable, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(executable, "--owned-cleanup-child")
+	cmd.Env = []string{"GITHUB_ACTIONS=true", "LANG=C", "LC_ALL=C"}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: 65534, Gid: 65534, Groups: []uint32{}}}
+	gate, err := cmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("life_cleanup: gate: %w", err)
+	}
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("life_cleanup: stdout: %w", errors.Join(err, gate.Close()))
+	}
+	if err = cmd.Start(); err != nil {
+		return fmt.Errorf("life_cleanup: start: %w", errors.Join(err, gate.Close()))
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	start, startErr := procStartTicks(cmd.Process.Pid)
+	owned := true
+	consumed := false
+	var stages []error
+	defer func() {
+		if !owned {
+			return
+		}
+		if closeErr := gate.Close(); closeErr != nil {
+			stages = append(stages, fmt.Errorf("life_cleanup: close gate: %w", closeErr))
+		}
+		select {
+		case waitErr := <-done:
+			owned = false
+			consumed = true
+			if waitErr != nil {
+				stages = append(stages, errors.New("life_cleanup: child cleanup failed"))
+			}
+		case <-ctx.Done():
+			stages = append(stages, errors.New("life_cleanup: child cleanup timed out"))
+		}
+		result = errors.Join(result, errors.Join(stages...))
+	}()
+	if startErr != nil {
+		return fmt.Errorf("life_cleanup: start ticks: %w", startErr)
+	}
+	ready := make(chan error, 1)
+	go func() {
+		marker := make([]byte, len("OWNED_CLEANUP_READY\n"))
+		_, readErr := io.ReadFull(out, marker)
+		if readErr == nil && string(marker) != "OWNED_CLEANUP_READY\n" {
+			readErr = errors.New("marker mismatch")
+		}
+		ready <- readErr
+	}()
+	select {
+	case err = <-ready:
+		if err != nil {
+			return errors.New("life_cleanup: child readiness failed")
+		}
+	case err = <-done:
+		owned = false
+		consumed = true
+		if err != nil {
+			return errors.New("life_cleanup: child exited before readiness")
+		}
+		return errors.New("life_cleanup: child exited before readiness")
+	case <-ctx.Done():
+		return errors.New("life_cleanup: readiness timed out")
+	}
+	consumed, cleanupErr := terminateOwnedCmd(cmd, start, done, ctx, "life_kill_holder", "life_holder_wait")
+	if consumed {
+		owned = false
+	}
+	if !errors.Is(cleanupErr, syscall.EPERM) || consumed || ctx.Err() != nil {
+		return errors.New("life_cleanup: expected live-child EPERM refusal")
+	}
+	current, err := procStartTicks(cmd.Process.Pid)
+	if err != nil || current != start || holderStillAlive(cmd) != nil {
+		return errors.New("life_cleanup: refused cleanup did not preserve child")
+	}
+	if err = gate.Close(); err != nil {
+		return fmt.Errorf("life_cleanup: close gate failed: %w", err)
+	}
+	select {
+	case err = <-done:
+		owned = false
+		consumed = true
+		if err != nil || ctx.Err() != nil {
+			return errors.New("life_cleanup: child did not exit cleanly")
+		}
+	case <-ctx.Done():
+		return errors.New("life_cleanup: child exit timed out")
+	}
+	if err = cmd.Process.Kill(); !errors.Is(err, os.ErrProcessDone) {
+		return errors.New("life_cleanup: reaped process kill did not report done")
+	}
+	return nil
+}
+
+func OwnedCleanupChild() error {
+	if os.Getuid() != 65534 || os.Geteuid() != 65534 || os.Getenv("GITHUB_ACTIONS") != "true" {
+		return errors.New("life_cleanup: child identity gate failed")
+	}
+	if _, err := io.WriteString(os.Stdout, "OWNED_CLEANUP_READY\n"); err != nil {
+		return errors.New("life_cleanup: ready marker write failed")
+	}
+	var one [1]byte
+	_, err := io.ReadFull(os.Stdin, one[:])
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	return errors.New("life_cleanup: gate did not close with EOF")
 }

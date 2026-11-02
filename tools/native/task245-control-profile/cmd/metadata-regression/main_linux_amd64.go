@@ -78,6 +78,15 @@ func main() {
 	}
 
 	switch args[0] {
+	case "--owned-cleanup-refusal":
+		if err := regression.RunOwnedCleanupRefusal(); err != nil {
+			runtimeError("metadata owned cleanup refusal", err)
+		}
+		fmt.Println("metadata owned cleanup refusal: PASS")
+	case "--owned-cleanup-child":
+		if err := regression.OwnedCleanupChild(); err != nil {
+			runtimeError("metadata owned cleanup child", err)
+		}
 	case "--lifetime-handoff":
 		if err := regression.LifetimeHandoffClient(); err != nil {
 			runtimeError("metadata lifetime handoff client", err)
@@ -131,6 +140,8 @@ func runtimeError(context string, err error) {
 	switch context {
 	case "metadata cancel-ack regression":
 		stage = "suite_ack"
+	case "metadata owned cleanup refusal":
+		stage = "suite_driver"
 	case "metadata kernel driver", "metadata component kernel suite", "metadata confinement suite":
 		stage = "suite_driver"
 	}
