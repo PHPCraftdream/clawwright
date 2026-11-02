@@ -74,6 +74,12 @@ The write-isolation baseline remains 428. The preceding CI diagnostic reported 4
 
 Parent-CI receipt scope for exact review: `tools/checks/release/release/installed-consumer.check.ts`, `tools/checks/integration/apps/invocation-hints-rooted.check.ts`, `tools/checks/foundation/cli/cli-help.check.ts`, `tools/checks/kit/selection/import-graph.ts`, `tools/checks/kit/selection/import-graph.check.ts`, `tools/checks/foundation/packaging/build-output.check.ts`, and `tools/checks/release/release/package-release.check.ts`. The parent refreshed six existing current-blob receipts and added the exact immutable-baseline/current transition for the newly corrected CLI-help fixture, bringing the runtime table to 79 entries without changing the immutable baseline. These source changes and all relocation checks remain NOT RUN; only parent CI can supply execution evidence and confirm the resulting approximation count.
 
+### Windows fixture namespace follow-up
+
+Full CI `41464391536` on `c9c3ab4c` passed Linux, macOS and all three negative-control shards; policy `41464391506` also passed. Both Windows jobs retained the delegated-consumer failures. Failure-only resolver diagnostics demonstrated the canonical checkout gate and command-spec URLs alongside short-path app and command-spec URLs in the same child. The check-only apps-root override preserved the short spelling after ownership resolution selected a canonical gate: legacy imports failed the exact parent-URL guard, while current imports created a second command-spec symbol namespace.
+
+The fixture now canonicalizes its temporary checkout before deriving any source, app or override paths. Production resolution and its exact legacy-parent guard remain unchanged. Temporary resolver instrumentation is removed; delegated probes additionally require all three canonical public-module identities. Public CI must confirm this source correction; no passing Windows result is claimed here.
+
 ### Original-path removal plan
 
 The complete original package subtree at task base is inventoried by `git ls-tree -r --name-only fd59e08fa0fbeb9450b5110c6bd0c08a2404d280 -- tools/framework/`; the inventory was inspected against the relocated tree. Parent removal must delete that original subtree only, never `tools/build-framework-package.ts`, checks or other tools. Until then, the original subtree remains pending removal.
