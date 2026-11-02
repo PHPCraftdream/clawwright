@@ -70,7 +70,7 @@ const FILES: Record<string, string> = {
   ["/usr/local/bin/cw"]: "#!/bin/sh\n",
   [`${ROOT}/clawwright`]: "#!/bin/sh\n",
   [`${ROOT}/tools/clawwright.ts`]: "// gate\n",
-  [`${ROOT}/tools/framework/package.json`]: JSON.stringify({ name: "@phpcraftdream/clawwright" }),
+  [`${ROOT}/packages/clawwright/package.json`]: JSON.stringify({ name: "@phpcraftdream/clawwright" }),
   [`${ROOT}/apps/openclaw/app.ts`]: "export default {};\n",
   [`${ROOT}/apps/demo/app.ts`]: "export default {};\n",
   // The case-4 target deployment exists on the law's layout, like demo and openclaw: rows
@@ -88,13 +88,13 @@ const FILES: Record<string, string> = {
   [LOCAL_ENTRY]: "// local package entry\n",
   [`${quoteRoot}/clawwright`]: "#!/bin/sh\n",
   [`${quoteRoot}/tools/clawwright.ts`]: "// gate\n",
-  [`${quoteRoot}/tools/framework/package.json`]: JSON.stringify({ name: "@phpcraftdream/clawwright" }),
+  [`${quoteRoot}/packages/clawwright/package.json`]: JSON.stringify({ name: "@phpcraftdream/clawwright" }),
   [`${quoteRoot}/apps/demo/app.ts`]: "export default {}",
   [`${quoteRoot}/apps/x/app.ts`]: "export default {}",
 };
 const DIRS: readonly string[] = [
   `${ROOT}/apps`, `${ROOT}/apps/openclaw`, `${ROOT}/apps/demo`, `${ROOT}/apps/x`, `${ROOT}/apps/staging`, `${ROOT}/docs`,
-  `${ROOT}/tools`, `${ROOT}/tools/framework`, `${APP_LOCAL}/config`,
+  `${ROOT}/tools`, `${ROOT}/packages`, `${ROOT}/packages/clawwright`, `${APP_LOCAL}/config`,
   `${APP_LOCAL}/node_modules`, `${APP_LOCAL}/node_modules/.bin`,
   `${APP_LOCAL}/node_modules/@phpcraftdream`, `${APP_LOCAL}/node_modules/@phpcraftdream/clawwright`,
   `${APP_LOCAL}/node_modules/@phpcraftdream/clawwright/entry`,

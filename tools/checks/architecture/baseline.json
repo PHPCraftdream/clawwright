@@ -1,25 +1,25 @@
 {
   "about": "Architecture ratchets (refactor plan docs/internal/refactor-plan-2026-10-01.md, stage 0 item 2). Each number is measured from the working tree (never git) and must EQUAL the recorded value: higher fails, lower fails too — lower the baseline in the same commit as the change that reduced it. Retired: localizeOptOuts (infoRaw/reportErrorVerbatim/localizeHints) counted three symbols that no longer exist, so it could never move; the property it stood for, that the output layers print the text they are given, is pinned by advice-matrix.check.ts (info() and reportError write rendered advice un-rewritten).",
   "rawArgvScans": {
-    "comment": "invariant (rf6): membership/prefix scans over argv-like names (argv/args/rawArgv/launchArgv .includes/.indexOf/.find/... , indexOf(\"--\"), startsWith(\"--, slice(2)) in tools/framework/{entry,integration,core,commands} plus tools/clawwright.ts must be the tokenizer's, an entry seam, or an exempt line recorded with a reason — total counts occurrences including exempt ones, so any new scan fails. 38 -> 37 (rf6-p16): rollback --operation uses the shared path-segment grammar, its own prefix scan is gone. 37 -> 36 (stage 7 S2.2): parseCall and execute.ts's --json probe read the action pick from selectAction (core/command/parse.ts); their own first-word scans are gone. 36 -> 40 (stage 7 S2.4): core/values/kinds.ts arrives (its interval wrapper's message-prefix slice, and the ssh/text leading-dash refusals over one raw value), and the interval wrappers in backup/watch install slice parseInterval's refusal prefix — all one-value refusals, exempted with reasons; schedule.ts's stale exemption is deleted with the flip that removed its line. Back at 36 (stage 7 S2.4, second pass): the dash refusals are expressed without startsWith (raw[0] === \"-\"), the install wrappers call kinds.ts's shared intervalRangeRefusal (whose own line is slice-based and adds no scan), and the kinds.ts interval wrapper's line is the one exempted occurrence — the same nature schedule.ts's deleted exemption had. 36 -> 35 (stage 7 S2.8): step()'s two branch-local `--` tests collapse into one hoisted const, the completion table's actionArgument find is gone with the transition-table refactor, and the no-slot/unknown refusal no longer scans (token[0] === \"-\"); S2.8 third pass: the pending option's declared-long-token refusal moved wholly into step(), so the driver's dead lookahead and its exempt line are gone, and the dashed lookups are restricted to flags and options as HEAD's parser did",
+    "comment": "invariant (rf6): membership/prefix scans over argv-like names (argv/args/rawArgv/launchArgv .includes/.indexOf/.find/... , indexOf(\"--\"), startsWith(\"--, slice(2)) in packages/clawwright/{entry,integration,core,commands} plus tools/clawwright.ts must be the tokenizer's, an entry seam, or an exempt line recorded with a reason — total counts occurrences including exempt ones, so any new scan fails. 38 -> 37 (rf6-p16): rollback --operation uses the shared path-segment grammar, its own prefix scan is gone. 37 -> 36 (stage 7 S2.2): parseCall and execute.ts's --json probe read the action pick from selectAction (core/command/parse.ts); their own first-word scans are gone. 36 -> 40 (stage 7 S2.4): core/values/kinds.ts arrives (its interval wrapper's message-prefix slice, and the ssh/text leading-dash refusals over one raw value), and the interval wrappers in backup/watch install slice parseInterval's refusal prefix — all one-value refusals, exempted with reasons; schedule.ts's stale exemption is deleted with the flip that removed its line. Back at 36 (stage 7 S2.4, second pass): the dash refusals are expressed without startsWith (raw[0] === \"-\"), the install wrappers call kinds.ts's shared intervalRangeRefusal (whose own line is slice-based and adds no scan), and the kinds.ts interval wrapper's line is the one exempted occurrence — the same nature schedule.ts's deleted exemption had. 36 -> 35 (stage 7 S2.8): step()'s two branch-local `--` tests collapse into one hoisted const, the completion table's actionArgument find is gone with the transition-table refactor, and the no-slot/unknown refusal no longer scans (token[0] === \"-\"); S2.8 third pass: the pending option's declared-long-token refusal moved wholly into step(), so the driver's dead lookahead and its exempt line are gone, and the dashed lookups are restricted to flags and options as HEAD's parser did",
     "files": {},
     "total": 34,
     "exempt": {
-      "tools/framework/core/io/invocation/frame.ts": {
+      "packages/clawwright/core/io/invocation/frame.ts": {
         "reason": "strict single-value persisted invocation parser validates program spelling; not argv scanning",
         "lines": {
           "if (value.startsWith(\"--\") || /\\s/.test(value)) return undefined;": 1,
           "if (program.startsWith(\"--\") || /\\s/.test(program)) return undefined;": 1
         }
       },
-      "tools/framework/core/command/parse/index.ts": {
+      "packages/clawwright/core/command/parse/index.ts": {
         "reason": "selectAction's first-word test and bindsAsFlag: the one reading every other site defers to; the tokenizer's own scan lines moved to scan.ts at S2.8 with the 700-line layout limit, so parse.ts keeps only the lines it still has",
         "lines": {
           "if (first !== undefined && !first.startsWith(\"-\")) {": 1,
           "return token.startsWith(\"-\");": 1
         }
       },
-      "tools/framework/core/command/parse/scan.ts": {
+      "packages/clawwright/core/command/parse/scan.ts": {
         "reason": "the tokenizer and selectAction's (parseCall's action pick) machine moved here from parse.ts at S2.8 (the 700-line layout limit): the one reading every other site defers to; step()'s single hoisted `--` test and the key/argument lookups read the same tokens",
         "lines": {
           "const long = token.startsWith(\"--\");": 1,
@@ -28,7 +28,7 @@
           "const name = token.startsWith(\"--\") && eq !== -1 ? token.slice(0, eq) : token;": 1
         }
       },
-      "tools/framework/integration/gate.ts": {
+      "packages/clawwright/integration/gate.ts": {
         "reason": "the bare-`--` boundary itself (beforeBareDoubleDash/requestsHelp/requestsShortHelp: the one function every help request reads through); splitLeadingAppFlag: the leading --app pair the gate splits off before any command declaration applies; helpWithoutDeployment's first-word test: argv[0] is the command position, an option there is left to the caller; misplacedAppFlag: its fallback for a command whose declarations the entry does not know (the declaration-known path is the tokenizer, differentially pinned by gate-dispatch.check.ts), and the lines that compare the token the tokenizer itself refused (UnknownArgumentError.argument) by equality — whether it sits behind an options-end `--` is tokenizeLenient's answer, not a scan",
         "lines": {
           "const sep = args.indexOf(\"--\");": 1,
@@ -42,7 +42,7 @@
           "const stopped = args.indexOf(token);": 1
         }
       },
-      "tools/framework/integration/completion/table.ts": {
+      "packages/clawwright/integration/completion/table.ts": {
         "reason": "completion's own --app pair skip (the gate's selector, not a command argument); the args.* lines read the registry's declared CommandArgument descriptors, not raw argv; a typed line's meaning (options-end, verbatim tail, pending option) is tokenizeLenient's",
         "lines": {
           "if (args.some((argument) => argument.kind === \"variadic\" && \"verbatim\" in argument && argument.verbatim === true)) {": 1,
@@ -54,13 +54,13 @@
           "verbatimFlags.set(name, args.filter((argument) => argument.kind === \"flag\" || argument.kind === \"option\").map(flagName));": 1
         }
       },
-      "tools/framework/entry/bin.ts": {
+      "packages/clawwright/entry/bin.ts": {
         "reason": "the entry seam: rawArgv is born here; --project-root is decided before any command declaration exists",
         "lines": {
           "const rawArgv = process.argv.slice(2);": 1
         }
       },
-      "tools/framework/entry/resolve.ts": {
+      "packages/clawwright/entry/resolve.ts": {
         "reason": "the installed entry's --project-root consumption, before any command exists; the first-word test (argv[0] is the command position: an option there is not a command, as in helpWithoutDeployment); candidates now reads DISPATCHER_COMMANDS (rf6-fix30 item 10) instead of re-listing control-mcp by hand",
         "lines": {
           "const argv = normalizeVersionAlias(scheduled ? rawArgv.slice(2) : [...rawArgv]);": 1,
@@ -74,31 +74,31 @@
           "if (decision.soleNote !== undefined && !beforeBareDoubleDash(decision.argv).includes(\"--json\") && process.stderr.isTTY === true) {": 1
         }
       },
-      "tools/framework/integration/mcp/call.ts": {
+      "packages/clawwright/integration/mcp/call.ts": {
         "reason": "narrowing a document's structured advice payload field, not a process-argv scan",
         "lines": {
           "if (advice.kind === \"clawwright\") return Array.isArray(advice.argv) && advice.argv.every((word) => typeof word === \"string\");": 1
         }
       },
-      "tools/framework/commands/management/provision-agent/declaration.ts": {
+      "packages/clawwright/commands/management/provision-agent/declaration.ts": {
         "reason": "compares a stored entry's declared args against the spec's, not a scan of process argv",
         "lines": {
           "return entry.args.every((value, index) => value === spec.args[index]);": 1
         }
       },
-      "tools/framework/core/values/kinds.ts": {
+      "packages/clawwright/core/values/kinds.ts": {
         "reason": "scans inside ONE value's own refusal, not argv: the interval wrapper slicing the parser's message prefix (the same nature schedule.ts's exemption had before the flip deleted it); the ssh/text leading-dash refusals no longer scan (raw[0] === \"-\"), and the install wrappers now call kinds.ts's intervalRangeRefusal, whose own line is slice-based and adds no scan",
         "lines": {
           "throw new ValueError(message.startsWith(\"--interval \") ? message.slice(\"--interval \".length) : `: ${message}`);": 1
         }
       },
-      "tools/framework/commands/orchestration/apply.ts": {
+      "packages/clawwright/commands/orchestration/apply.ts": {
         "reason": "a string search inside one value (`rest` is a string here), not argv",
         "lines": {
           "const separator = rest.indexOf(\":\");": 1
         }
       },
-      "tools/framework/core/paths.ts": {
+      "packages/clawwright/core/paths.ts": {
         "reason": "a string search inside a path (`rest` is a string here), not argv",
         "lines": {
           "const slash = rest.indexOf(\"/\");": 1
@@ -110,36 +110,36 @@
     "comment": "stage 4 (Advice): ./clawwright must reach output only through one renderer",
     "files": {},
     "exempt": {
-      "tools/framework/core/io/invocation/frame.ts": {
+      "packages/clawwright/core/io/invocation/frame.ts": {
         "reason": "the one owner of the program spelling (moved from render.ts, the former renderer owner)",
         "lines": {
           "export const SHIM_PROGRAM = \"./clawwright\";": 1
         }
       },
-      "tools/framework/integration/deployment/init.ts": {
+      "packages/clawwright/integration/deployment/init.ts": {
         "reason": "the committed shim names itself: its own comments and the two invocation variables",
         "lines": {
           "# Delegates to the installed @phpcraftdream/clawwright CLI. Committed so ./clawwright <command> works": 1,
           "# Hints in the CLI say \"./clawwright\" for this entry, \"clawwright\" for the system-wide command.": 1
         }
       },
-      "tools/framework/integration/mcp/project.ts": {
+      "packages/clawwright/integration/mcp/project.ts": {
         "reason": "generator of the checkout's own launcher, like the shim; the text is under a hash",
         "lines": {}
       },
-      "tools/framework/integration/completion/bash.ts": {
+      "packages/clawwright/integration/completion/bash.ts": {
         "reason": "the generated script registers both spellings of the command",
         "lines": {
           "\"complete -F _clawwright_complete ./clawwright\\n\";": 1
         }
       },
-      "tools/framework/integration/completion/index.ts": {
+      "packages/clawwright/integration/completion/index.ts": {
         "reason": "the zsh script's #compdef header names both spellings",
         "lines": {
           "\"#compdef clawwright ./clawwright\\n\" +": 1
         }
       },
-      "tools/framework/integration/completion/pwsh.ts": {
+      "packages/clawwright/integration/completion/pwsh.ts": {
         "reason": "the PowerShell registration names the same two spellings, as bash's does",
         "lines": {
           "\"Register-ArgumentCompleter -Native -CommandName clawwright, ./clawwright -ScriptBlock $clawwrightCompleter\\n\"": 1
@@ -149,17 +149,17 @@
     "total": 6
   },
   "dotClawwrightLiteralsNonTs": {
-    "comment": "stage 6 (review round 7): ./clawwright in static non-.ts product files under tools/framework (yml/yaml/sh/json/md/txt, plus dot/extensionless text files up to 1 MB); the compose :? guard message named a program rendered by docker compose, where it does not exist. README and .env.example lines are exempt: both document the deployment's committed launcher itself, like the shim.",
+    "comment": "stage 6 (review round 7): ./clawwright in static non-.ts product files under packages/clawwright (yml/yaml/sh/json/md/txt, plus dot/extensionless text files up to 1 MB); the compose :? guard message named a program rendered by docker compose, where it does not exist. README and .env.example lines are exempt: both document the deployment's committed launcher itself, like the shim.",
     "files": {},
     "exempt": {
-      "tools/framework/README.md": {
+      "packages/clawwright/README.md": {
         "reason": "the package README documents the committed launcher itself, like the shim",
         "lines": {
           "./clawwright bootstrap": 1,
           "not on `PATH`, and afterwards the `./clawwright` launcher it writes takes over. The": 1
         }
       },
-      "tools/framework/.env.example": {
+      "packages/clawwright/.env.example": {
         "reason": "copied into deployments in both modes: a checkout has the monorepo shim and init writes the same ./clawwright shim into an installed deployment (writeShim), so each command advice holds as typed; Windows cmd/pwsh users type npm's bin wrapper, as the tool's own hints say",
         "lines": {
           "# `new-app` and `init` copy this into the deployment; `./clawwright bootstrap` fills in the": 1,
@@ -205,25 +205,25 @@
     "files": {},
     "total": 4,
     "exempt": {
-      "tools/framework/commands/lifecycle/verify.ts": {
+      "packages/clawwright/commands/lifecycle/verify.ts": {
         "reason": "credentialUrl: @ in a URL means userinfo, not an image digest",
         "lines": {
           "return value.includes(\"@\");": 1
         }
       },
-      "tools/framework/commands/orchestration/inspect/helpers.ts": {
+      "packages/clawwright/commands/orchestration/inspect/helpers.ts": {
         "reason": "redactEndpoint: @ in a URL means userinfo, not an image digest",
         "lines": {
           "if (url.includes(\"@\")) {": 1
         }
       },
-      "tools/framework/commands/orchestration/apply.ts": {
+      "packages/clawwright/commands/orchestration/apply.ts": {
         "reason": "indexOf(\":\") splits the action id \"remove-owned:<kind>:<name>\", not an image reference",
         "lines": {
           "const separator = rest.indexOf(\":\");": 1
         }
       },
-      "tools/framework/runtime/files/datadir.ts": {
+      "packages/clawwright/runtime/files/datadir.ts": {
         "reason": "split(\":\") splits a chown \"uid:gid\" owner spec, not an image reference",
         "lines": {
           "const [uid, gid] = owner.split(\":\");": 1
@@ -709,7 +709,7 @@
     "total": 428
   },
   "ownProductExpectations": {
-    "comment": "stage 7 S0.5 (independent expectations, invariant I11): check()/assert.* assertions whose EXPECTED operand and ACTUAL operand share a symbol imported from tools/framework — one product mutation moves both sides. A predicate argument nested in the actual operand (.includes/.startsWith/.endsWith/.match) counts as the expected role. Initial baseline = the measured state after converting the round 18/19 offender sites to literal expectations (schedule crontab read/update/confirm refusals, host probe evidence and --choices, destroy --confirm-name mismatch, lock reinstall advice, recover-env refusals, system-install unknown-command/no-save lines). Exempt: a file a registered negative control covers (C1-C8, C9, C11), a line marked `// control: <id>`. The baseline was first recorded at 301 with the initial scanner. The measurement was then completed (derived locals, template interpolations, combined imports) and the converted sites moved to token-array assertions; the recorded total is now 391 (was 301) — a measurement widening of the new ratchet, not growth. A file absent from `files` must not gain one. S3.2: the 11 sites in set-validate.check.ts became control-exempt when controls C80-C82 registered that check file (exemption is per FILE — architecture.check.ts's CONTROLLED_FILES), so the recorded total is 380 (was 391); a recorded decrease, not growth. C83 registers set-validate-image.check.ts, adding a file exemption for 2 sites (not stronger expectations), so the measured total is 378 (was 380). S1.4: control C127 registers completion-behaviour.check.ts, adding a file exemption for its 3 sites (not stronger expectations), so the measured total is 375 (was 378). Stage 7 S2.5: the one site in set-command.check.ts became a structural assertion with the local-facts-of-arguments migration so the recorded total is 374 (was 375); a recorded decrease, not growth. S2.8: control C143 registers parse.check.ts, exempting its 4 sites per FILE — the recorded total is 370 (was 374); a recorded decrease, not growth. S2.6b records the decrease: gate-commands.check.ts is exempt as negative control C191's check (remove-app's confirm: true sets --yes), 15 own-product expectations fewer (370 -> 355).",
+    "comment": "stage 7 S0.5 (independent expectations, invariant I11): check()/assert.* assertions whose EXPECTED operand and ACTUAL operand share a symbol imported from packages/clawwright — one product mutation moves both sides. A predicate argument nested in the actual operand (.includes/.startsWith/.endsWith/.match) counts as the expected role. Initial baseline = the measured state after converting the round 18/19 offender sites to literal expectations (schedule crontab read/update/confirm refusals, host probe evidence and --choices, destroy --confirm-name mismatch, lock reinstall advice, recover-env refusals, system-install unknown-command/no-save lines). Exempt: a file a registered negative control covers (C1-C8, C9, C11), a line marked `// control: <id>`. The baseline was first recorded at 301 with the initial scanner. The measurement was then completed (derived locals, template interpolations, combined imports) and the converted sites moved to token-array assertions; the recorded total is now 391 (was 301) — a measurement widening of the new ratchet, not growth. A file absent from `files` must not gain one. S3.2: the 11 sites in set-validate.check.ts became control-exempt when controls C80-C82 registered that check file (exemption is per FILE — architecture.check.ts's CONTROLLED_FILES), so the recorded total is 380 (was 391); a recorded decrease, not growth. C83 registers set-validate-image.check.ts, adding a file exemption for 2 sites (not stronger expectations), so the measured total is 378 (was 380). S1.4: control C127 registers completion-behaviour.check.ts, adding a file exemption for its 3 sites (not stronger expectations), so the measured total is 375 (was 378). Stage 7 S2.5: the one site in set-command.check.ts became a structural assertion with the local-facts-of-arguments migration so the recorded total is 374 (was 375); a recorded decrease, not growth. S2.8: control C143 registers parse.check.ts, exempting its 4 sites per FILE — the recorded total is 370 (was 374); a recorded decrease, not growth. S2.6b records the decrease: gate-commands.check.ts is exempt as negative control C191's check (remove-app's confirm: true sets --yes), 15 own-product expectations fewer (370 -> 355).",
     "files": {
       "tools/checks/foundation/cli/cli-help.check.ts": 4,
       "tools/checks/foundation/cli/gate-commands.check.ts": 0,
@@ -788,13 +788,13 @@
     "total": 304
   },
   "frameReads": {
-    "comment": "stage 7 S1.3 (design docs/internal/refactor-stage7-frame-design.md §8): occurrences of invocation()/currentFrame() in product code outside the exempt modules core/io/invocation/**, core/io/help-render.ts, core/io/log.ts. Scan scope: tools/framework/**/*.ts plus tools/clawwright.ts. Measured at the S1.3 resolver refactor: 0 — the reads the design lists as pre-S1.3 (entry/resolve.ts, entry/delegate.ts, entry/bin.ts, integration/deployment/scaffold.ts, tools/clawwright.ts) are gone; the only remaining raw reads are the exempt ones (help-render.ts: 2 invocation() default arguments; invocation/{index,render,prose}.ts). Shrink-only at target 0: any occurrence fails.",
+    "comment": "stage 7 S1.3 (design docs/internal/refactor-stage7-frame-design.md §8): occurrences of invocation()/currentFrame() in product code outside the exempt modules core/io/invocation/**, core/io/help-render.ts, core/io/log.ts. Scan scope: packages/clawwright/**/*.ts plus tools/clawwright.ts. Measured at the S1.3 resolver refactor: 0 — the reads the design lists as pre-S1.3 (entry/resolve.ts, entry/delegate.ts, entry/bin.ts, integration/deployment/scaffold.ts, tools/clawwright.ts) are gone; the only remaining raw reads are the exempt ones (help-render.ts: 2 invocation() default arguments; invocation/{index,render,prose}.ts). Shrink-only at target 0: any occurrence fails.",
     "total": 0
   },
   "frameInstalls": {
     "comment": "stage 7 S1.3 (design §8): installFrame(/setInvocation( call sites outside the accessor module; app-selection refinement installs are obsolete, leaving one process-entry install in each owning entry. Verified measured sites: entry/bin.ts:68 and tools/clawwright.ts:64.",
     "files": {
-      "tools/framework/entry/bin.ts": 1,
+      "packages/clawwright/entry/bin.ts": 1,
       "tools/clawwright.ts": 1
     },
     "total": 2
@@ -802,28 +802,28 @@
   "modeDeciders": {
     "comment": "Semantic modeDeciders counts actual mode/launch decisions only. modeOf in frame.ts is the sole computation (one occurrence, deliberately counted honestly). Persisted mode validation/type/default compatibility in invocation/index.ts is excluded, not a launch decision; mcp/project.ts is an immutable generated-writer fixture with exact output pinned by golden. Baseline reduced 4 to 1 by measuring decisions rather than all compatibility literals; no thresholds were raised.",
     "files": {
-      "tools/framework/core/io/invocation/frame.ts": 1
+      "packages/clawwright/core/io/invocation/frame.ts": 1
     },
     "total": 1
   },
   "kindCastsOutsideValues": {
-    "comment": "stage 7 S2.5: casts minting the value brands (as RecipeName/LocalArtifact/LocalRecipeSource/RecipeRef/Checksum/OperationId/OwnedObjectName/SetName/StoreName/AgentName/DeploymentName) in tools/framework/** outside tools/framework/core/values/** — the values module owns every mint; run bodies receive already-minted branded names. Comments are stripped before counting. Growth fails",
+    "comment": "stage 7 S2.5: casts minting the value brands (as RecipeName/LocalArtifact/LocalRecipeSource/RecipeRef/Checksum/OperationId/OwnedObjectName/SetName/StoreName/AgentName/DeploymentName) in packages/clawwright/** outside packages/clawwright/core/values/** — the values module owns every mint; run bodies receive already-minted branded names. Comments are stripped before counting. Growth fails",
     "total": 0
   },
   "grammarCallsInRun": {
-    "comment": "stage 7 S2.5: calls of readName(/safeName(/nameValue(/createName(/imageRefValue.parse( inside tools/framework/commands/** run bodies, outside argument declarations and prepare phases (which are outside run bodies by construction). Measured by the shared counter in grammar-in-run.ts — the SAME measurement grammar-in-run.check.ts enforces with zero tolerance; this ratchet only records it, shrink-only. 0 after S2.5",
+    "comment": "stage 7 S2.5: calls of readName(/safeName(/nameValue(/createName(/imageRefValue.parse( inside packages/clawwright/commands/** run bodies, outside argument declarations and prepare phases (which are outside run bodies by construction). Measured by the shared counter in grammar-in-run.ts — the SAME measurement grammar-in-run.check.ts enforces with zero tolerance; this ratchet only records it, shrink-only. 0 after S2.5",
     "total": 0
   },
   "argumentErrorTokenOutside": {
-    "comment": "stage 7 S2.5: files under tools/framework/** OUTSIDE tools/framework/core/command/** whose comment-stripped source references ARGUMENT_ERROR_TOKEN (the private token in core/command/errors.ts; only the command layer's own modules build ArgumentErrors). Counted by the shared counter in kind-casts.ts; expected 0. Deep imports from hostile code remain possible in TS — the ratchet pins the codebase, not the type system.",
+    "comment": "stage 7 S2.5: files under packages/clawwright/** OUTSIDE packages/clawwright/core/command/** whose comment-stripped source references ARGUMENT_ERROR_TOKEN (the private token in core/command/errors.ts; only the command layer's own modules build ArgumentErrors). Counted by the shared counter in kind-casts.ts; expected 0. Deep imports from hostile code remain possible in TS — the ratchet pins the codebase, not the type system.",
     "total": 0
   },
   "preparedOutsideCommand": {
-    "comment": "stage 7 S2.5: files under tools/framework/** OUTSIDE tools/framework/core/command/** whose comment-stripped source calls prepared( — the prepare-phase internal, no longer leaked by the core/command/index.ts barrel (its spec re-export is explicit). Counted by the shared counter in kind-casts.ts; expected 0. Deep imports of spec.ts from hostile code remain possible in TS — the ratchet pins the codebase, not the type system.",
+    "comment": "stage 7 S2.5: files under packages/clawwright/** OUTSIDE packages/clawwright/core/command/** whose comment-stripped source calls prepared( — the prepare-phase internal, no longer leaked by the core/command/index.ts barrel (its spec re-export is explicit). Counted by the shared counter in kind-casts.ts; expected 0. Deep imports of spec.ts from hostile code remain possible in TS — the ratchet pins the codebase, not the type system.",
     "total": 0
   },
   "planMintImportOutside": {
-    "comment": "stage 7 S2.5: files under tools/framework/** OUTSIDE tools/framework/core/values/** and tools/framework/core/command/** with a RUNTIME (non-`import type`) import statement referencing core/values/plan.ts, i.e. reaching the brand mints (spec.ts's refusal-text-helper import stays legal; type-only imports are erased so never reach the mints; tools/checks are NOT scanned — checks legitimately import the refusal helpers). Counted by the shared counter in kind-casts.ts; expected 0. Deep imports from hostile code remain possible in TS — the ratchet pins the codebase, not the type system.",
+    "comment": "stage 7 S2.5: files under packages/clawwright/** OUTSIDE packages/clawwright/core/values/** and packages/clawwright/core/command/** with a RUNTIME (non-`import type`) import statement referencing core/values/plan.ts, i.e. reaching the brand mints (spec.ts's refusal-text-helper import stays legal; type-only imports are erased so never reach the mints; tools/checks are NOT scanned — checks legitimately import the refusal helpers). Counted by the shared counter in kind-casts.ts; expected 0. Deep imports from hostile code remain possible in TS — the ratchet pins the codebase, not the type system.",
     "total": 0
   },
   "frameLawViolations": {

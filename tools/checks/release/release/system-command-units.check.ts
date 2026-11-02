@@ -48,9 +48,15 @@ try {
 
   // --- which copy runs ------------------------------------------------------------------------
   const checkout = join(scratch, "checkout");
-  mkdirSync(join(checkout, "tools", "framework"), { recursive: true });
+  mkdirSync(join(checkout, "packages", "clawwright"), { recursive: true });
+  mkdirSync(join(checkout, "tools"), { recursive: true });
   writeFileSync(join(checkout, "tools", "clawwright.ts"), "");
-  check("a checkout's tools/framework is a checkout copy, path = the checkout root", classifyCopy(join(checkout, "tools", "framework")), { source: "checkout", path: checkout });
+  check("a checkout package folder is not mistaken for its parent tools folder", classifyCopy(join(checkout, "packages", "clawwright")), { source: "checkout", path: checkout });
+  const relocatedCheckout = join(scratch, "relocated", "packages", "clawwright");
+  mkdirSync(join(scratch, "relocated", "tools"), { recursive: true });
+  mkdirSync(relocatedCheckout, { recursive: true });
+  writeFileSync(join(scratch, "relocated", "tools", "clawwright.ts"), "");
+  check("a relocated checkout package resolves tools/clawwright.ts from the repository root", classifyCopy(relocatedCheckout), { source: "checkout", path: join(scratch, "relocated") });
   const local = join(app, "node_modules", "@phpcraftdream", "clawwright");
   mkdirSync(local, { recursive: true });
   check("a package inside the app is local", classifyCopy(local, app).source, "local");

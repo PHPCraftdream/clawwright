@@ -2,7 +2,7 @@
 
 ## Reviewed dependency evidence
 
-The audit is fail-closed. It reads required and optional production dependencies from the **published** `tools/framework/package.json`, and resolutions, versions, license fields and integrity values from the npm v3 root `package-lock.json`. Every reachable package must match an explicit reviewed name/version/license entry. No general SPDX allowlist is used; missing or unreviewed package evidence is a failure.
+The audit is fail-closed. It reads required and optional production dependencies from the **published** `packages/clawwright/package.json`, and resolutions, versions, license fields and integrity values from the npm v3 root `package-lock.json`. Every reachable package must match an explicit reviewed name/version/license entry. No general SPDX allowlist is used; missing or unreviewed package evidence is a failure.
 
 ### `json5@2.2.3`
 
@@ -18,4 +18,14 @@ The packed `THIRD_PARTY_NOTICES.md` reproduces an OpenClaw MIT notice attributin
 
 The check walks dependency and optionalDependency edges from each production dependency. Root manifest ranges must exactly agree with the root lock ranges; each transitive lock edge is accepted only when its declared range is an exact version equal to the resolved lock entry's version. It fails closed on peer dependencies, peer dependency metadata, bundled dependencies, malformed or missing license metadata, aliases and unsupported ranges. It does not audit `peerDependenciesMeta` fields on transitive lock entries: these are treated as ancillary metadata, while any actual nonempty peer dependency map itself fails. Lock metadata shape and consistency are checked; source authenticity and cryptographic retrieval are not proved. Dev dependencies, bundled OpenClaw images, app-owned recipe sources, embedded transitive contents and generated/downloaded binaries are outside scope.
 
-The check compares repository and `tools/framework/` copies of `LICENSE`, `LICENSE-MIT`, `LICENSE-APACHE`, and `NOTICE`. `THIRD_PARTY_NOTICES.md` copies intentionally differ in package wording. Release/full-tier CI compares packed notice/license bytes and package manifest with source copies; this verifies archive contents, not license validity or legal clearance.
+The check compares repository and `packages/clawwright/` copies of `LICENSE`, `LICENSE-MIT`, `LICENSE-APACHE`, and `NOTICE`. `THIRD_PARTY_NOTICES.md` copies intentionally differ in package wording. Release/full-tier CI compares packed notice/license bytes and package manifest with source copies; this verifies archive contents, not license validity or legal clearance.
+
+## Go migration candidate and execution boundary
+
+`npm run license:audit` now invokes the standard-library Go module at `tools/checks/release/license-audit`, with explicit repository and `packages/clawwright` paths, followed by uncached module tests. The source-location default is only suitable for a source checkout; a relocated standalone binary needs explicit paths. Existing CI audit callers and publish verification select the pinned Go 1.26.0 toolchain before this mandatory gate. No package or dependency version changed.
+
+The auditor retains exact reviewed dependency evidence and edge traversal, including required, optional, nested, hoisted and scoped packages. Root/transitive queue entries retain their dependency names, and installed identity is checked before visited-path deduplication. Stable non-regular inputs are rejected before open and rechecked through the opened descriptor. Files are limited to 16 MiB and JSON nesting to 128; duplicate keys, invalid UTF-8 and trailing JSON are rejected. These stricter malformed-input refusals and first-error ordering are not byte-for-byte TypeScript diagnostic parity. Notices are compared as raw bytes. The stat/open race remains, and filesystem stat/open/read operations have no general wall-clock deadline.
+
+Authored regressions include the original adversaries, copied-json5-evidence scoped-name attacks, conflicting identities on an already-visited path, a real writerless FIFO in a finite Unix subprocess, CLI outcomes, the actual npm caller and mandatory workflow ordering/pins. The Unix FIFO fixture explicitly skips unsupported platforms; the remaining suite stays portable. The unchanged superseded TypeScript implementations were inspected and removed from this candidate after parent source review.
+
+An earlier delegated worker violated the source-only restriction by running local formatters and tests before later edits. That violation was disclosed; those results are not acceptance evidence for this candidate. Subsequent correction passes and parent reconciliation were source-only. Final compilation, behavior, cross-platform callers, indexed policy and package/license-byte checks still require public GitHub CI. No complete tooling migration, legal clearance, OpenClaw adoption or production-readiness claim follows.

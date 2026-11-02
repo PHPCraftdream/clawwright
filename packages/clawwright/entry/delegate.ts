@@ -9,10 +9,10 @@
 
 import { createRequire, registerHooks } from "node:module";
 import { spawnSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { INVOCATION_ENV, serializeInvocation } from "../core/io/invocation/index.ts";
-import { checkoutFrameworkSource } from "../core/env.ts";
+import { checkoutFrameworkSource, frameworkRoot, monorepoRoot } from "../core/env.ts";
 import { reportError, UserError } from "../core/io/log.ts";
 import { command, shellLine, type Advice } from "../core/io/invocation/advice.ts";
 import { renderArgument, renderFrameAdvice } from "../core/io/invocation/render.ts";
@@ -132,8 +132,37 @@ export function resolveFrameworkFromSelf(): void {
  *  `@phpcraftdream/clawwright/<export>` resolves onto the sibling sources (the recipe hook loader
  *  maps the same table for hook imports on its own loader thread). */
 export function resolveFrameworkFromSources(): void {
+  const legacyPublicModules = new Map([
+    ["../../tools/framework/core/app.ts", "@phpcraftdream/clawwright/app"],
+    ["../../tools/framework/runtime/mounts.ts", "@phpcraftdream/clawwright/mounts"],
+    ["../../tools/framework/commands/interface/index.ts", "@phpcraftdream/clawwright/commands"],
+  ]);
+  const sourceCheckout =
+    resolve(frameworkRoot, "..") === resolve(monorepoRoot, "packages") &&
+    resolve(frameworkRoot, "..", "clawwright") === frameworkRoot &&
+    nodeFs.exists(resolve(monorepoRoot, "tools", "clawwright.ts"));
+
   registerHooks({
     resolve(specifier, context, nextResolve) {
+      const legacySpecifier = legacyPublicModules.get(specifier);
+      if (sourceCheckout && legacySpecifier !== undefined) {
+        const parentUrl = context.parentURL;
+        if (parentUrl !== undefined && !parentUrl.includes("?") && !parentUrl.includes("#")) {
+          let appPath: string;
+          try {
+            appPath = fileURLToPath(parentUrl);
+          } catch {
+            appPath = "";
+          }
+          const appsDir = resolve(monorepoRoot, "apps");
+          const relativeApp = relative(appsDir, appPath);
+          const parts = relativeApp.split(sep);
+          if (parts.length === 2 && parts[0] !== ".." && !isAbsolute(relativeApp) && parts[1] === "app.ts" && !parts[0]!.includes("/") && !parts[0]!.includes("\\") && pathToFileURL(resolve(appsDir, parts[0]!, "app.ts")).href === parentUrl) {
+            const source = checkoutFrameworkSource(legacySpecifier);
+            if (source !== undefined) return { url: pathToFileURL(source).href, shortCircuit: true };
+          }
+        }
+      }
       if (specifier !== PACKAGE && !specifier.startsWith(`${PACKAGE}/`)) return nextResolve(specifier, context);
       try {
         return nextResolve(specifier, context);

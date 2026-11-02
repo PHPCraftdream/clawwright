@@ -86,7 +86,7 @@ clawwright status
 ```
 
 From a clone of this repository, `npm run install:system` (once `npm install` has run) packs
-`tools/framework` and installs that instead — a copy, not a link to the working tree: run it
+`packages/clawwright` and installs that instead — a copy, not a link to the working tree: run it
 again to take later changes. It uses the deployment's own framework whenever there is one — a
 local `@phpcraftdream/clawwright` dependency (the app's version pin), or, inside this checkout,
 `apps/<name>` and the root go to the checkout's own gate — and runs on itself only in a folder

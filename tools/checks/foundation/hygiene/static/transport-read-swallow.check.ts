@@ -1,5 +1,5 @@
 // The target-read ratchet (S3.4, invariant I14's reading half): no catch around a transport
-// READ in tools/framework/service or tools/framework/commands may discard the error — an
+// READ in packages/clawwright/service or packages/clawwright/commands may discard the error — an
 // unreachable target is "could not find out" (thrown, with Advice), never "nothing there".
 // Reads are transport.readFile/exists/listFiles, the contract helpers themselves (a bare
 // catch around one converts its unknown into absence), and allowFailure exec reads whose
@@ -237,109 +237,109 @@ interface AllowEntry {
 
 const ALLOW: readonly AllowEntry[] = [
   {
-    file: "tools/framework/service/secrets.ts",
+    file: "packages/clawwright/service/secrets.ts",
     line: 98,
     reason:
       "noProviderConfigured is a best-effort diagnostic feeding smoke's hint; an unreadable config answers false (documented on the function) rather than aborting a report that has its own failure path",
   },
   {
-    file: "tools/framework/commands/lifecycle/bootstrap/index.ts",
+    file: "packages/clawwright/commands/lifecycle/bootstrap/index.ts",
     line: 220,
     reason:
       "a bonus 'provider: none configured yet' hint after bootstrap; doctor's own read of the same file reports a broken config, and the hint must never fail a bootstrap that just succeeded (comment on site)",
   },
   {
-    file: "tools/framework/commands/lifecycle/verify.ts",
+    file: "packages/clawwright/commands/lifecycle/verify.ts",
     line: 250,
     reason:
       "the LIVE openclaw.json secret scan (verify.ts collectSecrets) only adds findings to a verify that reports an unreadable config elsewhere (inspect/doctor); the swallow cannot hide a failed verify",
   },
   {
-    file: "tools/framework/commands/lifecycle/verify.ts",
+    file: "packages/clawwright/commands/lifecycle/verify.ts",
     line: 460,
     reason:
       "the catch is loud, not silent: warn() plus an unreadable-archived-config finding plus failures += 1 - the unknown is reported, never read as clean",
   },
   {
-    file: "tools/framework/service/archive/pack.ts",
+    file: "packages/clawwright/service/archive/pack.ts",
     line: 36,
     reason:
       "conservative default documented on site: an exists() the target could not answer is treated as PRESENT so privilege escalation is still demanded - never the other way round",
   },
   {
-    file: "tools/framework/commands/lifecycle/backup/index.ts",
+    file: "packages/clawwright/commands/lifecycle/backup/index.ts",
     line: 378,
     reason:
       "cleanup compensation: the catch collects the error into compensationErrors reported alongside the failure in flight - never discarded",
   },
   {
-    file: "tools/framework/commands/lifecycle/bootstrap/prereqs.ts",
+    file: "packages/clawwright/commands/lifecycle/bootstrap/prereqs.ts",
     line: 37,
     reason:
       "a port-probe tool that cannot even launch falls through to the next probe tool (ss, then netstat) and the function finally answers 'unavailable' - a visible gap, never a silent port claim",
   },
   {
-    file: "tools/framework/commands/lifecycle/bootstrap/prereqs.ts",
+    file: "packages/clawwright/commands/lifecycle/bootstrap/prereqs.ts",
     line: 127,
     reason:
       "nearestExistingAncestor: an unknown exists() answer is treated as absent - the walk stops and the candidate is returned as if it were the nearest existing ancestor; the operator then sees only the downstream probe's line (the writable line may be 'ok'), with no sign existence was never established. Lost here: the unknown-vs-absent distinction"
   },
   {
-    file: "tools/framework/commands/lifecycle/bootstrap/prereqs.ts",
+    file: "packages/clawwright/commands/lifecycle/bootstrap/prereqs.ts",
     line: 152,
     reason:
       "targetUserIdentity: a non-unreachable failure becomes undefined, so readyLine prints the path-only 'sudo install -d <path>' hint instead of the owner/group form - a correct but generic hint; the operator is never told the identity probe failed. Lost here: the cause and the ownership facts"
   },
   {
-    file: "tools/framework/commands/lifecycle/bootstrap/prereqs.ts",
+    file: "packages/clawwright/commands/lifecycle/bootstrap/prereqs.ts",
     line: 195,
     reason:
       "dockerProbe: a non-unreachable exec failure becomes fail('docker is not on PATH on the target', advice); the operator sees the named failure and fix guidance. Lost here: the underlying transport error - the message asserts 'not on PATH' without the cause"
   },
   {
-    file: "tools/framework/commands/lifecycle/bootstrap/prereqs.ts",
+    file: "packages/clawwright/commands/lifecycle/bootstrap/prereqs.ts",
     line: 218,
     reason:
       "composeProbe: a non-unreachable exec failure becomes fail('could not run docker compose version on the target', advice); the operator sees the failure and install guidance. Lost here: the underlying transport error cause"
   },
   {
-    file: "tools/framework/commands/lifecycle/bootstrap/prereqs.ts",
+    file: "packages/clawwright/commands/lifecycle/bootstrap/prereqs.ts",
     line: 269,
     reason:
       "diskProbe: a non-unreachable df failure becomes warn('could not run df -Pk <path> on the target', advice); the operator sees the degraded warning with advice, and bootstrap continues. Lost here: the error cause, and free space stays unknown"
   },
   {
-    file: "tools/framework/commands/lifecycle/bootstrap/prereqs.ts",
+    file: "packages/clawwright/commands/lifecycle/bootstrap/prereqs.ts",
     line: 374,
     reason:
       "gnuUserlandProbe: a non-unreachable sh failure becomes fail('no POSIX sh on the target', advice); the operator sees the failure and install guidance. Lost here: the underlying transport error cause",
   },
   {
-    file: "tools/framework/service/secrets.ts",
+    file: "packages/clawwright/service/secrets.ts",
     line: 316,
     reason:
       "readTargetSecrets: the catch retries the read through the sudo prefix (sudoForRead); when the retry succeeds the operator sees normal secret statuses and the first failure is discarded with no trace - only when no prefix exists does the original error rethrow. Lost here: any sign of the first failed read on the success path",
   },
   {
-    file: "tools/framework/commands/lifecycle/restore/index.ts",
+    file: "packages/clawwright/commands/lifecycle/restore/index.ts",
     line: 476,
     reason:
       "the caught error drives rollbackRestore, which reports it and unwinds the restore - the failure is the rollback's input, never read as clean",
   },
   {
-    file: "tools/framework/commands/operate/recover-env/bootstrap.ts",
+    file: "packages/clawwright/commands/operate/recover-env/bootstrap.ts",
     line: 79,
     reason:
       "inspection failure retains the first TargetReadUnknownError with cause and advice while later candidates are tried; exhaustion throws it, and only a valid later match supersedes it. The handler-local analyzer cannot follow the deferred throw after the loop",
   },
   {
-    file: "tools/framework/commands/operate/watch/health.ts",
+    file: "packages/clawwright/commands/operate/watch/health.ts",
     line: 70,
     reason:
       "a df that cannot run becomes a DISK_UNKNOWN 'degraded' finding carrying the cause (never a silent ok, never a false down) - the watch contract's documented unknown state",
   },
   {
-    file: "tools/framework/commands/operate/watch/state.ts",
+    file: "packages/clawwright/commands/operate/watch/state.ts",
     line: 105,
     reason:
       "documented gap (backlog): readScheduledWatchState turns any failure, including an unknown transport read, into known:false 'no watch history'; migrating it needs the corrupt-history and absent-history branches split first",
@@ -347,8 +347,8 @@ const ALLOW: readonly AllowEntry[] = [
 ];
 
 const scannedFiles = [
-  ...(await walk(resolve(repoRoot, "tools", "framework", "service"))),
-  ...(await walk(resolve(repoRoot, "tools", "framework", "commands"))),
+  ...(await walk(resolve(repoRoot, "packages", "clawwright", "service"))),
+  ...(await walk(resolve(repoRoot, "packages", "clawwright", "commands"))),
 ].sort();
 
 interface Flagged extends Hit {

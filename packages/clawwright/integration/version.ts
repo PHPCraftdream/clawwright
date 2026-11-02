@@ -36,8 +36,8 @@ function real(path: string): string {
  *  (inside `appRoot`), or else the system-wide one. `path` is the checkout root for a checkout. */
 export function classifyCopy(packageDir: string, appRoot?: string): { source: VersionSource; path: string } {
   const dir = real(packageDir);
-  const tools = dirname(dir);
-  if (basename(tools) === "tools" && existsSync(resolve(tools, "clawwright.ts"))) return { source: "checkout", path: dirname(tools) };
+  const root = dirname(dirname(dir));
+  if (basename(dir) === "clawwright" && basename(dirname(dir)) === "packages" && existsSync(resolve(root, "tools", "clawwright.ts"))) return { source: "checkout", path: root };
   if (appRoot !== undefined && dir !== real(appRoot) && isWithin(real(appRoot), dir)) return { source: "local", path: dir };
   return { source: "global", path: dir };
 }

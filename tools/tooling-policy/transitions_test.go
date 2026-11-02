@@ -133,6 +133,86 @@ func TestControlRunnerRejectsTamperingAndNearMisses(t *testing.T) {
 	}
 }
 
+func TestTask251TransitionsAreExactAndPathBound(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	transitions := task251Transitions()
+	if len(transitions) != 78 {
+		t.Fatalf("expected 78 reviewed transitions, got %d", len(transitions))
+	}
+	legacy := make(map[string]inventory, len(transitions))
+	current := make(map[string]inventory, len(transitions))
+	for path, pair := range transitions {
+		baselineBytes, err := git(root, "show", baseline+":"+path)
+		if err != nil {
+			t.Fatalf("read immutable baseline %s: %v", path, err)
+		}
+		if got := gitBlobID(baselineBytes); got != pair.baseline {
+			t.Errorf("%s baseline blob=%s, configured=%s", path, got, pair.baseline)
+		}
+		legacy[path] = inventory{mode: "100644", blob: pair.baseline}
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil {
+			t.Fatalf("read current %s: %v", path, err)
+		}
+		if got := gitBlobID(data); got != pair.current {
+			t.Errorf("%s current blob=%s, configured=%s", path, got, pair.current)
+		}
+		current[path] = inventory{mode: "100644", blob: pair.current}
+	}
+	approved := approvedTask251(legacy)
+	if len(approved) != len(transitions) {
+		t.Fatalf("approved %d of %d exact transitions", len(approved), len(transitions))
+	}
+	check := func(name string, candidate, old map[string]inventory, wantViolation bool) {
+		t.Helper()
+		got := evaluateWithTransitions(candidate, old, func(inventory) (int, error) { return 1, nil }, approved)
+		if violated := len(got.Violations) != 0; violated != wantViolation {
+			t.Errorf("%s: violations=%v, want violation=%t", name, got.Violations, wantViolation)
+		}
+	}
+	check("all exact transitions", current, legacy, false)
+	mutated := make(map[string]inventory, len(current))
+	for path, item := range current {
+		mutated[path] = item
+	}
+	mutatedPath := ""
+	for path := range mutated {
+		mutatedPath = path
+		break
+	}
+	mutatedData, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(mutatedPath)))
+	if err != nil {
+		t.Fatalf("read source for tamper case %s: %v", mutatedPath, err)
+	}
+	mutated[mutatedPath] = inventory{mode: "100644", blob: gitBlobID(append(mutatedData, '\n'))}
+	check("transition with appended newline", mutated, legacy, true)
+	neighbor := make(map[string]inventory, len(current))
+	for path, item := range current {
+		neighbor[path] = item
+	}
+	neighbor["tools/checks/adjacent-unapproved.ts"] = current["tools/build-framework-package.ts"]
+	check("neighbor path with approved blob", neighbor, legacy, true)
+	changedBaseline := make(map[string]inventory, len(legacy))
+	for path, item := range legacy {
+		changedBaseline[path] = item
+	}
+	changedPath := ""
+	for path := range changedBaseline {
+		changedPath = path
+		break
+	}
+	changedBaseline[changedPath] = inventory{mode: "100644", blob: "0000000000000000000000000000000000000000"}
+	if got := approvedTask251(changedBaseline); len(got) != len(approved)-1 {
+		t.Errorf("changed baseline unexpectedly retained transition: got %d approvals", len(got))
+	}
+	if approvedRustFallback("tools/native/task251/extra.rs") {
+		t.Error("task251 Rust path unexpectedly approved")
+	}
+}
+
 func TestControlRunnerRejectsMissingOrDuplicateAnchors(t *testing.T) {
 	root, err := filepath.Abs("../..")
 	if err != nil {

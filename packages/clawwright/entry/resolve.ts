@@ -326,7 +326,7 @@ const PACKAGE = "@phpcraftdream/clawwright";
 /** The checkout's own gate, purely: `root` holds tools/clawwright.ts next to the framework sources. */
 export function checkoutGateIn(root: string, fs: FsProbe): string | undefined {
   const gate = resolve(root, "tools", "clawwright.ts");
-  const manifest = fs.readFile(resolve(root, "tools", "framework", "package.json"));
+  const manifest = fs.readFile(resolve(root, "packages", "clawwright", "package.json"));
   if (manifest === undefined) return undefined;
   try {
     return (JSON.parse(manifest) as { name?: unknown }).name === PACKAGE && fs.exists(gate) ? gate : undefined;
@@ -347,7 +347,7 @@ export function findCheckoutRootIn(start: string, fs: FsProbe): string | undefin
 }
 
 /** True when `appRoot/app.ts` loads the framework from a checkout's sources rather than the package. */
-const CHECKOUT_IMPORT = /(?:from|import)\s*\(?\s*["'](?:\.\.?\/)+(?:[^"']*\/)?tools\/framework\//;
+const CHECKOUT_IMPORT = /(?:from|import)\s*\(?\s*["'](?:\.\.?\/)+(?:[^"']*\/)?(?:packages\/clawwright|tools\/framework)\//;
 
 export function importsCheckoutSourcesIn(appRoot: string, fs: FsProbe): boolean {
   const source = fs.readFile(resolve(appRoot, "app.ts"));

@@ -1,4 +1,4 @@
-// The owner module itself (tools/framework/set/artifacts/tar.ts) against the REAL local tar:
+// The owner module itself (packages/clawwright/set/artifacts/tar.ts) against the REAL local tar:
 // spaces in every path, backslashed -C dirs (rf6-fix33), drive-letter absolute -C (the
 // --force-local case), and failure noise that stays tar's own — never remote-host noise.
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";

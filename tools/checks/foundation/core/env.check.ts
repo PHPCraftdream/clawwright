@@ -435,10 +435,10 @@ check("image defaults", minimal.image, "ghcr.io/openclaw/openclaw:extended-stabl
 // The default image is written in three more places: the compose file's three `image:` lines
 // and .env.example. They must all name the one default the settings fall back to.
 {
-  const compose = await readFile(resolve(monorepoRoot, "tools", "framework", "docker-compose.yml"), "utf8");
+  const compose = await readFile(resolve(monorepoRoot, "packages", "clawwright", "docker-compose.yml"), "utf8");
   const composeDefaults = [...compose.matchAll(/\$\{OPENCLAW_IMAGE:-([^}]+)\}/g)].map((match) => match[1]);
   check("docker-compose.yml falls back to the default image at each of its three services", composeDefaults, Array(3).fill(minimal.image));
-  const example = parseEnv(await readFile(resolve(monorepoRoot, "tools", "framework", ".env.example"), "utf8"));
+  const example = parseEnv(await readFile(resolve(monorepoRoot, "packages", "clawwright", ".env.example"), "utf8"));
   check(".env.example names the default image", example.OPENCLAW_IMAGE, minimal.image);
 }
 check("location defaults to auto", minimal.location, "auto");

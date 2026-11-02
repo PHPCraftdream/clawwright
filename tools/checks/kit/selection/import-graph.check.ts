@@ -40,10 +40,10 @@ checkTrue("parse.strip.blanks.comment.bodies.only", !stripNonCode(`a/*x*/b`).inc
 const never = (): boolean => false;
 const onlyTs = (path: string): boolean => path.endsWith(".ts");
 
-check("resolve.alias.framework.family", resolveSpecifier("#framework/core/env.ts", "tools/x.ts", onlyTs), "tools/framework/core/env.ts");
+check("resolve.alias.framework.family", resolveSpecifier("#framework/core/env.ts", "tools/x.ts", onlyTs), "packages/clawwright/core/env.ts");
 check("resolve.alias.checks.family", resolveSpecifier("#checks/kit/harness.ts", "tools/x.ts", onlyTs), "tools/checks/kit/harness.ts");
 check("resolve.alias.tools.family", resolveSpecifier("#tools/clawwright.ts", "tools/x.ts", onlyTs), "tools/clawwright.ts");
-check("resolve.alias.framework.src.map", resolveSpecifier("#src/core/env.ts", "tools/x.ts", onlyTs), "tools/framework/core/env.ts");
+check("resolve.alias.framework.src.map", resolveSpecifier("#src/core/env.ts", "tools/x.ts", onlyTs), "packages/clawwright/core/env.ts");
 check("resolve.relative.uses.importer.directory", resolveSpecifier("./spawn.ts", "tools/checks/kit/harness.ts", onlyTs), "tools/checks/kit/spawn.ts");
 check("resolve.relative.parent", resolveSpecifier("../harness.ts", "tools/checks/kit/self/shells.check.ts", onlyTs), "tools/checks/kit/harness.ts");
 check("resolve.bare.package.ignored", resolveSpecifier("json5", "tools/x.ts", onlyTs), null);

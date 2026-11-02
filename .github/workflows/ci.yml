@@ -52,10 +52,20 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.0'
+          cache: false
+          check-latest: false
+
       - name: Install development dependencies
         run: npm ci --include=dev
 
       - name: Fail-closed production license audit
+        env:
+          GOTOOLCHAIN: local
+          CGO_ENABLED: '0'
         run: npm run license:audit
 
       - name: Fast tier — typecheck, lint, affected checks
@@ -69,6 +79,9 @@ jobs:
           if [ -z "$base" ] || [[ "$base" =~ ^0+$ ]]; then base="$(git merge-base origin/main HEAD)"; fi
           git rev-parse --verify "$base^{commit}" >/dev/null
           node --experimental-strip-types tools/clawwright.ts check --related --base "$base"
+
+      - name: Run relocation parity checks explicitly
+        run: node --experimental-strip-types tools/clawwright.ts check foundation/packaging/build-output.check.ts release/release/installed-consumer.check.ts release/release/system-command-units.check.ts release/release/system-install.check.ts
 
       # ubuntu-latest ships openssh-client but not always a running sshd: install it if
       # missing, start it, and authorize a passphrase-less key for the `ssh-loopback`
@@ -145,14 +158,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          (cd tools/framework && npm pack --ignore-scripts --pack-destination "$GITHUB_WORKSPACE/artifacts")
+          (cd packages/clawwright && npm pack --ignore-scripts --pack-destination "$GITHUB_WORKSPACE/artifacts")
           archive="$(ls artifacts/*.tgz)"
           tar -tzf "$archive" > "$RUNNER_TEMP/packed-files.txt"
           for file in LICENSE LICENSE-MIT LICENSE-APACHE NOTICE THIRD_PARTY_NOTICES.md; do
             grep -qx "package/$file" "$RUNNER_TEMP/packed-files.txt"
-            tar -xOf "$archive" "package/$file" | cmp - "tools/framework/$file"
+            tar -xOf "$archive" "package/$file" | cmp - "packages/clawwright/$file"
           done
-          tar -xOf "$archive" package/package.json | cmp - tools/framework/package.json
+          tar -xOf "$archive" package/package.json | cmp - packages/clawwright/package.json
           printf '%s\n' "$GITHUB_SHA" > artifacts/BUILD_COMMIT
           (cd artifacts && sha256sum *.tgz > SHA256SUMS)
 
@@ -194,10 +207,20 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.0'
+          cache: false
+          check-latest: false
+
       - name: Install development dependencies
         run: npm ci --include=dev
 
       - name: Fail-closed production license audit
+        env:
+          GOTOOLCHAIN: local
+          CGO_ENABLED: '0'
         run: npm run license:audit
 
       - name: Fast tier — typecheck, lint, affected checks
@@ -297,10 +320,20 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.0'
+          cache: false
+          check-latest: false
+
       - name: Install development dependencies
         run: npm ci --include=dev
 
       - name: Fail-closed production license audit
+        env:
+          GOTOOLCHAIN: local
+          CGO_ENABLED: '0'
         run: npm run license:audit
 
       - name: Fast tier — typecheck, lint, affected checks
@@ -408,10 +441,20 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.0'
+          cache: false
+          check-latest: false
+
       - name: Install development dependencies
         run: npm ci --include=dev
 
       - name: Fail-closed production license audit
+        env:
+          GOTOOLCHAIN: local
+          CGO_ENABLED: '0'
         run: npm run license:audit
 
       - name: Fast tier — typecheck, lint, affected checks

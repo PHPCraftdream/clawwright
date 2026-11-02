@@ -205,13 +205,14 @@ async function clearReadOnly(dir: string): Promise<void> {
 
   // One synthetic source root for the whole group, carrying exactly what the scan reads:
   // a tools/clawwright.ts marker (isMonorepoCheckout's acceptance test) and a git repo whose
-  // HEAD holds tools/framework/.env.example — the tracked-shaped file — so tracked+clean
+  // HEAD holds packages/clawwright/.env.example — the tracked-shaped file — so tracked+clean
   // vetting and the blob-hash twin both behave as in a real checkout.
   const syntheticRoot = await mkdtemp(join(tmpdir(), "clawwright-p1-05-source-"));
   const git = (args: string[]) => execFileAsync("git", ["-C", syntheticRoot, ...args]);
-  await mkdir(resolve(syntheticRoot, "tools", "framework"), { recursive: true });
+  await mkdir(resolve(syntheticRoot, "tools"), { recursive: true });
+  await mkdir(resolve(syntheticRoot, "packages", "clawwright"), { recursive: true });
   await writeFile(resolve(syntheticRoot, "tools", "clawwright.ts"), "// checkout marker\n");
-  await writeFile(resolve(syntheticRoot, "tools", "framework", ".env.example"), "TEMPLATE=example\n");
+  await writeFile(resolve(syntheticRoot, "packages", "clawwright", ".env.example"), "TEMPLATE=example\n");
   await git(["init"]);
   await git(["add", "."]);
   await git(["-c", "user.name=check", "-c", "user.email=check@example.test", "commit", "--no-gpg-sign", "-m", "fixture"]);
@@ -312,7 +313,7 @@ async function clearReadOnly(dir: string): Promise<void> {
   }
 
   // Non-vacuous: a git-tracked file that happens to share a sensitive shape — the tracked
-  // tools/framework/.env.example in the synthetic root, the template `new-app` copies onto
+  // packages/clawwright/.env.example in the synthetic root, the template `new-app` copies onto
   // every new deployment — must not itself refuse the checkout-root scan. If it did, the
   // happy-path deploy() calls above (scanning the same root through the seam) would already
   // have failed before reaching this point; asserted again here, by name, so the reason is
@@ -320,12 +321,12 @@ async function clearReadOnly(dir: string): Promise<void> {
   const checkoutFindings = await collectSensitiveCheckoutNames(syntheticRoot);
   check(
     "a git-tracked file that happens to match the sensitive-name shape is not refused",
-    checkoutFindings.some((entry) => entry.path === "tools/framework/.env.example"),
+    checkoutFindings.some((entry) => entry.path === "packages/clawwright/.env.example"),
     false,
   );
 
   // An UNTRACKED byte-identical copy of the tracked template — exactly what `npm run build`
-  // leaves at tools/framework/dist/.env.example, a verbatim copy of the tracked source next
+  // leaves at packages/clawwright/dist/.env.example, a verbatim copy of the tracked source next
   // to it — must not refuse either: the same reviewed bytes, just also sitting at a second,
   // gitignored path a build script produced (a follow-up fix: the path-only tracked check
   // missed exactly this, and broke a plain `npm run build` + deploy).
@@ -334,7 +335,7 @@ async function clearReadOnly(dir: string): Promise<void> {
   {
     const copyScratch = resolve(syntheticRoot, ".clawwright-p1-05-content-copy-scratch");
     try {
-      const trackedTemplate = await readFile(resolve(syntheticRoot, "tools", "framework", ".env.example"));
+      const trackedTemplate = await readFile(resolve(syntheticRoot, "packages", "clawwright", ".env.example"));
       await mkdir(copyScratch, { recursive: true });
       await writeFile(resolve(copyScratch, ".env.example"), trackedTemplate);
       await writeFile(resolve(copyScratch, "unrelated.secrets.env"), "SECRET\n");
@@ -390,7 +391,7 @@ async function clearReadOnly(dir: string): Promise<void> {
         "tools/node_modules/pkg/.env.production",
         "worktrees/agent/.env.production",
         "tools/worktrees/agent/.env.production",
-        "tools/framework/dist/.env.production",
+        "packages/clawwright/dist/.env.production",
         "build/.env.production",
         "scratch/.env.production",
         "apps/.env.production",

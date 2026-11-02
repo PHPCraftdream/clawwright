@@ -42,8 +42,11 @@ init` there, then `clawwright <command>`. A folder with its own local `@phpcraft
 still runs that one — the global command hands over to it — so a version pin per app keeps working.
 
 The gateway image, Docker, WSL, SSH, and provider credentials belong to the deployment. The
-framework does not bundle OpenClaw or any provider key. Read the repository documentation
-for transport requirements, archive profiles, set artifacts, and the security model.
+framework does not bundle OpenClaw or any provider key. The repository owns this package's
+TypeScript source under `packages/clawwright/`; `tools/build-framework-package.ts` builds the
+published `dist/` package from that source. The package's public exports and runtime remain the
+installed application API. See the repository guides for transport requirements, archive profiles,
+set artifacts, and the security model.
 
 Provider setup is provider-agnostic: put `<PROVIDER>_API_KEY` in the target's
 `config/.env`, then run `clawwright configure-provider`. Use `--provider <id> --env <VAR>`

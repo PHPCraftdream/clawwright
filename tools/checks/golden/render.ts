@@ -56,7 +56,7 @@ import { runProcess } from "#checks/kit/spawn.ts";
 import { isolatedAppsRoot } from "#checks/kit/harness.ts";
 
 const GATE_SCRIPT = resolve(monorepoRoot, "tools", "clawwright.ts");
-const BIN_SCRIPT = resolve(monorepoRoot, "tools", "framework", "entry", "bin.ts");
+const BIN_SCRIPT = resolve(monorepoRoot, "packages", "clawwright", "entry", "bin.ts");
 const FIXTURE_APP = "golden-fixture";
 
 // The gate surfaces that list commands agree on one list: the declared checkout commands
@@ -128,7 +128,7 @@ function section(title: string, body: string): string {
  *  framework as a package; here a file URL stands in for that resolution. Written into a
  *  temp directory, never committed. */
 function fixtureAppTs(): string {
-  const commands = pathToFileURL(resolve(monorepoRoot, "tools", "framework", "commands", "interface", "index.ts")).href;
+  const commands = pathToFileURL(resolve(monorepoRoot, "packages", "clawwright", "commands", "interface", "index.ts")).href;
   return [
     `const { openclawCommands } = await import(${JSON.stringify(commands)});`,
     `export default {`,

@@ -20,7 +20,7 @@ import type { Stage } from "#framework/core/command/execute.ts";
 // Resolve against the monorepo root, not process.cwd(): the check is invoked from tools/,
 // where cwd-relative "tools/..." paths would double the segment and the child's imports
 // would fail with ERR_MODULE_NOT_FOUND before any CALL_STAGE line.
-const moduleUrl = (name: string): string => pathToFileURL(join(monorepoRoot, "tools", "framework", name)).href;
+const moduleUrl = (name: string): string => pathToFileURL(join(monorepoRoot, "packages", "clawwright", name)).href;
 const checkUrl = (name: string): string => pathToFileURL(join(monorepoRoot, "tools", "checks", name)).href;
 
 export interface ChangedInventoryUnit {

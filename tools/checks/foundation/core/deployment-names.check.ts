@@ -46,7 +46,7 @@ function checkThrows(name: string, fn: () => unknown, messageIncludes: string[])
 // earlier in this suite.
 
 async function checkNeverSelectedThrows(): Promise<void> {
-  const deploymentUrl = pathToFileURL(resolve(monorepoRoot, "tools", "framework", "runtime", "deployment.ts")).href;
+  const deploymentUrl = pathToFileURL(resolve(monorepoRoot, "packages", "clawwright", "runtime", "deployment.ts")).href;
   const script = [
     `import { deploymentDir } from ${JSON.stringify(deploymentUrl)};`,
     "try {",

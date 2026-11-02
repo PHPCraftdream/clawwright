@@ -52,11 +52,11 @@ const words = (line: string): readonly string[] => line.split(SPACE);
 const GATE = "/co";
 
 /** The fake fs the adapter classifies over: a checkout gate at GATE (tools/clawwright.ts
- *  beside a tools/framework/package.json naming the framework) and app.ts beside the local
+ *  beside a packages/clawwright/package.json naming the framework) and app.ts beside the local
  *  deployment — nothing else exists. Paths are compared normalized, so the facts are the
  *  same on either platform's resolve(). The narrowed probe shape (exists/readFile) keeps
  *  frame.ts free of any import of the resolver. */
-const GATE_FILES = [`${GATE}/tools/clawwright.ts`, `${GATE}/tools/framework/package.json`, `${ROOT}/tools/clawwright.ts`, `${ROOT}/tools/framework/package.json`];
+const GATE_FILES = [`${GATE}/tools/clawwright.ts`, `${GATE}/packages/clawwright/package.json`, `${ROOT}/tools/clawwright.ts`, `${ROOT}/packages/clawwright/package.json`];
 const APP_FILES = [`${APP_LOCAL}/app.ts`];
 const key = (path: string): string => resolve(path).split(sep).join("/");
 const existsIn = (paths: readonly string[]): ((path: string) => boolean) => (path) => paths.some((entry) => key(entry) === key(path));

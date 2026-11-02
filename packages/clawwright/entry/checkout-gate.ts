@@ -14,7 +14,7 @@ import { materializeGate, type GateCommand } from "../integration/gate.ts";
 
 // The check runner is this repository's own tree, outside the shipped package — the path is
 // built, not literal, so the declaration build's graph stays inside tools/framework.
-const CHECK_RUNNER_PATH = ["../../checks/kit", "run.ts"].join("/");
+const CHECK_RUNNER_PATH = ["../../../tools/checks/kit", "run.ts"].join("/");
 
 // Drives new-app's declaration: one body owns the argument kinds, the effect and the run.
 const newAppBody = commandBody({

@@ -39,7 +39,7 @@ const root = await mkdtemp(join(tmpdir(), "clawwright-gate-confirm-"));
 const EOL = "\n";
 try {
   const marker = join(root, "removed.marker");
-  const moduleUrl = (name: string) => new URL(`../../../../framework/${name}.ts`, import.meta.url).href;
+  const moduleUrl = (name: string) => new URL(`../../../../../packages/clawwright/${name}.ts`, import.meta.url).href;
   const script = `
     const { serveMcp } = await import(${JSON.stringify(moduleUrl("integration/mcp/server"))});
     const { checkoutGate, installedGate } = await import(${JSON.stringify(moduleUrl("entry/registry"))});

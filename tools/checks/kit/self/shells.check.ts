@@ -1,5 +1,5 @@
 // Asserts the shells tokenization model against independent literals — nothing here calls
-// into tools/framework beyond importing the Shell type. Style note: every string literal in
+// into packages/clawwright beyond importing the Shell type. Style note: every string literal in
 // an assertion is space-free (dotted names, `\u0020` escapes in input lines, token arrays as
 // expectations) so the architecture ratchet's spaced-literal counts hold steady. Assertions
 // compare TOKEN ARRAYS directly — never re-splitting on spaces — so "one token with an inner

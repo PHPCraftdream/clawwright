@@ -49,11 +49,15 @@ const WINDOWS_RELATED = spaced("check", "--related", "--base", "$base");
 const FAST_STEP_NAME = "Fast tier — typecheck, lint, affected checks";
 
 // Steps allowed in BOTH tiers; every other step must carry the full-tier guard.
+const GO_SETUP = "actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5";
+const GO_STEP = spaced("Set", "up", "Go");
 const BOTH_TIER_STEPS = new Set([
   "Check out",
   "Set up Node",
+  GO_STEP,
   "Install development dependencies",
   "Fail-closed production license audit",
+  "Run relocation parity checks explicitly",
   "Check timing summary",
   FAST_STEP_NAME,
 ]);
@@ -379,8 +383,18 @@ for (const job of EXPECTED_JOBS) {
 
   // The fast step validates an explicit base and uses the host's own shell.
   const licenseAudit = findStep(steps, "Fail-closed production license audit");
+  const go = findStep(steps, GO_STEP);
   checkTrue(`${job}: mandatory production license audit runs npm run license:audit`, containsText(asText(licenseAudit?.run), "npm run license:audit"));
   checkTrue(`${job}: mandatory production license audit is unguarded in both tiers`, licenseAudit !== undefined && licenseAudit.if === undefined);
+  checkTrue(`${job}: pinned Go setup precedes audit`, go !== undefined && steps.indexOf(go) < steps.indexOf(licenseAudit!));
+  check(`${job}: Go setup action pin`, go?.uses, GO_SETUP);
+  const goWith = asRecord(go?.with);
+  check(`${job}: Go version`, goWith["go-version"], "1.26.0");
+  check(`${job}: Go setup disables cache`, goWith.cache, false);
+  check(`${job}: Go setup disables latest lookup`, goWith["check-latest"], false);
+  const auditEnv = asRecord(licenseAudit?.env);
+  check(`${job}: audit uses local Go toolchain`, auditEnv.GOTOOLCHAIN, "local");
+  check(`${job}: audit disables cgo`, auditEnv.CGO_ENABLED, "0");
 
   const fast = findStep(steps, FAST_STEP_NAME);
   const fastRun = asText(fast?.run);
@@ -411,7 +425,7 @@ for (const job of EXPECTED_JOBS) {
   );
 
   const uses = steps.map((step) => asText(step.uses)).filter((value) => value !== "");
-  check(`${job}: action pin count`, uses.length, job === "checks" ? 3 : 2);
+  check(`${job}: action pin count`, uses.length, job === "checks" ? 4 : 3);
   allUses.push(...uses);
 }
 
@@ -422,6 +436,10 @@ const EXPECTED_PINS: readonly string[] = [
   "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
   "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
   "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+  "actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5",
+  "actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5",
+  "actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5",
+  "actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5",
   "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
   "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
   "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",

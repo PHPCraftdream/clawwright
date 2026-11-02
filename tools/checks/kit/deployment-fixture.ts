@@ -56,7 +56,7 @@ const RECIPE_NAME = "local";
 // app.ts must load from a temp root, where "#framework/..." package imports do not resolve —
 // the declaration imports this checkout's modules by absolute file URL instead.
 function declarationFor(): string {
-  const framework = (module: string): string => pathToFileURL(resolve(monorepoRoot, "tools", "framework", module)).href;
+  const framework = (module: string): string => pathToFileURL(resolve(monorepoRoot, "packages", "clawwright", module)).href;
   return [
     `import { defineApp } from ${JSON.stringify(framework(join("core", "app.ts")))};`,
     `import { mountPoints } from ${JSON.stringify(framework(join("runtime", "mounts.ts")))};`,

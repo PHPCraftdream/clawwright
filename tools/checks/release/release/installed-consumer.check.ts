@@ -13,9 +13,10 @@
 // the point here is the packed tarball and the consumer's package.json, not npm's resolver,
 // and a check that needs the registry cannot run on a machine without one.
 
-import { mkdtemp, mkdir, readdir, readFile, writeFile, rm, cp, access, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, writeFile, rm, cp, access, symlink, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { monorepoRoot } from "#framework/core/env.ts";
 import { check, finish } from "#checks/kit/harness.ts";
 import { runProcess } from "#checks/kit/spawn.ts";
@@ -26,9 +27,9 @@ interface Run {
 }
 
 /** spawnLocal has no cwd, and every step here is about which directory it runs in. */
-async function run(command: string, args: string[], cwd: string): Promise<Run> {
+async function run(command: string, args: string[], cwd: string, env: NodeJS.ProcessEnv = process.env): Promise<Run> {
   // runProcess runs npm.cmd through a shell on Windows, the command itself unquoted.
-  const result = await runProcess(command, args, { cwd });
+  const result = await runProcess(command, args, { cwd, env });
   return { code: result.error === undefined ? (result.code ?? -1) : -1, output: result.output };
 }
 
@@ -57,7 +58,8 @@ try {
   // system-install.check.ts) means that dist/ lands in the temp tree, never in the checkout.
   packRoot = await mkdtemp(join(tmpdir(), "clawwright-pack-"));
   await mkdir(join(packRoot, "tools"), { recursive: true });
-  await cp(resolve(monorepoRoot, "tools", "framework"), join(packRoot, "tools", "framework"), {
+  await mkdir(join(packRoot, "packages"), { recursive: true });
+  await cp(resolve(monorepoRoot, "packages", "clawwright"), join(packRoot, "packages", "clawwright"), {
     recursive: true,
     filter: (entry) => {
       const name = basename(entry);
@@ -67,7 +69,7 @@ try {
   await cp(resolve(monorepoRoot, "tsconfig.json"), join(packRoot, "tsconfig.json"));
   await cp(resolve(monorepoRoot, "tools", "build-framework-package.ts"), join(packRoot, "tools", "build-framework-package.ts"));
   await symlink(resolve(monorepoRoot, "node_modules"), join(packRoot, "node_modules"), "junction"); // type is used on Windows only, ignored elsewhere
-  const packed = await run(npm, ["pack", "--pack-destination", base], join(packRoot, "tools", "framework"));
+  const packed = await run(npm, ["pack", "--pack-destination", base], join(packRoot, "packages", "clawwright"));
   const tarballs = packed.code === 0 ? (await readdir(base)).filter((entry) => entry.endsWith(".tgz")) : [];
 
   if (tarballs.length === 0) {
@@ -82,6 +84,40 @@ try {
     // off, so no absolute Windows path is handed to it at all.
     const untarred = await run("tar", ["-xzf", tarballs[0], "-C", "extracted"], base);
     check("the tarball unpacks", untarred.code === 0 ? 0 : untarred.output.trim(), 0);
+    const unpackedPackage = join(extracted, "package");
+    for (const file of ["README.md", "LICENSE", "LICENSE-MIT", "LICENSE-APACHE", "NOTICE", "THIRD_PARTY_NOTICES.md", "package.json"]) {
+      const source = resolve(monorepoRoot, "packages", "clawwright", file);
+      const packedFile = resolve(unpackedPackage, file);
+      const [sourceBytes, packedBytes] = await Promise.all([readFile(source), readFile(packedFile)]);
+      check(`packed file bytes match checkout: ${file}`, packedBytes.equals(sourceBytes), true);
+    }
+    const packedManifest = JSON.parse(await readFile(resolve(unpackedPackage, "package.json"), "utf8")) as { bin?: Record<string, string>; exports?: Record<string, unknown>; files?: string[] };
+    check("packed bin declaration points at the compiled entry", packedManifest.bin?.clawwright, "dist/entry/bin.js");
+    async function inventory(root: string, dir = root): Promise<string[]> {
+      const entries = await readdir(dir, { withFileTypes: true });
+      const files: string[] = [];
+      for (const entry of entries) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) files.push(...await inventory(root, path));
+        else files.push(path.slice(root.length + 1).replaceAll("\\", "/"));
+      }
+      return files.sort();
+    }
+    const builtDist = resolve(packRoot, "packages", "clawwright", "dist");
+    const builtFiles = await inventory(builtDist);
+    check("the builder emits the package assets", [builtFiles.includes(".env.example"), builtFiles.includes("docker-compose.yml")], [true, true]);
+    const expectedArchiveFiles = [
+      ...(packedManifest.files ?? []).filter((path) => path !== "dist"),
+      "package.json",
+      ...builtFiles.map((path) => `dist/${path}`),
+    ].sort();
+    const archiveFiles = await inventory(unpackedPackage);
+    check("packed archive has exactly the manifest allowlist and package.json", JSON.stringify(archiveFiles), JSON.stringify(expectedArchiveFiles));
+    for (const path of builtFiles) {
+      const builtBytes = await readFile(resolve(builtDist, path));
+      const archiveBytes = await readFile(resolve(unpackedPackage, "dist", path));
+      check(`packed dist bytes match the temp prepack build: ${path}`, archiveBytes.equals(builtBytes), true);
+    }
 
     // --- a consumer directory exactly as npm leaves it --------------------------------------
     const consumer = join(base, "consumer");
@@ -89,6 +125,11 @@ try {
     await writeFile(resolve(consumer, "package.json"), `${JSON.stringify(DEFAULT_CONSUMER_PACKAGE, undefined, 2)}\n`, "utf8");
     await cp(join(extracted, "package"), join(consumer, "node_modules", "@phpcraftdream", "clawwright"), { recursive: true });
     await cp(resolve(monorepoRoot, "node_modules", "json5"), join(consumer, "node_modules", "json5"), { recursive: true });
+
+    for (const specifier of ["@phpcraftdream/clawwright/app", "@phpcraftdream/clawwright/mounts", "@phpcraftdream/clawwright/commands", "@phpcraftdream/clawwright/recipe-kit", "@phpcraftdream/clawwright/private-config"]) {
+      const imported = await run(process.execPath, ["--input-type=module", "-e", `await import(${JSON.stringify(specifier)})`], consumer);
+      check(`installed public import resolves from node_modules: ${specifier}`, imported.code, 0);
+    }
 
     const entry = join(consumer, "node_modules", "@phpcraftdream", "clawwright", "dist", "entry", "bin.js");
     check("the packed entry point is where the bin field says it is", await access(entry).then(() => true, () => false), true);
@@ -195,5 +236,156 @@ assert.equal((await importHookModule(hook)).verify(), "second");
   }
   await rm(base, { recursive: true, force: true });
 }
+
+// Source-checkout relocation compatibility is exercised separately from the published tarball:
+// the fixture has the canonical packages/clawwright + tools/clawwright.ts geometry, but no
+// tools/framework mirror. Its generated legacy app and current public-import app both run
+// through the checkout gate and must observe the same canonical framework module instances.
+async function relocatedCheckoutConsumer(): Promise<void> {
+  const checkout = await mkdtemp(join(tmpdir(), "clawwright-relocated-checkout-"));
+  const sourcePackage = join(checkout, "packages", "clawwright");
+  try {
+    await mkdir(join(checkout, "packages"), { recursive: true });
+    await mkdir(join(checkout, "tools"), { recursive: true });
+    await cp(resolve(monorepoRoot, "packages", "clawwright"), sourcePackage, {
+      recursive: true,
+      filter: (entry) => basename(entry) !== "dist" && basename(entry) !== "node_modules",
+    });
+    await cp(resolve(monorepoRoot, "tools", "clawwright.ts"), join(checkout, "tools", "clawwright.ts"));
+    await symlink(resolve(monorepoRoot, "node_modules"), join(checkout, "node_modules"), "junction");
+    await writeFile(join(checkout, "package.json"), JSON.stringify({ type: "module" }), "utf8");
+
+    const apps = join(checkout, "apps");
+    for (const app of ["legacy", "current"]) await mkdir(join(apps, app), { recursive: true });
+    const legacyText = `import { defineApp } from "../../tools/framework/core/app.ts";
+import { mountPoints } from "../../tools/framework/runtime/mounts.ts";
+import { openclawCommands } from "../../tools/framework/commands/interface/index.ts";
+import { commandBody, materializeCommands } from "../../packages/clawwright/core/command/spec.ts";
+
+export default defineApp({
+  name: "legacy",
+  description: "legacy compatibility probe",
+  commands: materializeCommands({
+    "compat-probe": {
+      summary: "compatibility probe",
+      body: commandBody({
+      effect: "read",
+      needs: "nothing",
+      arguments: [],
+      run: async () => {
+        const publicApp = await import("@phpcraftdream/clawwright/app");
+        const publicMounts = await import("@phpcraftdream/clawwright/mounts");
+        const publicCommands = await import("@phpcraftdream/clawwright/commands");
+        console.log(JSON.stringify({
+          marker: "legacy",
+          sameDefineApp: defineApp === publicApp.defineApp,
+          sameMountPoints: mountPoints === publicMounts.mountPoints,
+          sameCommands: openclawCommands === publicCommands.openclawCommands,
+          mountCount: Object.keys(mountPoints).length,
+        }));
+      },
+      }),
+    },
+  }),
+});
+`;
+    const currentText = `import { defineApp } from "../../packages/clawwright/core/app.ts";
+import { mountPoints } from "../../packages/clawwright/runtime/mounts.ts";
+import { openclawCommands } from "../../packages/clawwright/commands/interface/index.ts";
+import { commandBody, materializeCommands } from "../../packages/clawwright/core/command/spec.ts";
+
+export default defineApp({
+  name: "current",
+  description: "public source import probe",
+  commands: materializeCommands({
+    "compat-probe": {
+      summary: "compatibility probe",
+      body: commandBody({
+      effect: "read",
+      needs: "nothing",
+      arguments: [],
+      run: async () => {
+        const publicApp = await import("@phpcraftdream/clawwright/app");
+        const publicMounts = await import("@phpcraftdream/clawwright/mounts");
+        const publicCommands = await import("@phpcraftdream/clawwright/commands");
+        console.log(JSON.stringify({
+          marker: "current",
+          sameDefineApp: defineApp === publicApp.defineApp,
+          sameMountPoints: mountPoints === publicMounts.mountPoints,
+          sameCommands: openclawCommands === publicCommands.openclawCommands,
+          mountCount: Object.keys(mountPoints).length,
+        }));
+      },
+      }),
+    },
+  }),
+});
+`;
+    const paths = { legacy: join(apps, "legacy", "app.ts"), current: join(apps, "current", "app.ts") };
+    await writeFile(paths.legacy, legacyText, "utf8");
+    await writeFile(paths.current, currentText, "utf8");
+    const before = { legacy: await readFile(paths.legacy), current: await readFile(paths.current) };
+    const noMirror = await access(join(checkout, "tools", "framework")).then(() => false, () => true);
+    check("relocated checkout fixture has no tools/framework mirror", noMirror, true);
+
+    const gate = join(checkout, "tools", "clawwright.ts");
+    const packageEntry = join(sourcePackage, "entry", "bin.ts");
+    const childEnv = { ...process.env, CLAWWRIGHT_CHECKS_APPS_DIR: apps };
+    for (const name of ["legacy", "current"] as const) {
+      const result = await run(process.execPath, ["--experimental-strip-types", gate, "--app", name, "compat-probe"], join(apps, name), childEnv);
+      check(`${name} app runs through the relocated checkout gate`, result.code, 0);
+      for (const identity of ["sameDefineApp", "sameMountPoints", "sameCommands"])
+        check(`${name} app shares canonical ${identity} module state`, result.output.includes(`\"${identity}\":true`), true);
+      check(`${name} compatibility probe identifies its unchanged app`, result.output.includes(`\"marker\":\"${name}\"`), true);
+
+      const delegated = await run(process.execPath, ["--experimental-strip-types", packageEntry, "--app", name, "compat-probe"], join(apps, name), childEnv);
+      check(`${name} package entry delegates to the relocated checkout gate`, delegated.code, 0);
+      check(`${name} delegated invocation loads the original app`, delegated.output.includes(`\"marker\":\"${name}\"`), true);
+
+      const version = await run(process.execPath, ["--experimental-strip-types", gate, "--app", name, "version", "--json"], join(apps, name), childEnv);
+      check(`${name} checkout version JSON succeeds`, version.code, 0);
+      let versionData: { source?: string; path?: string } | undefined;
+      try { versionData = JSON.parse(version.output) as { source?: string; path?: string }; } catch { /* checked below */ }
+      check(`${name} version JSON identifies the relocated checkout`, [versionData?.source, versionData?.path], ["checkout", await realpath(checkout)]);
+    }
+
+    // Keep all unrelated imports valid so removing the parent-scope guard would load this app.
+    const isolatedLegacyText = legacyText.replace(
+      '"../../packages/clawwright/core/command/spec.ts"',
+      JSON.stringify(pathToFileURL(join(sourcePackage, "core", "command", "spec.ts")).href),
+    );
+    const nestedDir = join(apps, "nested", "inside");
+    await mkdir(nestedDir, { recursive: true });
+    const nestedApp = join(nestedDir, "app.ts");
+    await writeFile(nestedApp, isolatedLegacyText, "utf8");
+    const nestedUrl = pathToFileURL(nestedApp).href;
+    const nested = await run(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", `import { resolveFrameworkFromSources } from ${JSON.stringify(pathToFileURL(join(sourcePackage, "entry", "delegate.ts")).href)}; resolveFrameworkFromSources(); try { await import(${JSON.stringify(nestedUrl)}); console.log("UNEXPECTED_APP_LOADED"); } catch (error) { console.log(error.code ?? "IMPORT_FAILED"); }`], checkout, childEnv);
+    check("nested app paths are not granted legacy import remapping", nested.output.includes("UNEXPECTED_APP_LOADED"), false);
+    check("nested app fails with ordinary unresolved legacy import", nested.output.includes("ERR_MODULE_NOT_FOUND"), true);
+
+    const outside = join(checkout, "outside-app.ts");
+    await writeFile(outside, isolatedLegacyText, "utf8");
+    const outsideUrl = pathToFileURL(outside).href;
+    const outsideRun = await run(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", `import { resolveFrameworkFromSources } from ${JSON.stringify(pathToFileURL(join(sourcePackage, "entry", "delegate.ts")).href)}; resolveFrameworkFromSources(); try { await import(${JSON.stringify(outsideUrl)}); console.log("UNEXPECTED_APP_LOADED"); } catch (error) { console.log(error.code ?? "IMPORT_FAILED"); }`], checkout, childEnv);
+    check("app outside apps/<one-dir> is not granted legacy import remapping", outsideRun.output.includes("UNEXPECTED_APP_LOADED"), false);
+    check("outside app fails with ordinary unresolved legacy import", outsideRun.output.includes("ERR_MODULE_NOT_FOUND"), true);
+
+    const unsupported = join(apps, "unsupported", "app.ts");
+    await mkdir(join(apps, "unsupported"), { recursive: true });
+    const unsupportedText = 'import "../../tools/framework/core/env.ts";\n' + legacyText.replaceAll('"legacy"', '"unsupported"');
+    await writeFile(unsupported, unsupportedText, "utf8");
+    const unsupportedRun = await run(process.execPath, ["--experimental-strip-types", gate, "--app", "unsupported", "compat-probe"], checkout, childEnv);
+    check("unlisted legacy source imports use ordinary resolution and fail", unsupportedRun.code === 0, false);
+    check("unsupported import fails before app command execution", unsupportedRun.output.includes('"marker":"unsupported"'), false);
+
+    check("legacy generated app bytes remain unchanged", (await readFile(paths.legacy)).equals(before.legacy), true);
+    check("current generated app bytes remain unchanged", (await readFile(paths.current)).equals(before.current), true);
+  } finally {
+    await rm(join(checkout, "node_modules"), { force: true });
+    await rm(checkout, { recursive: true, force: true });
+  }
+}
+
+await relocatedCheckoutConsumer();
 
 finish("installed consumer");

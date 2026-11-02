@@ -4,9 +4,11 @@ import { access, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { monorepoRoot } from "#framework/core/env.ts";
 
-const packageRoot = resolve(monorepoRoot, "tools", "framework");
+const packageRoot = resolve(monorepoRoot, "packages", "clawwright");
 const manifest = JSON.parse(await readFile(resolve(packageRoot, "package.json"), "utf8")) as {
+  name?: string;
   private?: boolean;
+  version?: string;
   license?: string;
   homepage?: string;
   bugs?: { url?: string };
@@ -15,11 +17,19 @@ const manifest = JSON.parse(await readFile(resolve(packageRoot, "package.json"),
   main?: string;
   exports?: Record<string, string | { types?: string; default?: string }>;
   files?: string[];
+  dependencies?: Record<string, string>;
+  scripts?: Record<string, string>;
   publishConfig?: { access?: string };
 };
 
 const requiredFiles = ["README.md", "LICENSE", "LICENSE-MIT", "LICENSE-APACHE", "NOTICE", "THIRD_PARTY_NOTICES.md"];
 for (const file of requiredFiles) await access(resolve(packageRoot, file));
+const expectedFiles = ["dist", ...requiredFiles];
+if (JSON.stringify(manifest.files) !== JSON.stringify(expectedFiles)) throw new Error("the package files allowlist must contain dist and the exact release metadata files");
+if (manifest.name !== "@phpcraftdream/clawwright" || manifest.version !== "0.1.2") throw new Error("package name/version changed during runtime relocation");
+if (JSON.stringify(Object.keys(manifest.exports ?? {}).sort()) !== JSON.stringify(["./app", "./commands", "./mounts", "./private-config", "./recipe-kit"].sort())) throw new Error("the package's five public exports changed");
+if (JSON.stringify(manifest.dependencies) !== JSON.stringify({ json5: "^2.2.3" })) throw new Error("package runtime dependencies changed during relocation");
+if (manifest.scripts?.prepack !== "node --experimental-strip-types ../../tools/build-framework-package.ts") throw new Error("package prepack does not target the retained repository builder");
 
 if (manifest.private === true) throw new Error("the published package must not be private");
 if (manifest.license !== "(MIT OR Apache-2.0)") throw new Error("the package must declare the dual SPDX license");

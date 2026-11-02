@@ -283,7 +283,7 @@ change; it needs Docker (Desktop on Windows/macOS, Engine on Linux) and otherwis
 the next step rather than failing unhelpfully. It reproduces the ubuntu job's checks and
 typecheck/lint steps inside the official `node:24` image, from a clean `git
 ls-files -co --exclude-standard` snapshot (never the host's own `node_modules/` or
-`tools/framework/dist/`) — never the whole working tree. Filter it exactly like `check`:
+`packages/clawwright/dist/`) — never the whole working tree. Filter it exactly like `check`:
 `npm run check:linux -- backup`. It does not install Docker inside the container or mount the
 host's Docker socket, so the handful of checks that specifically probe for a local Docker
 daemon skip their tool-dependent assertions here, the same as they do on a bare runner with no
@@ -297,20 +297,20 @@ module — hitting either one means the directory has stopped mapping onto a sin
 the fix is to regroup by meaning: pull the files that share a real topic into a named
 subdirectory (`runtime/docker/` for the Docker runtime and its diagnostics, `security/privacy/`
 for what must never leave a deployment, and so on), not to drop a new file into whichever
-directory still has a free slot. `tools/checks/` mirrors `tools/framework/` by meaning, not by
+directory still has a free slot. `tools/checks/` mirrors `packages/clawwright/` by meaning, not by
 identical paths: a check lives next to the concept it tests, not necessarily inside a
-directory of the same name as the module it happens to import. `tools/framework/` itself has
+directory of the same name as the module it happens to import. `packages/clawwright/` itself has
 no source files of its own directly under it, so the cap does not apply at that root — new
 top-level groupings still need a name that describes what belongs there, not "wherever fits".
 
 A command a message, an error or a `details` text tells the user to run goes through the advice model and its one
-renderer (`tools/framework/core/io/invocation/` — `command`/`shellLine`/`manual` as data, `renderAdvice`/`commandLine`
+renderer (`packages/clawwright/core/io/invocation/` — `command`/`shellLine`/`manual` as data, `renderAdvice`/`commandLine`
 as text); a hand-written program spelling freezes one invocation into every other one. A line for another shell, host
 or scheduler is `shellLine` and nothing rewrites it — cron, `schtasks` and a remote `deploy` line reach the output layer
 exactly as built. Help prose names a command as a `{clawwright …}` token and its own flags as `{--flag}`, so one text
 reads right under every invocation. The ratchets in `tools/checks/architecture/` enforce this: a literal program
 spelling outside the renderer fails `check architecture` (`dotClawwrightLiterals`), and
-`tools/framework/core/io/invocation/render.ts` is the only exemption that table names.
+`packages/clawwright/core/io/invocation/render.ts` is the only exemption that table names.
 
 The command table in `docs/guide/commands.md`, between its `<!-- commands:begin … -->` and
 `<!-- commands:end -->` markers, and the command list in `README.md`, between its
@@ -353,7 +353,7 @@ unchanged product.
 
 A check's expectation must not be computed by the same product function or table the check
 guards. When the EXPECTED operand and the ACTUAL operand of a `check()`/`assert.*` call share
-a symbol imported from `tools/framework`, one product mutation moves both sides and the
+a symbol imported from `packages/clawwright`, one product mutation moves both sides and the
 assertion can no longer fail — it restates the product instead of guarding it (review rounds
 18-19: `CRONTAB_FAILURES[28] ?? SCHEDULER_TRANSACTION_FAILED`, `engineDistroNote(...)`,
 `crontabUpdateFailure(...)` used as expectations). Prefer an independent expectation: a
@@ -393,7 +393,7 @@ ratchet. New prose ratchets are written against the tokenizer.
 ## Pull requests
 
 Explain the user-visible behavior, security implications, and validation performed. Keep
-generated `tools/framework/dist/` output out of commits. Do not include `.env`, secret stores,
+generated `packages/clawwright/dist/` output out of commits. Do not include `.env`, secret stores,
 archives, snapshots, MCP client settings, or deployment data.
 
 Changes to archive extraction, remote commands, MCP dispatch, credentials, ownership, or

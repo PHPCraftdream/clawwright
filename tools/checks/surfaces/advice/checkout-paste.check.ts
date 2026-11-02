@@ -19,13 +19,13 @@ const forward = (s: string): string => s.replaceAll("\\", "/");
 const timeoutMs = 60_000;
 try {
   await mkdir(checkout);
-  await cp(join(monorepoRoot, "tools", "framework"), join(checkout, "tools", "framework"), { recursive: true, filter: (p) => !p.includes(`${String.fromCharCode(92)}dist`) && !p.includes("/dist") });
+  await cp(join(monorepoRoot, "packages", "clawwright"), join(checkout, "packages", "clawwright"), { recursive: true, filter: (p) => !p.includes(`${String.fromCharCode(92)}dist`) && !p.includes("/dist") });
   for (const file of ["clawwright", "package.json", "tools/clawwright.ts"]) {
     await mkdir(dirname(join(checkout, file)), { recursive: true });
     await cp(join(monorepoRoot, file), join(checkout, file));
   }
   await cp(join(monorepoRoot, "node_modules", "json5"), join(checkout, "node_modules", "json5"), { recursive: true, dereference: true });
-  const moduleUrl = (p: string): string => JSON.stringify(pathToFileURL(join(checkout, "tools", "framework", p)).href);
+  const moduleUrl = (p: string): string => JSON.stringify(pathToFileURL(join(checkout, "packages", "clawwright", p)).href);
   const payload = ['literal $DO_NOT_EXPAND_CF $(printf unexpected-substitution) "$@" $1', 'r3"paired', "r3$TOKEN", "r3'DArcy", "r3Ω雪", ...[1, 2, 3, 4, 5, 6].map((n) => "r3 spaced " + "\\".repeat(n))];
   const declaration = `import { commandBody, materializeCommands } from ${moduleUrl("core/command/spec.ts")};
 import * as kinds from ${moduleUrl("core/values/kinds.ts")};

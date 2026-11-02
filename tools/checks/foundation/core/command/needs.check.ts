@@ -284,13 +284,13 @@ try {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) { await sweep(path); continue; }
       const rel = relative(monorepoRoot, path).split("\\").join("/");
-      if (!entry.name.endsWith(".ts") || rel === "tools/framework/core/env.ts") continue;
+      if (!entry.name.endsWith(".ts") || rel === "packages/clawwright/core/env.ts") continue;
       (await readFile(path, "utf8")).split("\n").forEach((line, index) => {
         if (/\breadFile\([ \t]*envFile\(\)/.test(line)) offenders.push(`${rel}:${index + 1}`);
       });
     }
   };
-  await sweep(join(monorepoRoot, "tools", "framework"));
+  await sweep(join(monorepoRoot, "packages", "clawwright"));
   check("no product file reads envFile() past the counted reader", offenders, []);
 
   await writeFile(memoryDeclarationPath, memoryDeclaration, "utf8");

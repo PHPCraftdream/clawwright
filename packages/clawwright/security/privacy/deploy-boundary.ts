@@ -23,7 +23,7 @@ const LOCAL_DIRECTORIES = [
 ] as const;
 
 const GENERATED_ROOTS = ["dist", "build", "coverage", ".cache", ".tmp", "scratch"] as const;
-const GENERATED_FRAMEWORK_PATHS = ["/tools/framework/dist/", "/tools/framework/build/"] as const;
+const GENERATED_FRAMEWORK_PATHS = ["/packages/clawwright/dist/", "/packages/clawwright/build/"] as const;
 
 /** Filters shared by the framework and deployment payload mirrors. */
 export const EXCLUDES = [
@@ -176,7 +176,7 @@ export async function collectSensitiveCheckoutNames(root: string): Promise<{ pat
         LOCAL_DIRECTORIES.some((name) => name === entry.name)
         || entry.name === ".git"
         || (base === "" && (entry.name === "apps" || GENERATED_ROOTS.some((name) => name === entry.name)))
-        || (base === "tools/framework" && (entry.name === "dist" || entry.name === "build"))
+        || (base === "packages/clawwright" && (entry.name === "dist" || entry.name === "build"))
       )) continue;
       const relativePath = base === "" ? entry.name : `${base}/${entry.name}`;
       if (SENSITIVE_RECIPE_NAME.test(relativePath)) {

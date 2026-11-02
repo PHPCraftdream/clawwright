@@ -1,4 +1,4 @@
-// `./clawwright list` — tools/framework/integration/list.ts's listDeployments().
+// `./clawwright list` — packages/clawwright/integration/list.ts's listDeployments().
 //
 // A scratch apps/ this file builds and owns, never the real one: several fixtures, one
 // broken in each of the ways a real deployment can be, all read through the one function

@@ -3,9 +3,59 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+
+func TestApprovedLicenseCallersFiniteBlobTransitions(t *testing.T) {
+	const (
+		ciPath = "tools/checks/ci/ci-tiers.check.ts"
+		rulesPath = "tools/checks/kit/selection/rules.ts"
+		ciOld = "dc8d01cc5ad57f2bd4bede88f2a18a2d6a6a325c"
+		ciNew = "1c339eac001b4d0cd5ccd86dba521c137ea43b2b"
+		rulesOld = "e24d463345f84ce455cded12efab52118aae0373"
+		rulesNew = "e8549159c7e4f9e6bd29789c8a80839fd3bd12ec"
+	)
+	for _, tc := range []struct { name, path, old, current string; allowed bool }{
+		{"exact2 approved", ciPath, ciOld, ciNew, true},
+		{"unrelated blob refused", ciPath, ciOld, "unrelated", false},
+		{"wrongpath refused", "tools/checks/elsewhere.ts", ciOld, ciNew, false},
+		{"changedbaseline refused", ciPath, "changed-baseline", ciNew, false},
+		{"old baseline remains allowed", ciPath, ciOld, ciOld, true},
+		{"Go current remains allowed", "tools/example.go", "old", "current", true},
+		{"rules exact2 approved", rulesPath, rulesOld, rulesNew, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			legacy := map[string]inventory{tc.path: {mode: "100644", blob: tc.old}}
+			approved := approvedLicenseCallers(legacy)
+			if tc.current == tc.old || tc.path == "tools/example.go" {
+				got := evaluate(map[string]inventory{tc.path: {mode: "100644", blob: tc.current}}, legacy, func(inventory) (int, error) { return 1, nil })
+				if len(got.Violations) != 0 { t.Fatalf("baseline/Go blob refused: %+v", got) }
+				return
+			}
+			got := evaluateWithTransitions(map[string]inventory{tc.path: {mode: "100644", blob: tc.current}}, legacy, func(inventory) (int, error) { return 1, nil }, approved)
+			if accepted := len(got.Violations) == 0; accepted != tc.allowed { t.Fatalf("accepted=%v want %v: %+v", accepted, tc.allowed, got) }
+		})
+	}
+}
+
+func TestApprovedLicenseCallerReceiptsMatchGitBlobs(t *testing.T) {
+	root := "../.."
+	for _, tc := range []struct{ path, old, next string }{
+		{"tools/checks/ci/ci-tiers.check.ts", "dc8d01cc5ad57f2bd4bede88f2a18a2d6a6a325c", "1c339eac001b4d0cd5ccd86dba521c137ea43b2b"},
+		{"tools/checks/kit/selection/rules.ts", "e24d463345f84ce455cded12efab52118aae0373", "e8549159c7e4f9e6bd29789c8a80839fd3bd12ec"},
+	} {
+		old, err := git(root, "show", baseline+":"+tc.path)
+		if err != nil || gitBlobID(old) != tc.old { t.Fatalf("baseline receipt %s: blob=%s err=%v", tc.path, gitBlobID(old), err) }
+		current, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(tc.path)))
+		if err != nil { t.Fatal(err) }
+		current = bytes.ReplaceAll(current, []byte("\r\n"), []byte("\n"))
+		if got := gitBlobID(current); got != tc.next { t.Fatalf("current receipt %s: blob=%s want=%s", tc.path, got, tc.next) }
+	}
+}
 
 func TestApprovedRunnerStillEnforcesLineCeiling(t *testing.T) {
 	legacy := map[string]inventory{"tools/native/task245-acceptance/run.py": {mode: "100644", blob: "old"}}

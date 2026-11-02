@@ -7,7 +7,7 @@ project. The upstream project is available at:
 
 https://github.com/openclaw/openclaw
 
-The adapted file is `tools/framework/docker-compose.yml` in source form and
+The adapted file is `packages/clawwright/docker-compose.yml` in source form and
 `dist/docker-compose.yml` in the npm package. Changes made by Clawwright include the image-only
 workflow, explicit host bind mounts, loopback-by-default port publishing, and the healthcheck.
 Clawwright does not distribute the OpenClaw image or its source code; users obtain the image

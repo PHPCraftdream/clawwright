@@ -366,7 +366,7 @@ try {
   // --- (2) a REAL serveMcp session: tools/list advertises it, tools/call accepts it ------
   {
     // OC_DATA_DIR is absent on purpose: MCP must run recovery without building a Context.
-    const moduleUrl = (name: string) => new URL(`../../../framework/${name}.ts`, import.meta.url).href;
+    const moduleUrl = (name: string) => new URL(`../../../../packages/clawwright/${name}.ts`, import.meta.url).href;
     const mcpScript = `
       const { serveMcp } = await import(${JSON.stringify(moduleUrl("integration/mcp/server"))});
       const { commandBody, materializeCommands } = await import(${JSON.stringify(moduleUrl("core/command/index"))});
@@ -454,7 +454,7 @@ try {
   // predicate throws while the pipeline reads its facts must answer as a masked isError
   // tool result — never as a JSON-RPC error that skips the caller's content handling.
   {
-    const moduleUrl = (name: string) => new URL(`../../../framework/${name}.ts`, import.meta.url).href;
+    const moduleUrl = (name: string) => new URL(`../../../../packages/clawwright/${name}.ts`, import.meta.url).href;
     const mcpScript = `
       const { serveMcp } = await import(${JSON.stringify(moduleUrl("integration/mcp/server"))});
       const { useDeployment } = await import(${JSON.stringify(moduleUrl("runtime/deployment"))});

@@ -78,11 +78,11 @@ async function verifyRevision(name: string): Promise<{ revision?: number }> {
 // The mapping table mirrors the package's export map: every public export resolves to the
 // source file its dist target is built from, and nothing else does.
 {
-  const manifest = JSON.parse(await readFile(resolve(monorepoRoot, "tools", "framework", "package.json"), "utf8")) as { exports: Record<string, { default: string }> };
+  const manifest = JSON.parse(await readFile(resolve(monorepoRoot, "packages", "clawwright", "package.json"), "utf8")) as { exports: Record<string, { default: string }> };
   for (const [key, target] of Object.entries(manifest.exports)) {
     const expected = target.default.replace("./dist/", "").replace(/\.js$/, ".ts");
     const mapped = checkoutFrameworkSource(`@phpcraftdream/clawwright/${key.slice(2)}`);
-    check(`export ${key} maps to its source file`, mapped !== undefined && mapped.replaceAll("\\", "/").endsWith(`/tools/framework/${expected}`), true);
+    check(`export ${key} maps to its source file`, mapped !== undefined && mapped.replaceAll("\\", "/").endsWith(`/packages/clawwright/${expected}`), true);
   }
   check("an unknown subpath maps to nothing", checkoutFrameworkSource("@phpcraftdream/clawwright/not-an-export"), undefined);
   check("a foreign package maps to nothing", checkoutFrameworkSource("json5"), undefined);

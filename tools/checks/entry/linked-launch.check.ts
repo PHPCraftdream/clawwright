@@ -1,4 +1,4 @@
-// End-to-end proof of the linked-package launch decision (tools/framework/entry/root.ts):
+// End-to-end proof of the linked-package launch decision (packages/clawwright/entry/root.ts):
 // when the app's node_modules/@phpcraftdream/clawwright is a link to the running package, the
 // entry's advice must name the DEPLOYMENT's launcher, not the framework checkout the link
 // resolves to. The child process resolves its main module through the link to its real

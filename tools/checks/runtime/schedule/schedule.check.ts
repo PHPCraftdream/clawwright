@@ -413,7 +413,7 @@ try {
   await writeFile(join(installedRoot, "clawwright"), "");
   await writeFile(join(installedRoot, "app.ts"), 'export default { name: "fixture", summary: "Fixture", commands: {} };\n');
   useDeployment(installedRoot);
-  const entry = resolve(monorepoRoot, "tools", "framework", "entry", "bin.ts");
+  const entry = resolve(monorepoRoot, "packages", "clawwright", "entry", "bin.ts");
   const fromOtherCwd = spawnSync(process.execPath, ["--experimental-strip-types", entry, "--project-root", installedRoot, "help"], {
     cwd: otherCwd,
     encoding: "utf8",

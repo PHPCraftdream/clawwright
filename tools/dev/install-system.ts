@@ -4,7 +4,7 @@
 //   npm run install:system                     into npm's global prefix
 //   npm run install:system -- --prefix <dir>   into another prefix (the check uses a scratch one)
 //
-// Packs tools/framework exactly as it would be published (prepack builds dist/) and installs
+// Packs packages/clawwright exactly as it would be published (prepack builds dist/) and installs
 // that tarball with `npm install -g`: a copy, not a link to this working tree, so the command
 // does not change under later edits. Then runs the installed command itself.
 //
@@ -19,7 +19,7 @@ import { resolveOnPath, shadowMessage } from "./resolve-on-path.ts";
 import { INSTALLED_MARK, NOT_ON_PATH_HINT } from "./install-messages.ts";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const packageDir = resolve(repoRoot, "tools", "framework");
+const packageDir = resolve(repoRoot, "packages", "clawwright");
 const windows = process.platform === "win32";
 
 function refuse(message: string): never {

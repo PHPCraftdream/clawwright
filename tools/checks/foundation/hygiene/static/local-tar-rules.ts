@@ -1,5 +1,5 @@
 // Pure local-tar ownership analysis over source TEXT — no filesystem, no imports of the
-// tree. tools/framework/set/artifacts/tar.ts is the single owner of LOCAL tar spawns; tar
+// tree. packages/clawwright/set/artifacts/tar.ts is the single owner of LOCAL tar spawns; tar
 // over ctx.transport runs on the target and is legitimate. Enforces two invariants:
 // (1) no local process runner is ever given the literal program "tar" outside the owner;
 // (2) inside the owner, a spawnLocal/localTarRunner("tar", [...]) array that passes "-C"

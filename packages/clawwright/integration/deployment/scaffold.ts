@@ -36,8 +36,8 @@ const storedTarget = targetFrame({ kind: "checkout-shim", root: "" }, "posix");
 function declarationSpecifier(module: string): string {
   const override = process.env["CLAWWRIGHT_CHECKS_APPS_DIR"];
   if (override !== undefined && override !== "")
-    return JSON.stringify(pathToFileURL(resolve(monorepoRoot, "tools", "framework", module)).href);
-  return JSON.stringify(`../../tools/framework/${module}`);
+    return JSON.stringify(pathToFileURL(resolve(monorepoRoot, "packages", "clawwright", module)).href);
+  return JSON.stringify(`../../packages/clawwright/${module}`);
 }
 
 export function declarationFor(name: string): string {
@@ -50,7 +50,7 @@ export function declarationFor(name: string): string {
 //
 // Run it with:  ${renderAdvice(command(["status"], { app: name }), storedTarget)}
 ${seam ? `// Check-only root: this textual specifier marks the deployment as
-// checkout-sourced for importsCheckoutSourcesIn: import { defineApp } from "../../tools/framework/core/app.ts";
+// checkout-sourced for importsCheckoutSourcesIn: import { defineApp } from "../../packages/clawwright/core/app.ts";
 ` : ""}
 import { defineApp } from ${declarationSpecifier("core/app.ts")};
 import { mountPoints } from ${declarationSpecifier("runtime/mounts.ts")};

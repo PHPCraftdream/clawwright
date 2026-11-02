@@ -63,14 +63,14 @@ export function fakeFs(files: Record<string, string>, dirs: readonly string[], r
 }
 
 const manifest = JSON.stringify({ name: "@phpcraftdream/clawwright" });
-const strayAppTs = 'import { defineApp } from "../../tools/framework/core/app.ts";\nexport default defineApp({});\n';
+const strayAppTs = 'import { defineApp } from "../../packages/clawwright/core/app.ts";\nexport default defineApp({});\n';
 
 /** Files/dirs shared by every layout, laid out once: the checkout with two deployments, the
  *  stray checkout-style app.ts outside apps/, the installed app, its local-package twin,
  *  and an empty directory. */
 const BASE_FILES: Record<string, string> = {
   [`${ROOT}/tools/clawwright.ts`]: "// gate\n",
-  [`${ROOT}/tools/framework/package.json`]: manifest,
+  [`${ROOT}/packages/clawwright/package.json`]: manifest,
   [`${ROOT}/apps/openclaw/app.ts`]: "export default {};\n",
   [`${ROOT}/apps/demo/app.ts`]: "export default {};\n",
   [`${STRAY}/app.ts`]: strayAppTs,
@@ -80,7 +80,7 @@ const BASE_FILES: Record<string, string> = {
   [`${APP_LOCAL}/config/desired-state.json`]: "{}\n",
   [LOCAL_ENTRY]: "// local package entry\n",
 };
-const BASE_DIRS = [`${ROOT}/apps`, `${ROOT}/apps/openclaw`, `${ROOT}/apps/demo`, `${ROOT}/apps/fresh`, `${ROOT}/docs`, `${ROOT}/tools`, `${ROOT}/tools/framework`, dirname(STRAY), STRAY, `${APP}/config`, `${APP}/recipes`, `${APP}/recipes/sub`, `${APP_LOCAL}/config`, EMPTY];
+const BASE_DIRS = [`${ROOT}/apps`, `${ROOT}/apps/openclaw`, `${ROOT}/apps/demo`, `${ROOT}/apps/fresh`, `${ROOT}/docs`, `${ROOT}/packages`, `${ROOT}/packages/clawwright`, dirname(STRAY), STRAY, `${APP}/config`, `${APP}/recipes`, `${APP}/recipes/sub`, `${APP_LOCAL}/config`, EMPTY];
 /** Windows case: the same deployment typed as APPS/<name>. */
 const WIN_REAL: Record<string, string> = {
   [`${ROOT}/APPS/openclaw`]: `${ROOT}/apps/openclaw`,

@@ -70,7 +70,7 @@ try {
     exists: (path) => path === resolve(checkoutRoot, "tools", "clawwright.ts") || path === resolve(appRoot, "app.ts") || path === resolve(checkoutRoot, "apps", "demo", "app.ts"),
     isDirectory: (path) => path === resolve(checkoutRoot, "apps", "demo") || path === resolve(checkoutRoot, "apps"),
     readdir: (path) => path === resolve(checkoutRoot, "apps") ? ["demo"] : [],
-    readFile: (path) => path === resolve(checkoutRoot, "tools", "framework", "package.json") ? JSON.stringify({ name: "@phpcraftdream/clawwright" }) : undefined,
+    readFile: (path) => path === resolve(checkoutRoot, "packages", "clawwright", "package.json") ? JSON.stringify({ name: "@phpcraftdream/clawwright" }) : undefined,
     realpath: (path) => path,
   }, localEntry: undefined });
   checkTrue("system launch delegates to owning checkout gate", owner.kind === "spawn" && owner.delegated === false);
@@ -89,7 +89,7 @@ try {
       exists: (path) => path === resolve(checkoutRoot, "tools", "clawwright.ts") || path === resolve(appsRoot, "openclaw", "app.ts") || path === resolve(appsRoot, "demo", "app.ts"),
       isDirectory: (path) => path === appsRoot || path === resolve(appsRoot, "demo"),
       readdir: (path) => path === appsRoot ? ["demo"] : [],
-      readFile: (path) => path === resolve(checkoutRoot, "tools", "framework", "package.json") ? JSON.stringify({ name: "@phpcraftdream/clawwright" }) : undefined,
+      readFile: (path) => path === resolve(checkoutRoot, "packages", "clawwright", "package.json") ? JSON.stringify({ name: "@phpcraftdream/clawwright" }) : undefined,
       realpath: (path) => path,
     }, gateCommands: [], deploymentCommands: ["status"], variadicCommands: [] });
     checkTrue("delegated spawn passes the selected app to the final gate", final.kind === "run" && final.appName === "demo");

@@ -50,7 +50,10 @@ func check(root string) (report, error) {
 		}
 		return lineCount(data), nil
 	}
-	approved := make(map[string]string)
+	approved := approvedTask251(legacy)
+	for path, blob := range approvedLicenseCallers(legacy) {
+		approved[path] = blob
+	}
 	const runnerPath = "tools/native/task245-acceptance/run.py"
 	if old, ok := legacy[runnerPath]; ok {
 		oldBytes, err := git(root, "cat-file", "blob", old.blob)
@@ -80,6 +83,20 @@ const rustRunnerBlock = `        for source, output in (("task245-domain-init/ma
             invoke(["rustc", "--edition=2021", "--target=x86_64-unknown-linux-gnu", "-C", "opt-level=2", "-C", "panic=abort", "-C", "target-feature=+crt-static", "-o", str(stage/output), str(NATIVE/source)])
             (stage/output).chmod(0o755)
         for source, output in (("task245-control-profile/control-profile.c","control-profile"),`
+
+func approvedLicenseCallers(legacy map[string]inventory) map[string]string {
+	transitions := map[string]struct{ old, next string }{
+		"tools/checks/ci/ci-tiers.check.ts": {"dc8d01cc5ad57f2bd4bede88f2a18a2d6a6a325c", "1c339eac001b4d0cd5ccd86dba521c137ea43b2b"},
+		"tools/checks/kit/selection/rules.ts": {"e24d463345f84ce455cded12efab52118aae0373", "e8549159c7e4f9e6bd29789c8a80839fd3bd12ec"},
+	}
+	approved := make(map[string]string)
+	for path, transition := range transitions {
+		if old, ok := legacy[path]; ok && old.blob == transition.old {
+			approved[path] = transition.next
+		}
+	}
+	return approved
+}
 
 func approvedRunner(b []byte) ([]byte, error) {
 	transformed, err := approvedLaunchRunner(b)

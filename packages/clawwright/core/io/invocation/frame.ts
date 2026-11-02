@@ -334,7 +334,7 @@ const FRAMEWORK_PACKAGE = "@phpcraftdream/clawwright";
  *  a checkout when tools/framework/package.json names the framework and tools/clawwright.ts
  *  stands beside it. */
 function gateIn(dir: string, fs: HandoverFacts["fs"]): boolean {
-  const manifest = fs.readFile(resolve(dir, "tools", "framework", "package.json"));
+  const manifest = fs.readFile(resolve(dir, "packages", "clawwright", "package.json"));
   if (manifest === undefined) return false;
   try {
     return (JSON.parse(manifest) as { name?: unknown }).name === FRAMEWORK_PACKAGE && fs.exists(resolve(dir, "tools", "clawwright.ts"));

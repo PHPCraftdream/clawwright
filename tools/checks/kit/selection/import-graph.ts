@@ -98,7 +98,7 @@ interface AliasSource {
 /** Alias sources, rooted at REPO_ROOT: the root package.json and the framework package's own. */
 const ALIAS_SOURCES: readonly AliasSource[] = [
   { packageJsonPath: "package.json", importPathFromRoot: "" },
-  { packageJsonPath: "tools/framework/package.json", importPathFromRoot: "tools/framework/" },
+  { packageJsonPath: "packages/clawwright/package.json", importPathFromRoot: "packages/clawwright/" },
 ];
 
 let aliasCache: readonly AliasMap[] | undefined;

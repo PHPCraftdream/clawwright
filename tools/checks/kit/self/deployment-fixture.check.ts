@@ -63,7 +63,7 @@ const checkoutAppsEntries = async (): Promise<string[]> =>
   (await readdir(checkoutApps, { recursive: true }).catch(() => [] as string[])).map(String).sort();
 const appsBefore = await checkoutAppsEntries();
 // The pathspec excludes prune the tracked pass cheaply; the ignored pass keeps its bare directory markers, which visibleGitStatus filters.
-const gitArgs = ["status", "--porcelain", "--ignored=matching", "--", ":(exclude)apps", ":(exclude)node_modules", ":(exclude)worktrees", ":(exclude)tools/framework/dist"];
+const gitArgs = ["status", "--porcelain", "--ignored=matching", "--", ":(exclude)apps", ":(exclude)node_modules", ":(exclude)worktrees", ":(exclude)packages/clawwright/dist"];
 const gitBefore = await runProcess("git", gitArgs, { cwd: repoRoot });
 // git may be absent in a bare environment: that skips the comparison, never fails the suite.
 const gitAvailable = gitBefore.code === 0 && gitBefore.error === undefined;

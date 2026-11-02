@@ -131,10 +131,10 @@ for (const [name, text] of SYNTHETIC_TOKENS) {
 // Group data must not freeze an invocation into a command line: a renderer call in a group
 // file or in service/inspection.ts bakes the program spelling into the declaration.
 const RENDERER_CALLS = ["commandLine(", "renderAdvice("];
-const groupsDir = resolve(monorepoRoot, "tools", "framework", "commands", "interface", "groups");
+const groupsDir = resolve(monorepoRoot, "packages", "clawwright", "commands", "interface", "groups");
 const structureFiles = [
   ...(await readdir(groupsDir)).filter((name) => name.endsWith(".ts")).map((name) => resolve(groupsDir, name)),
-  resolve(monorepoRoot, "tools", "framework", "service", "inspection.ts"),
+  resolve(monorepoRoot, "packages", "clawwright", "service", "inspection.ts"),
 ];
 for (const file of structureFiles) {
   const text = await readFile(file, "utf8");

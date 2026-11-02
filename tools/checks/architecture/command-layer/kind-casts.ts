@@ -10,7 +10,7 @@ import { grammarInRunScan } from "./grammar-in-run.ts";
 
 const BRAND_CAST = /\bas\s+(?:RecipeName|LocalArtifact|LocalRecipeSource|RecipeRef|Checksum|OperationId|OwnedObjectName|SetName|StoreName|AgentName|DeploymentName)\b/;
 
-/** Value-brand casts (`as RecipeName`, …) in tools/framework/** outside core/values —
+/** Value-brand casts (`as RecipeName`, …) in packages/clawwright/** outside core/values —
  *  comment lines are stripped so prose mentions never count. */
 export async function kindCastsOutsideValues(): Promise<number> {
   let count = 0;
@@ -29,11 +29,11 @@ export async function kindCastsOutsideValues(): Promise<number> {
       }
     }
   }
-  await scan(join(monorepoRoot, "tools", "framework"));
+  await scan(join(monorepoRoot, "packages", "clawwright"));
   return count;
 }
 
-/** Grammar-mint calls inside run bodies under tools/framework/commands/** — the shared
+/** Grammar-mint calls inside run bodies under packages/clawwright/commands/** — the shared
  *  grammar-in-run measurement, shrink-only: after S2.5 it is 0 and must stay 0. */
 export async function grammarCallsInRun(): Promise<number> {
   return (await grammarInRunScan()).sites.length;
@@ -53,7 +53,7 @@ function codeLines(content: string): readonly string[] {
 const ARGUMENT_ERROR_TOKEN = /\bARGUMENT_ERROR_TOKEN\b/;
 const PREPARED_CALL = /\bprepared\s*\(/;
 
-/** Stage-7 S2.5 layer-boundary counts over tools/framework/**, one file per occurrence:
+/** Stage-7 S2.5 layer-boundary counts over packages/clawwright/**, one file per occurrence:
  *  argumentErrorTokenOutside — files OUTSIDE core/command/** referencing the private
  *  ArgumentError token (the token stays in core/command/errors.ts; only that layer builds
  *  ArgumentErrors); preparedOutsideCommand — files OUTSIDE core/command/** calling
@@ -86,6 +86,6 @@ export async function stage7S25Boundaries(): Promise<{
       }
     }
   }
-  await scan(join(monorepoRoot, "tools", "framework"), []);
+  await scan(join(monorepoRoot, "packages", "clawwright"), []);
   return { argumentErrorTokenOutside: tokenFiles, preparedOutsideCommand: preparedFiles, planMintImportOutside: planMintFiles };
 }

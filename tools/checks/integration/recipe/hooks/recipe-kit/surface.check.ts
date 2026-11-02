@@ -9,7 +9,7 @@ const compatibleRuntime = (runtime: Runtime): RecipeRuntime => runtime;
 const compatibleContext = (ctx: Context): RecipeContext => ctx;
 void compatibleRuntime;
 void compatibleContext;
-const root = new URL("../../../../../framework/recipe-kit/", import.meta.url);
+const root = new URL("../../../../../../packages/clawwright/recipe-kit/", import.meta.url);
 const entries = await readdir(root);
 checkTrue("new source directory at most seven entries", entries.length <= 7);
 const graph = ["index.ts", "types.ts", "app.ts", "consumer.ts"];

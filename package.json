@@ -6,7 +6,7 @@
   "license": "(MIT OR Apache-2.0)",
   "type": "module",
   "imports": {
-    "#framework/*": "./tools/framework/*",
+    "#framework/*": "./packages/clawwright/*",
     "#checks/*": "./tools/checks/*",
     "#tools/*": "./tools/*"
   },
@@ -23,10 +23,10 @@
     "build": "node --experimental-strip-types tools/build-framework-package.ts",
     "install:system": "node --experimental-strip-types tools/dev/install-system.ts",
     "typecheck": "tsgo --noEmit",
-    "lint": "oxlint tools --deny-warnings",
+    "lint": "oxlint tools packages --deny-warnings",
     "format:check": "npm run typecheck && npm run lint",
-    "pack:check": "cd tools/framework && npm pack --dry-run --json",
-    "license:audit": "node --experimental-strip-types tools/checks/release/license-audit.ts && node --experimental-strip-types tools/checks/release/license-audit.check.ts"
+    "pack:check": "cd packages/clawwright && npm pack --dry-run --json",
+    "license:audit": "go -C tools/checks/release/license-audit run . --root ../../../.. --package-dir ../../../../packages/clawwright && go -C tools/checks/release/license-audit test -count=1 ./..."
   },
   "devDependencies": {
     "@types/node": "24.13.6",
