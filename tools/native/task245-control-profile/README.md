@@ -10,17 +10,19 @@ Linux/amd64 laboratory component, not a production service or OpenClaw adoption 
 - `cmd/metadata-regression` and `internal/regression`: owning syscall-error and actual-binary/kernel regressions.
 - `internal/proof`: canonical root-service proof parsing and client authentication.
 
-The superseded `control-profile.c`, `metadata.c`, `metadata_client.c`, `metadata.h` and `metadata_test.c` remain available in Git at `c85aa1a`. `probe.c` remains an unchanged protocol fixture for the subsequent fixture migration. The component root has five immediate entries; new implementation files remain within 700 physical lines and nested directories within seven entries. These constraints do not mean the repository-wide tooling migration is complete.
+The superseded `control-profile.c`, `metadata.c`, `metadata_client.c`, `metadata.h` and `metadata_test.c` remain available in Git at `c85aa1a`. The former `probe.c` remains in Git at `04f1d80`; its Go replacement is `cmd/control-probe`, with an explicit same-image exec witness rather than a bare-fork witness. Replacement execution remains pending public CI. The component root has four immediate entries; new implementation files remain within 700 physical lines and nested directories within seven entries. These constraints do not mean the repository-wide tooling migration is complete.
 
 ## Identity, confinement and authority
 
 The external laboratory route remains CLI/keeper to fixed consumer, root broker, launch-owning native supervisor and fixed provider. Keeper supplies finite human-authorized per-write grants; root-service metadata, hashes, UID, receipts and immutable artifacts identify components but never approve secret delivery. Payload does not pass through the root broker. Provider OC-PIPE-ACK is a write receipt, not gateway adoption or authentication proof.
 
-The control profile grants read/execute access only to immutable read-only `/lab/bin`. Landlock ABI v3 and selected Linux/amd64 seccomp rules block `/proc` access, AF_UNIX/SCM bypasses, namespace changes and process-memory access after installation. Ordinary allowed descriptors and inherited filters remain usable across the tested process/image transitions. Root compromise, same-UID trust and trusted-runtime/kernel limitations remain outside this component's guarantees.
+The profile grants read/execute access to immutable read-only `/lab/bin`. Landlock ABI v3 and selected Linux/amd64 seccomp rules block `/proc` access, AF_UNIX/SCM bypasses, namespace changes and process-memory access after installation. Bare-fork compatibility and same-image exec compatibility are distinct: a same-image exec probe does not establish bare-fork compatibility. Root compromise, same-UID trust and trusted-runtime/kernel limitations remain outside this component's guarantees.
 
-The unchanged `service.py` publisher independently verifies its actual root process, executable inode/hash, proc start time, listening SOCK_SEQPACKET endpoint and owned kernel FD before publishing a root-owned canonical proof. Go clients verify protected directories/record, expected artifact/socket identities, peer PID/UID and proc start time without dereferencing the root process's executable. The Go regression publisher is a separate fixture, not a replacement for that Python publisher or proof of full composition.
+The current acceptance publisher is Go `tools/native/task245-acceptance/internal/service`, which owns children with `exec.Cmd` and publishes the root-service proof after checking process identity and the actual listening socket. The old Python `service.py`/`Popen` publisher description and related evidence are historical only; they do not describe or validate the current publisher. Go clients validate the protected proof and endpoint identities, peer PID/UID and proc start time. The Go regression publisher is a separate fixture, not a replacement for the current publisher or proof of full composition.
 
-Regression launchers distinguish an absent socket, an authenticated bound-but-not-listening endpoint and a ready listener. PID/start, pinned socket inode, ownership, endpoint state and owned descriptor checks precede the unchanged strict publisher. A socket pathname alone is not readiness.
+Regression launchers distinguish an absent socket, an authenticated bound-but-not-listening endpoint and a ready listener. PID/start, pinned socket inode, ownership, endpoint state and owned descriptor checks precede publication. A socket pathname alone is not readiness.
+
+The broker lifecycle source tests cover a real receive timeout returning EAGAIN, followed by explicit `MSG_DONTWAIT` polling without a read goroutine. Production clears the five-second timeout; cleanup waits under that same 60-second deadline. Coverage includes getsockopt confirming zero, continued child liveness, cancellation and child reaping; timeout is not proof of reaping. Natural EOF and unexpected data are refusal cases. These are authored source tests only; no execution is claimed.
 
 ## Cancellation and finite lifecycle
 
@@ -30,7 +32,10 @@ The shipped service budget is 600 seconds; fixed root/CI-only two-second modes e
 
 The installer transfers its listener and closes its local copy; the daemon has one receive loop. Linux v6.8 [seccomp source](https://raw.githubusercontent.com/torvalds/linux/v6.8/kernel/seccomp.c) explains how a canceled request can leave a count consumed by receive and yield ENOENT. This is not a general multi-reader or all-kernel proof. The actual cancellation test gates the daemon after poll readiness, kills/reaps the filtered holder, and requires real receive ENOENT followed by normal shutdown.
 
-## Executed public evidence
+## Source-only status
+
+This README describes source contracts, not current execution evidence. Task #250 rewires public CI to Go entry points; its composition is NOT RUN in this worktree and remains unaccepted until parent CI. No PASS or full migration claim is made. The pinned external `delivery_pty.py` remains non-Go. The task #249 guarantees below remain constraints, not newly validated results.
+
 
 At `b66ff07537e4532e57d1671c40745cd928d1119c`, native CI `41368394895` passed twice on the same SHA; policy `41368394892` and feature `41368394902` also passed. The daemon-slot mask repair restored the original writable-slot contract. Earlier cross-UID Kill failure was reproduced as EPERM in a real refusal fixture and no longer hides behind an unconditional Wait.
 
@@ -42,6 +47,6 @@ Executed component coverage includes Rust parser/filter/ABI tests, Go proof refu
 
 CI recorded Linux `7.0.0-1017-azure`, Rust/Cargo `1.99.1` and target `x86_64-unknown-linux-gnu`; Go remains `1.26.0`. No local build/test or toolchain upgrade occurred. Shipped Rust uses edition2021, optimization2, static CRT and panic abort; test harnesses unwind. Unsafe ABI/pointer lifetime/alignment boundaries were source-reviewed and kernel-tested, not formally proven; Miri does not prove these raw kernel transitions. No external Rust dependency graph was introduced.
 
-Tooling policy retains immutable baseline `8eadbd4e8dcfac3d6e11fe5ee49525da5baa3482`, seven exact Rust fallback paths, and exact baseline-derived runner/profile transformations. Its real CLI/Git tests and index audit passed. Remaining C/Python and TypeScript helper debt stays explicit; application/runtime relocation is separate.
+Tooling policy retains immutable baseline `8eadbd4e8dcfac3d6e11fe5ee49525da5baa3482`, seven exact Rust fallback paths, and exact baseline-derived runner/profile transformations. Current policy tests use current Go paths plus the historical immutable baseline; they do not require current Python sources to be readable. No execution passes are claimed for this update. The pinned external Python helper and remaining TypeScript helper debt stay explicit; application/runtime relocation is separate.
 
 Diagnostics emit only finite stage/event/class codes and bounded errno/exit/signal values. Arbitrary error text and child stderr are filtered; payload, bootstrap values, raw PTY/CLI output and private configuration are not diagnostic channels. Component success does not establish full keeper composition, actual OpenClaw authentication, production readiness or permission for deployment.

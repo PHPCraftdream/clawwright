@@ -21,6 +21,52 @@ func TestApprovedRunnerStillEnforcesLineCeiling(t *testing.T) {
 	}
 }
 
+func TestTask250GoMigrationKeepsImmutableLanguageBoundary(t *testing.T) {
+	legacy := map[string]inventory{}
+	for _, path := range []string{
+		"tools/native/task245-acceptance/run.py",
+		"tools/native/task245-acceptance/profile.py",
+		"tools/native/task245-acceptance/service.py",
+		"tools/native/task245-acceptance/service_test.py",
+		"tools/native/task245-acceptance/gateway.c",
+		"tools/native/task245-acceptance/release_fixture.c",
+		"tools/native/task245-control-profile/probe.c",
+	} {
+		legacy[path] = inventory{mode: "100644", blob: "old"}
+	}
+	current := map[string]inventory{}
+	for _, path := range []string{
+		"tools/native/task245-acceptance/cmd/profile/main_linux.go",
+		"tools/native/task245-acceptance/fixtures/gateway/main_linux.go",
+		"tools/native/task245-control-profile/cmd/control-probe/main_linux.go",
+	} {
+		current[path] = inventory{mode: "100644", blob: "new"}
+	}
+	lines := func(inventory) (int, error) { return 1, nil }
+	if got := evaluate(current, legacy, lines); len(got.Violations) != 0 {
+		t.Fatalf("Go migration should preserve the immutable language boundary: %+v", got)
+	}
+
+	runPath := "tools/native/task245-acceptance/run.py"
+	changedRunner := make(map[string]inventory, len(current)+1)
+	for path, item := range current {
+		changedRunner[path] = item
+	}
+	changedRunner[runPath] = inventory{mode: "100644", blob: "changed"}
+	if got := evaluate(changedRunner, legacy, lines); len(got.Violations) == 0 {
+		t.Fatalf("changed legacy run.py accepted: %+v", got)
+	}
+
+	withoutRunner := make(map[string]inventory, len(current)-1)
+	for path, item := range current {
+		withoutRunner[path] = item
+	}
+	withoutRunner["tools/native/task245-acceptance/cmd/wrapper.c"] = inventory{mode: "100644", blob: "new-wrapper"}
+	if got := evaluate(withoutRunner, legacy, lines); len(got.Violations) == 0 {
+		t.Fatalf("replacement wrapper.c accepted: %+v", got)
+	}
+}
+
 func TestClassification(t *testing.T) {
 	cases := map[string]string{
 		"tools/a.ts": "implementation",

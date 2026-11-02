@@ -2,55 +2,76 @@ package main
 
 import (
 	"bytes"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestControlRunnerMatchesWorkingSource(t *testing.T) {
+func TestCurrentRunnerAndWorkflowUseGoSource(t *testing.T) {
 	root, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
 	}
-	baselineBytes, err := git(root, "show", baseline+":tools/native/task245-acceptance/run.py")
-	if err != nil {
-		t.Fatalf("read immutable baseline runner: %v", err)
+	read := func(path string) []byte {
+		t.Helper()
+		b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil {
+			t.Fatalf("read current source %s: %v", path, err)
+		}
+		return b
 	}
-	approvedBytes, err := approvedRunner(baselineBytes)
-	if err != nil {
-		t.Fatalf("derive approved runner from baseline blob: %v", err)
+	run := string(read("tools/native/task245-acceptance/internal/runner/run.go"))
+	container := string(read("tools/native/task245-acceptance/internal/runner/container.go"))
+	for _, token := range []string{"./task245-acceptance/cmd/profile", "./task245-control-profile/cmd/control-probe", "./task245-acceptance/fixtures/gateway", "./task245-acceptance/fixtures/release"} {
+		if !strings.Contains(run, token) && !strings.Contains(container, token) {
+			t.Errorf("Go runner source missing expected package path %q", token)
+		}
 	}
-	workingBytes, err := os.ReadFile(filepath.Join(root, "tools", "native", "task245-acceptance", "run.py"))
+	f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(root, "tools/native/task245-acceptance/internal/runner/run.go"), nil, 0)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("parse live Go runner: %v", err)
 	}
-	if !bytes.Equal(workingBytes, approvedBytes) {
-		t.Fatal("working runner does not exactly match approved baseline transition")
+	foundContainerRun := false
+	ast.Inspect(f, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		ident, ok := call.Fun.(*ast.Ident)
+		foundContainerRun = foundContainerRun || ok && ident.Name == "containerRun"
+		return true
+	})
+	if !foundContainerRun {
+		t.Error("live Go runner has no containerRun call")
+	}
+	if strings.Contains(run, "run.py") || strings.Contains(run, "python3") || strings.Contains(container, "/lab/run") {
+		t.Fatal("live Go runner retains a legacy Python run path")
+	}
+	for _, path := range []string{
+		"tools/native/task245-acceptance/cmd/profile/main_linux.go",
+		"tools/native/task245-acceptance/cmd/profile/setup_linux.go",
+		"tools/native/task245-acceptance/cmd/profile/ceremony_linux.go",
+		"tools/native/task245-acceptance/fixtures/gateway/main_linux.go",
+		"tools/native/task245-acceptance/fixtures/release/main_linux.go",
+		"tools/native/task245-control-profile/cmd/control-probe/main_linux.go",
+	} {
+		read(path)
+	}
+	workflow := string(read(".github/workflows/native-supervisor.yml"))
+	for _, token := range []string{"working-directory: tools/native", "go run ./task245-acceptance/cmd/acceptance", "lab_case:", "- confinement", "- connected", "- wrong-holder", "- unexpected-exec", "- partial-ack", "- lost-ack", "- cancel"} {
+		if !strings.Contains(workflow, token) {
+			t.Errorf("workflow lost expected working-directory/source/matrix element %q", token)
+		}
+	}
+	if strings.Count(workflow, "go run ./task245-acceptance/cmd/acceptance") != 1 {
+		t.Fatal("workflow Go runner invocation changed")
 	}
 }
 
-
-func TestControlProfileMatchesWorkingSource(t *testing.T) {
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
-	baselineBytes, err := git(root, "show", baseline+":tools/native/task245-acceptance/profile.py")
-	if err != nil {
-		t.Fatalf("read immutable baseline profile: %v", err)
-	}
-	approvedBytes, err := approvedControlProfile(baselineBytes)
-	if err != nil {
-		t.Fatalf("derive approved baseline profile transition: %v", err)
-	}
-	workingBytes, err := os.ReadFile(filepath.Join(root, "tools", "native", "task245-acceptance", "profile.py"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(workingBytes, approvedBytes) {
-		t.Fatal("working profile does not exactly match approved baseline transition")
-	}
-}
 func TestControlProfileRejectsAdditionalEdits(t *testing.T) {
 	const profilePath = "tools/native/task245-acceptance/profile.py"
 	root, err := filepath.Abs("../..")

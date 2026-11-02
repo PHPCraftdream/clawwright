@@ -84,7 +84,7 @@ func TestPublicCLIReadsStagedBlobAndRequiresStaging(t *testing.T) {
 	}
 }
 
-func TestPublicCLIAcceptsOnlyApprovedRunnerTransitionFromBaseline(t *testing.T) {
+func TestPublicCLIHistoricalRunnerTransitionFromBaseline(t *testing.T) {
 	binary := buildCLI(t)
 	clone := cloneCheckout(t)
 	const runnerPath = "tools/native/task245-acceptance/run.py"
@@ -113,6 +113,56 @@ func TestPublicCLIAcceptsOnlyApprovedRunnerTransitionFromBaseline(t *testing.T) 
 	}
 }
 
+func TestPublicCLITracksGoMigrationAndRejectsLegacyResurrection(t *testing.T) {
+	binary := buildCLI(t)
+	clone := cloneCheckout(t)
+	goPath := "tools/native/task245-acceptance/internal/runner/policy.go"
+	originalGo, err := os.ReadFile(filepath.Join(clone, filepath.FromSlash(goPath)))
+	if err != nil {
+		t.Fatalf("read existing Go fixture: %v", err)
+	}
+	initial := runCLI(t, binary, clone)
+	if initial.exitCode != 0 {
+		t.Fatalf("initial CLI failed: %s", initial.stderr)
+	}
+
+	writeRepo(t, clone, goPath, "package runner\n")
+	gitTest(t, clone, "add", goPath)
+	valid := runCLI(t, binary, clone)
+	if valid.exitCode != 0 || goInventoryCount(t, valid.stdout) != goInventoryCount(t, initial.stdout) {
+		t.Fatalf("staged Go fixture rejected: exit=%d stderr=%q", valid.exitCode, valid.stderr)
+	}
+
+	writeRepo(t, clone, goPath, repeatedLines(701))
+	gitTest(t, clone, "add", goPath)
+	oversized := runCLI(t, binary, clone)
+	if oversized.exitCode != 1 || !strings.Contains(oversized.stderr, goPath) || !strings.Contains(oversized.stderr, "exceeds 700") {
+		t.Fatalf("oversized Go source was not rejected: exit=%d stderr=%q", oversized.exitCode, oversized.stderr)
+	}
+	writeRepo(t, clone, goPath, string(originalGo))
+	gitTest(t, clone, "add", goPath)
+
+	cPath := "tools/native/task245-acceptance/cmd/acceptance/new-caller.c"
+	writeRepo(t, clone, cPath, "int main(void) { return 0; }\n")
+	gitTest(t, clone, "add", cPath)
+	cResult := runCLI(t, binary, clone)
+	if cResult.exitCode != 1 || !strings.Contains(cResult.stderr, cPath) || !strings.Contains(cResult.stderr, "implementation is new or changed from baseline") {
+		t.Fatalf("new C source was not rejected for implementation baseline: exit=%d stderr=%q", cResult.exitCode, cResult.stderr)
+	}
+	gitTest(t, clone, "rm", cPath)
+
+	legacyPath := "tools/native/task245-acceptance/run.py"
+	baselineBytes, err := git(clone, "show", baseline+":"+legacyPath)
+	if err != nil {
+		t.Fatalf("read historical runner baseline: %v", err)
+	}
+	writeRepo(t, clone, legacyPath, string(baselineBytes)+"\n# resurrected\n")
+	gitTest(t, clone, "add", legacyPath)
+	legacy := runCLI(t, binary, clone)
+	if legacy.exitCode != 1 || !strings.Contains(legacy.stderr, legacyPath) || !strings.Contains(legacy.stderr, "implementation is new or changed from baseline") {
+		t.Fatalf("reintroduced legacy runner was not rejected for implementation baseline: exit=%d stderr=%q", legacy.exitCode, legacy.stderr)
+	}
+}
 func TestPublicCLIMissingBaselineAndUnreadableBlob(t *testing.T) {
 	binary := buildCLI(t)
 	empty := initRepository(t)
@@ -135,6 +185,7 @@ func TestPublicCLIMissingBaselineAndUnreadableBlob(t *testing.T) {
 		t.Fatalf("missing-blob result = %+v", unreadable)
 	}
 }
+
 
 type cliResult struct {
 	stdout   string
