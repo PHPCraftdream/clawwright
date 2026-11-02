@@ -64,21 +64,11 @@ func run() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	metadata := make([]byte, 4097)
+	metadata, err := readNativeMetadata(ctx)
+	if err != nil {
+		return errAdmission
+	}
 	defer clear(metadata)
-	if err := os.Stdin.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
-		return errAdmission
-	}
-	stopStdin := context.AfterFunc(ctx, func() { _ = os.Stdin.Close() })
-	defer stopStdin()
-	n, err := io.ReadFull(os.Stdin, metadata)
-	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
-		return errAdmission
-	}
-	if n == 0 || n > 4096 || parseNativeMetadata(metadata[:n]) != nil {
-		return errAdmission
-	}
-	metadata = metadata[:n]
 
 	p, err := loadPolicy()
 	if err != nil {
@@ -113,6 +103,61 @@ func run() error {
 		}
 		return verifySupervisor(peer, p.SupervisorSHA256)
 	})
+}
+
+func readNativeMetadata(ctx context.Context) (result []byte, resultErr error) {
+	if ctx == nil || ctx.Err() != nil {
+		return nil, errAdmission
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return nil, errAdmission
+	}
+	var st syscall.Stat_t
+	if syscall.Fstat(0, &st) != nil {
+		return nil, errAdmission
+	}
+	copyFD, _, errno := syscall.Syscall(syscall.SYS_FCNTL, 0, syscall.F_DUPFD_CLOEXEC, 3)
+	if errno != 0 {
+		return nil, errAdmission
+	}
+	if syscall.SetNonblock(int(copyFD), true) != nil {
+		_ = syscall.Close(int(copyFD))
+		return nil, errAdmission
+	}
+	in := os.NewFile(copyFD, "native-metadata-input")
+	if in == nil {
+		_ = syscall.Close(int(copyFD))
+		return nil, errAdmission
+	}
+	closed := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		_ = in.Close()
+		close(closed)
+	})
+	defer func() {
+		if !stop() {
+			<-closed
+		}
+		_ = in.Close()
+	}()
+	if err := in.SetReadDeadline(deadline); err != nil {
+		return nil, errAdmission
+	}
+	metadata := make([]byte, 4097)
+	defer func() {
+		if resultErr != nil {
+			clear(metadata)
+		}
+	}()
+	n, err := io.ReadFull(in, metadata)
+	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+		return nil, errAdmission
+	}
+	if n == 0 || n > 4096 || parseNativeMetadata(metadata[:n]) != nil || ctx.Err() != nil {
+		return nil, errAdmission
+	}
+	return metadata[:n], nil
 }
 
 func parseNativeMetadata(raw []byte) error {

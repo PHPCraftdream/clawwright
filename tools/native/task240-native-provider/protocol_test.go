@@ -4,10 +4,184 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
+	"errors"
 	"io"
+	"os"
+	"os/exec"
+	"syscall"
 	"testing"
+	"time"
 )
+
+const metadataProbeArg = "--task240-metadata-pipe-probe"
+
+func init() {
+	if len(os.Args) == 3 && os.Args[1] == metadataProbeArg {
+		os.Exit(runMetadataPipeProbe(os.Args[2]))
+	}
+}
+
+func runMetadataPipeProbe(mode string) int {
+	if err := os.Stdin.SetReadDeadline(time.Now().Add(time.Second)); !errors.Is(err, os.ErrNoDeadline) {
+		return 31
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	started := time.Now()
+	if mode == "cancel" {
+		time.AfterFunc(40*time.Millisecond, cancel)
+	}
+	if _, err := syscall.Write(3, []byte{1}); err != nil {
+		return 32
+	}
+	var before syscall.Stat_t
+	if syscall.Fstat(0, &before) != nil {
+		return 33
+	}
+	got, err := readNativeMetadata(ctx)
+	elapsed := time.Since(started)
+	var after syscall.Stat_t
+	if syscall.Fstat(0, &after) != nil || before.Dev != after.Dev || before.Ino != after.Ino {
+		return 34
+	}
+	switch mode {
+	case "valid":
+		want := []byte(`{"protocolVersion":1,"provider":"clawwright-ssjack","ids":["gateway-token"]}`)
+		if err != nil || !bytes.Equal(got, want) || parseNativeMetadata(got) != nil {
+			return 35
+		}
+	case "at-limit":
+		want := []byte(`{"protocolVersion":1,"provider":"clawwright-ssjack","ids":["gateway-token"]}`)
+		want = append(want, bytes.Repeat([]byte{' '}, 4096-len(want))...)
+		if err != nil || !bytes.Equal(got, want) || parseNativeMetadata(got) != nil {
+			return 36
+		}
+	case "oversized", "invalid", "empty":
+		if err == nil {
+			return 37
+		}
+	case "timeout":
+		select {
+		case <-ctx.Done():
+		case <-time.After(200 * time.Millisecond):
+			return 38
+		}
+		if err == nil || ctx.Err() != context.DeadlineExceeded {
+			return 38
+		}
+	case "cancel":
+		if err == nil || ctx.Err() != context.Canceled || elapsed > 800*time.Millisecond {
+			return 39
+		}
+	default:
+		return 40
+	}
+	return 0
+}
+
+func TestReadNativeMetadataPipeSubprocess(t *testing.T) {
+	valid := []byte(`{"protocolVersion":1,"provider":"clawwright-ssjack","ids":["gateway-token"]}`)
+	modes := []string{"valid", "at-limit", "oversized", "invalid", "empty", "timeout", "cancel"}
+	for _, mode := range modes {
+		t.Run(mode, func(t *testing.T) {
+			reader, writer, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer reader.Close()
+			defer writer.Close()
+			readyR, readyW, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer readyR.Close()
+			defer readyW.Close()
+			cmd := exec.Command(os.Args[0], metadataProbeArg, mode)
+			cmd.Stdin = reader
+			cmd.ExtraFiles = []*os.File{readyW}
+			cmd.Env = []string{}
+			cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+			_ = reader.Close()
+			_ = readyW.Close()
+			waited := make(chan error, 1)
+			reaped := make(chan struct{})
+			go func() {
+				waited <- cmd.Wait()
+				close(reaped)
+			}()
+			defer func() {
+				_ = writer.Close()
+				select {
+				case <-reaped:
+					return
+				default:
+					_ = cmd.Process.Kill()
+				}
+				select {
+				case <-reaped:
+				case <-time.After(time.Second):
+					t.Error("probe process was not reaped within bound")
+				}
+			}()
+			if err := readyR.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+				t.Fatalf("set readiness deadline: %v", err)
+			}
+			var signal [1]byte
+			if _, err := io.ReadFull(readyR, signal[:]); err != nil || signal[0] != 1 {
+				t.Fatalf("probe readiness handshake failed: %v", err)
+			}
+			switch mode {
+			case "valid":
+				if _, err := writer.Write(valid); err != nil {
+					t.Fatal(err)
+				}
+				if err := writer.Close(); err != nil {
+					t.Fatal(err)
+				}
+			case "at-limit":
+				data := append(append([]byte(nil), valid...), bytes.Repeat([]byte{' '}, 4096-len(valid))...)
+				if _, err := writer.Write(data); err != nil {
+					t.Fatal(err)
+				}
+				if err := writer.Close(); err != nil {
+					t.Fatal(err)
+				}
+			case "oversized":
+				data := append(append([]byte(nil), valid...), bytes.Repeat([]byte{' '}, 4097-len(valid))...)
+				if _, err := writer.Write(data); err != nil {
+					t.Fatal(err)
+				}
+				if err := writer.Close(); err != nil {
+					t.Fatal(err)
+				}
+			case "invalid":
+				if _, err := writer.Write([]byte(`{"protocolVersion":1}`)); err != nil {
+					t.Fatal(err)
+				}
+				if err := writer.Close(); err != nil {
+					t.Fatal(err)
+				}
+			case "empty":
+				if err := writer.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			select {
+			case err := <-waited:
+				if err != nil {
+					t.Fatalf("probe failed: %v", err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("probe did not finish within bound")
+			}
+		})
+	}
+}
 
 func TestNativeMetadataBoundariesAndValidation(t *testing.T) {
 	valid := []byte(`{"protocolVersion":1,"provider":"clawwright-ssjack","ids":["gateway-token"]}`)
