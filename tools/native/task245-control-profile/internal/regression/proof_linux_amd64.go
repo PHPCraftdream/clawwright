@@ -80,7 +80,7 @@ func runServiceProofCase(parent context.Context, name string) (retErr error) {
 		return err
 	}
 	var socket syscall.Stat_t
-	if err := waitForProofSocket(ctx, done, &owned, &socket); err != nil {
+	if err := waitForProofSocket(ctx, daemon.Process.Pid, start, done, &owned, &socket); err != nil {
 		return err
 	}
 	if name == "wrong_service" {
@@ -229,7 +229,7 @@ func RunCanceledNotificationCase(parent context.Context) (retErr error) {
 		return startErr
 	}
 	var socket syscall.Stat_t
-	if err := waitForProofSocket(ctx, daemonDone, &daemonOwned, &socket); err != nil {
+	if err := waitForProofSocket(ctx, daemon.Process.Pid, daemonStart, daemonDone, &daemonOwned, &socket); err != nil {
 		return err
 	}
 	start := daemonStart
@@ -392,7 +392,7 @@ func runDaemonLifetimeCase(parent context.Context, name string) (retErr error) {
 
 	var socket syscall.Stat_t
 	ReportStage("life_socket")
-	if err := waitForProofSocket(ctx, done, &daemonOwned, &socket); err != nil {
+	if err := waitForProofSocket(ctx, daemon.Process.Pid, daemonStart, done, &daemonOwned, &socket); err != nil {
 		ReportFailure("life_socket", err)
 		return err
 	}
@@ -544,25 +544,8 @@ func runDaemonLifetimeCase(parent context.Context, name string) (retErr error) {
 	return nil
 }
 
-func waitForProofSocket(ctx context.Context, done <-chan error, owned *bool, socket *syscall.Stat_t) error {
-	tick := time.NewTicker(10 * time.Millisecond)
-	defer tick.Stop()
-	for {
-		if err := ctx.Err(); err != nil {
-			return errors.New("daemon socket readiness timeout")
-		}
-		if err := syscall.Stat(kernelSocket, socket); err == nil && socket.Mode&syscall.S_IFMT == syscall.S_IFSOCK {
-			return nil
-		}
-		select {
-		case daemonErr := <-done:
-			*owned = false
-			return fmt.Errorf("daemon exited before socket: %v", daemonErr)
-		case <-ctx.Done():
-			return errors.New("daemon socket readiness timeout")
-		case <-tick.C:
-		}
-	}
+func waitForProofSocket(ctx context.Context, pid int, start uint64, done <-chan error, owned *bool, socket *syscall.Stat_t) error {
+	return waitOwnedProofSocket(ctx, pid, start, done, owned, socket)
 }
 
 func holderStillAlive(holder *exec.Cmd) error {

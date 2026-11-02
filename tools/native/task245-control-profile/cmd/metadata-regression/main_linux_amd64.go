@@ -15,6 +15,12 @@ import (
 
 func main() {
 	args := os.Args[1:]
+	if len(args) == 1 && args[0] == "--proof-readiness-child" {
+		if err := regression.ProofReadinessChild(); err != nil {
+			runtimeError("metadata proof readiness child", err)
+		}
+		return
+	}
 	if len(args) == 0 {
 		if err := regression.RunACKRegression(); err != nil {
 			runtimeError("metadata cancel-ack regression", err)

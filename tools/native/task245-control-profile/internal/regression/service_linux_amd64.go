@@ -3,6 +3,7 @@
 package regression
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -280,6 +281,132 @@ func runACKObserverRegression() error {
 	return nil
 }
 
+func waitOwnedProofSocket(ctx context.Context, pid int, start uint64, done <-chan error, owned *bool, socket *syscall.Stat_t, observe ...func(bool) error) error {
+	if len(observe) > 1 {
+		return errors.New("wait owned proof socket accepts at most one observer")
+	}
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		select {
+		case err := <-done:
+			*owned = false
+			return fmt.Errorf("daemon exited before socket ready: %v", err)
+		default:
+		}
+		ready, err := ownedProofSocketReady(pid, start, socket)
+		if err != nil {
+			return err
+		}
+		if len(observe) == 1 {
+			if observeErr := observe[0](ready); observeErr != nil {
+				return observeErr
+			}
+		}
+		if ready {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-done:
+			*owned = false
+			return fmt.Errorf("daemon exited before socket ready: %v", err)
+		case <-tick.C:
+		}
+	}
+}
+
+func ownedProofSocketReady(pid int, start uint64, socket *syscall.Stat_t) (bool, error) {
+	if err := verifyProcessIdentity(pid, start); err != nil {
+		return false, err
+	}
+	var current syscall.Stat_t
+	if err := syscall.Lstat(kernelSocket, &current); err != nil {
+		if errors.Is(err, os.ErrNotExist) && socket.Ino == 0 {
+			return false, nil
+		}
+		return false, err
+	}
+	if current.Mode&syscall.S_IFMT != syscall.S_IFSOCK || current.Uid != 0 {
+		return false, errors.New("daemon socket has wrong type or owner")
+	}
+	if socket.Ino != 0 && (socket.Dev != current.Dev || socket.Ino != current.Ino) {
+		return false, errors.New("daemon socket identity changed")
+	}
+	if socket.Ino == 0 {
+		*socket = current
+	}
+	const tableLimit = 1 << 20
+	data, err := os.ReadFile("/proc/net/unix")
+	if err != nil {
+		return false, fmt.Errorf("read unix listener table: %w", err)
+	}
+	if len(data) > tableLimit {
+		return false, errors.New("unix listener table exceeds limit")
+	}
+	matches := 0
+	var flags, tableInode []byte
+	for _, line := range bytes.Split(data, []byte{'\n'})[1:] {
+		fields := bytes.Fields(line)
+		if len(fields) >= 8 && bytes.Equal(fields[4], []byte("0005")) && bytes.Equal(fields[7], []byte(kernelSocket)) {
+			flags = fields[3]
+			tableInode = fields[6]
+			matches++
+		}
+	}
+	if matches != 1 {
+		return false, errors.New("expected exactly one bound SOCK_SEQPACKET unix socket")
+	}
+	entries, err := os.ReadDir(fmt.Sprintf("/proc/%d/fd", pid))
+	if err != nil {
+		return false, fmt.Errorf("read daemon fds: %w", err)
+	}
+	if len(entries) > 4096 {
+		return false, errors.New("daemon fd count exceeds limit")
+	}
+	target := "socket:[" + string(tableInode) + "]"
+	ownedFD := false
+	for _, entry := range entries {
+		path := fmt.Sprintf("/proc/%d/fd/%s", pid, entry.Name())
+		link, err := os.Readlink(path)
+		if err != nil {
+			return false, fmt.Errorf("read daemon fd link: %w", err)
+		}
+		if link != target {
+			continue
+		}
+		var st syscall.Stat_t
+		if err := syscall.Stat(path, &st); err != nil {
+			return false, fmt.Errorf("stat daemon socket fd: %w", err)
+		}
+		if st.Mode&syscall.S_IFMT != syscall.S_IFSOCK {
+			return false, errors.New("daemon socket fd has wrong type")
+		}
+		ownedFD = true
+	}
+	if !ownedFD {
+		return false, errors.New("daemon does not own the bound socket")
+	}
+	if bytes.Equal(flags, []byte("00000000")) {
+		return false, nil
+	}
+	if !bytes.Equal(flags, []byte("00010000")) {
+		return false, errors.New("unexpected unix socket flags")
+	}
+	if current.Mode&07777 != 0666 {
+		return false, errors.New("daemon listening socket has wrong mode")
+	}
+	if err := verifyDaemonListener(pid, kernelSocket); err != nil {
+		return false, err
+	}
+	*socket = current
+	return true, nil
+}
+
 func terminateOwnedCmd(cmd *exec.Cmd, start uint64, done <-chan error, ctx context.Context, killStage, waitStage string) (consumed bool, cleanupErr error) {
 	select {
 	case waitErr := <-done:
@@ -411,6 +538,9 @@ func RunKernelDriver(ctx context.Context) error {
 		return errors.New("kernel driver regression requires root in GitHub Actions")
 	}
 	if err := RunDiagnosticRegression(); err != nil {
+		return err
+	}
+	if err := runDiagnosticStage("life_socket", func() error { return RunProofReadinessRegression(ctx) }); err != nil {
 		return err
 	}
 

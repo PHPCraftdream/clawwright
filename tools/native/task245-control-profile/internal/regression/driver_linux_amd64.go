@@ -117,9 +117,7 @@ func runCasePhaseKind(parent context.Context, active bool, phase, refusal string
 		return fmt.Errorf("start daemon: %w", err)
 	}
 	daemonDone := make(chan error, 1)
-	go func() {
-		daemonDone <- daemon.Wait()
-	}()
+	go func() { daemonDone <- daemon.Wait() }()
 	daemonOwned := true
 	defer func() {
 		if daemonOwned {
@@ -143,35 +141,15 @@ func runCasePhaseKind(parent context.Context, active bool, phase, refusal string
 		return err
 	}
 	var socketStat syscall.Stat_t
-	deadline := time.NewTimer(2*time.Second)
-	tick := time.NewTicker(time.Millisecond)
-	defer deadline.Stop()
-	defer tick.Stop()
-	for {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if _, err = os.Lstat(kernelSocket); err == nil {
-			if err = syscall.Stat(kernelSocket, &socketStat); err == nil && socketStat.Mode&syscall.S_IFMT == syscall.S_IFSOCK {
-				break
-			}
-		}
-		select {
-		case daemonErr := <-daemonDone:
-			daemonOwned = false
-			return fmt.Errorf("daemon exited before socket ready: %v", daemonErr)
-			case <-deadline.C:
-			return errors.New("timed out waiting for daemon socket")
-		case <-tick.C:
-		}
-	}
-	if socketStat.Uid != 0 || socketStat.Mode&07777 != 0666 {
-		return errors.New("daemon socket has wrong owner or mode")
-	}
 	start, err := procStartTicks(daemon.Process.Pid)
+	if err != nil { return err }
+	readyCtx, readyCancel := context.WithTimeout(ctx, 2*time.Second)
+	err = waitOwnedProofSocket(readyCtx, daemon.Process.Pid, start, daemonDone, &daemonOwned, &socketStat)
+	readyCancel()
 	if err != nil {
 		return err
 	}
+	if socketStat.Uid != 0 || socketStat.Mode&07777 != 0666 { return errors.New("daemon socket has wrong owner or mode") }
 	if err = publishKernelProof(daemon.Process.Pid, start, artifactStat, artifactHash, &socketStat); err != nil {
 		return err
 	}
