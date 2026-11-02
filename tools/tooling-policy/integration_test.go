@@ -149,7 +149,7 @@ func TestPublicCLITracksGoMigrationAndRejectsLegacyResurrection(t *testing.T) {
 	if cResult.exitCode != 1 || !strings.Contains(cResult.stderr, cPath) || !strings.Contains(cResult.stderr, "implementation is new or changed from baseline") {
 		t.Fatalf("new C source was not rejected for implementation baseline: exit=%d stderr=%q", cResult.exitCode, cResult.stderr)
 	}
-	gitTest(t, clone, "rm", cPath)
+	gitTest(t, clone, "rm", "-f", cPath)
 
 	legacyPath := "tools/native/task245-acceptance/run.py"
 	baselineBytes, err := git(clone, "show", baseline+":"+legacyPath)
