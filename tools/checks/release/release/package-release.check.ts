@@ -29,7 +29,9 @@ if (JSON.stringify(manifest.files) !== JSON.stringify(expectedFiles)) throw new 
 if (manifest.name !== "@phpcraftdream/clawwright" || manifest.version !== "0.1.2") throw new Error("package name/version changed during runtime relocation");
 if (JSON.stringify(Object.keys(manifest.exports ?? {}).sort()) !== JSON.stringify(["./app", "./commands", "./mounts", "./private-config", "./recipe-kit"].sort())) throw new Error("the package's five public exports changed");
 if (JSON.stringify(manifest.dependencies) !== JSON.stringify({ json5: "^2.2.3" })) throw new Error("package runtime dependencies changed during relocation");
-if (manifest.scripts?.prepack !== "node --experimental-strip-types ../../tools/build-framework-package.ts") throw new Error("package prepack does not target the retained repository builder");
+const prepackCommand = ["node", "--experimental-strip-types", "../../tools/build-framework-package.ts"];
+const prepack = manifest.scripts?.prepack;
+if (typeof prepack !== "string" || JSON.stringify(prepack.split(" ")) !== JSON.stringify(prepackCommand)) throw new Error("package prepack does not target the retained repository builder");
 
 if (manifest.private === true) throw new Error("the published package must not be private");
 if (manifest.license !== "(MIT OR Apache-2.0)") throw new Error("the package must declare the dual SPDX license");

@@ -163,11 +163,12 @@ function listTypeScriptFiles(rootDir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** Parses every *.ts file under tools/ and maps each file to the repo-relative files it
- *  imports (unresolvable specifiers are dropped). */
-export function buildImportGraph(rootDir = "tools"): ImportGraph {
+/** Parses every *.ts file under the default tooling and product roots and maps each file to the repo-relative files it
+ *  imports (unresolvable specifiers are dropped). Explicit rootDir keeps its single-root behavior. */
+export function buildImportGraph(rootDir?: string): ImportGraph {
   const graph = new Map<string, string[]>();
-  for (const file of listTypeScriptFiles(rootDir)) {
+  const roots = rootDir === undefined ? ["tools", "packages/clawwright"] : [rootDir];
+  for (const root of roots) for (const file of listTypeScriptFiles(root)) {
     const source = readFileSync(join(REPO_ROOT, file), "utf8");
     const targets: string[] = [];
     for (const specifier of parseImportSpecifiers(source)) {

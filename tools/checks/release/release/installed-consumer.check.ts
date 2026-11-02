@@ -20,6 +20,7 @@ import { pathToFileURL } from "node:url";
 import { monorepoRoot } from "#framework/core/env.ts";
 import { check, finish } from "#checks/kit/harness.ts";
 import { runProcess } from "#checks/kit/spawn.ts";
+import { maskSecrets } from "#framework/core/io/log.ts";
 
 interface Run {
   code: number;
@@ -268,22 +269,22 @@ export default defineApp({
   commands: materializeCommands({
     "compat-probe": {
       summary: "compatibility probe",
-      body: commandBody({
-      effect: "read",
-      needs: "nothing",
-      arguments: [],
-      run: async () => {
-        const publicApp = await import("@phpcraftdream/clawwright/app");
-        const publicMounts = await import("@phpcraftdream/clawwright/mounts");
-        const publicCommands = await import("@phpcraftdream/clawwright/commands");
-        console.log(JSON.stringify({
-          marker: "legacy",
-          sameDefineApp: defineApp === publicApp.defineApp,
-          sameMountPoints: mountPoints === publicMounts.mountPoints,
-          sameCommands: openclawCommands === publicCommands.openclawCommands,
-          mountCount: Object.keys(mountPoints).length,
-        }));
-      },
+      ...commandBody({
+        effect: "read",
+        needs: "nothing",
+        arguments: [],
+        run: async () => {
+          const publicApp = await import("@phpcraftdream/clawwright/app");
+          const publicMounts = await import("@phpcraftdream/clawwright/mounts");
+          const publicCommands = await import("@phpcraftdream/clawwright/commands");
+          console.log(JSON.stringify({
+            marker: "legacy",
+            sameDefineApp: defineApp === publicApp.defineApp,
+            sameMountPoints: mountPoints === publicMounts.mountPoints,
+            sameCommands: openclawCommands === publicCommands.openclawCommands,
+            mountCount: Object.keys(mountPoints).length,
+          }));
+        },
       }),
     },
   }),
@@ -300,30 +301,30 @@ export default defineApp({
   commands: materializeCommands({
     "compat-probe": {
       summary: "compatibility probe",
-      body: commandBody({
-      effect: "read",
-      needs: "nothing",
-      arguments: [],
-      run: async () => {
-        const publicApp = await import("@phpcraftdream/clawwright/app");
-        const publicMounts = await import("@phpcraftdream/clawwright/mounts");
-        const publicCommands = await import("@phpcraftdream/clawwright/commands");
-        console.log(JSON.stringify({
-          marker: "current",
-          sameDefineApp: defineApp === publicApp.defineApp,
-          sameMountPoints: mountPoints === publicMounts.mountPoints,
-          sameCommands: openclawCommands === publicCommands.openclawCommands,
-          mountCount: Object.keys(mountPoints).length,
-        }));
-      },
+      ...commandBody({
+        effect: "read",
+        needs: "nothing",
+        arguments: [],
+        run: async () => {
+          const publicApp = await import("@phpcraftdream/clawwright/app");
+          const publicMounts = await import("@phpcraftdream/clawwright/mounts");
+          const publicCommands = await import("@phpcraftdream/clawwright/commands");
+          console.log(JSON.stringify({
+            marker: "current",
+            sameDefineApp: defineApp === publicApp.defineApp,
+            sameMountPoints: mountPoints === publicMounts.mountPoints,
+            sameCommands: openclawCommands === publicCommands.openclawCommands,
+            mountCount: Object.keys(mountPoints).length,
+          }));
+        },
       }),
     },
   }),
 });
 `;
     const paths = { legacy: join(apps, "legacy", "app.ts"), current: join(apps, "current", "app.ts") };
-    await writeFile(paths.legacy, legacyText, "utf8");
-    await writeFile(paths.current, currentText, "utf8");
+    await writeFile(join(apps, "legacy", "app.ts"), legacyText, "utf8");
+    await writeFile(join(apps, "current", "app.ts"), currentText, "utf8");
     const before = { legacy: await readFile(paths.legacy), current: await readFile(paths.current) };
     const noMirror = await access(join(checkout, "tools", "framework")).then(() => false, () => true);
     check("relocated checkout fixture has no tools/framework mirror", noMirror, true);
@@ -334,16 +335,28 @@ export default defineApp({
     for (const name of ["legacy", "current"] as const) {
       const result = await run(process.execPath, ["--experimental-strip-types", gate, "--app", name, "compat-probe"], join(apps, name), childEnv);
       check(`${name} app runs through the relocated checkout gate`, result.code, 0);
+      if (result.code !== 0) {
+        const diagnostic = maskSecrets(result.output).slice(-2000).split(/\r?\n/).slice(-20).join("\n    ");
+        process.stderr.write(`    ${diagnostic}\n`);
+      }
       for (const identity of ["sameDefineApp", "sameMountPoints", "sameCommands"])
         check(`${name} app shares canonical ${identity} module state`, result.output.includes(`\"${identity}\":true`), true);
       check(`${name} compatibility probe identifies its unchanged app`, result.output.includes(`\"marker\":\"${name}\"`), true);
 
       const delegated = await run(process.execPath, ["--experimental-strip-types", packageEntry, "--app", name, "compat-probe"], join(apps, name), childEnv);
       check(`${name} package entry delegates to the relocated checkout gate`, delegated.code, 0);
+      if (delegated.code !== 0) {
+        const diagnostic = maskSecrets(delegated.output).slice(-2000).split(/\r?\n/).slice(-20).join("\n    ");
+        process.stderr.write(`    ${name} delegated invocation failure:\n    ${diagnostic}\n`);
+      }
       check(`${name} delegated invocation loads the original app`, delegated.output.includes(`\"marker\":\"${name}\"`), true);
 
       const version = await run(process.execPath, ["--experimental-strip-types", gate, "--app", name, "version", "--json"], join(apps, name), childEnv);
       check(`${name} checkout version JSON succeeds`, version.code, 0);
+      if (version.code !== 0) {
+        const diagnostic = maskSecrets(version.output).slice(-2000).split(/\r?\n/).slice(-20).join("\n    ");
+        process.stderr.write(`    ${name} checkout version failure:\n    ${diagnostic}\n`);
+      }
       let versionData: { source?: string; path?: string } | undefined;
       try { versionData = JSON.parse(version.output) as { source?: string; path?: string }; } catch { /* checked below */ }
       check(`${name} version JSON identifies the relocated checkout`, [versionData?.source, versionData?.path], ["checkout", await realpath(checkout)]);

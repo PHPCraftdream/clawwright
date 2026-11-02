@@ -91,6 +91,27 @@ try {
 // The real graph builds over this repo and resolves its own import (sanity, machine-independent paths).
 const realGraph = buildImportGraph();
 checkTrue("real.graph.contains.this.file", realGraph.has("tools/checks/kit/selection/import-graph.ts"));
+checkTrue("real.graph.contains.relocated.product.module", realGraph.has("packages/clawwright/commands/lifecycle/bootstrap/check.ts"));
+checkTrue("real.graph.contains.transitive.product.dependency", realGraph.has("packages/clawwright/core/context.ts"));
+const productSources = [...realGraph.keys()].filter((file) => file.startsWith("packages/clawwright/") && !file.endsWith(".check.ts"));
+const productReachableChecks = selectRelatedChecks(realGraph, productSources).reachableChecks;
+const formerlyMissingChecks = [
+  "tools/checks/foundation/providers/provider.check.ts",
+  "tools/checks/integration/agent/cron-timezone.check.ts",
+  "tools/checks/runtime/recovery/private-config-publish.check.ts",
+  "tools/checks/runtime/service/image-identity/compose-sweep.check.ts",
+  "tools/checks/runtime/service/image-identity/runtime-image-identity.check.ts",
+  "tools/checks/runtime/service/image-identity/upgrade-support.check.ts",
+  "tools/checks/runtime/transport/remote/ssjack-client.check.ts",
+  "tools/checks/runtime/transport/remote/ssjack-contract.check.ts",
+  "tools/checks/runtime/transport/remote/ssjack-scoped.check.ts",
+  "tools/checks/runtime/transport/remote/ssjack-selection.check.ts",
+  "tools/checks/runtime/transport/remote/ssjack-stream.check.ts",
+  "tools/checks/runtime/transport/remote/ssjack.check.ts",
+  "tools/checks/sets/artifact/set-evidence.check.ts",
+];
+check("real.graph.product.sources.reach.named.checks", formerlyMissingChecks.filter((file) => !productReachableChecks.has(file)), []);
+checkTrue("explicit.rootDir.remains.tools.only", !buildImportGraph("tools").has("packages/clawwright/core/context.ts"));
 checkTrue(
   "real.graph.edges.point.inside.repo",
   [...realGraph.values()].flat().every((target) => !target.includes("\\") && !target.startsWith("/")),

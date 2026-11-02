@@ -59,7 +59,7 @@ async function verifyRelocationParity(distDir: string): Promise<void> {
     await writeFile(originalBuilder, await baselineFile("tools/build-framework-package.ts"));
     await writeFile(resolve(parityRoot, "tsconfig.json"), await baselineFile("tsconfig.json"));
     await writeFile(resolve(parityRoot, "package.json"), await baselineFile("package.json"));
-    await symlink(resolve(monorepoRoot, "node_modules"), join(parityRoot, "node_modules"), process.platform === "win32" ? "junction" : "dir");
+    await symlink(resolve(monorepoRoot, "node_modules"), join(parityRoot, "node_modules"), "junction");
 
     const oldPackage = JSON.parse((await baselineFile("tools/framework/package.json")).toString("utf8")) as Record<string, unknown>;
     const newPackage = JSON.parse(await readFile(resolve(monorepoRoot, "packages/clawwright/package.json"), "utf8")) as Record<string, unknown>;
@@ -69,13 +69,16 @@ async function verifyRelocationParity(distDir: string): Promise<void> {
     oldRepo.directory = newRepo.directory;
     const oldScripts = oldPackage.scripts as Record<string, unknown>;
     const newScripts = newPackage.scripts as Record<string, unknown>;
-    if (oldScripts.prepack !== "node --experimental-strip-types ../build-framework-package.ts" || newScripts.prepack !== "node --experimental-strip-types ../../tools/build-framework-package.ts") throw new Error("package prepack relocation changed unexpectedly");
+    const oldPrepack = ["node", "--experimental-strip-types", "../build-framework-package.ts"];
+    const newPrepack = ["node", "--experimental-strip-types", "../../tools/build-framework-package.ts"];
+    if (typeof oldScripts.prepack !== "string" || typeof newScripts.prepack !== "string"
+      || JSON.stringify(oldScripts.prepack.split(" ")) !== JSON.stringify(oldPrepack)
+      || JSON.stringify(newScripts.prepack.split(" ")) !== JSON.stringify(newPrepack)) throw new Error("package prepack relocation changed unexpectedly");
     oldScripts.prepack = newScripts.prepack;
     if (JSON.stringify(oldPackage) !== JSON.stringify(newPackage)) throw new Error("package manifest has changes beyond repository.directory and prepack relocation");
 
-    const script = `import { build } from ${JSON.stringify(pathToFileURL(originalBuilder).href)}; await build(${JSON.stringify(originalDist)});`;
-    const result = spawnSync(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", script], { cwd: parityRoot, encoding: "utf8" });
-    if (result.status !== 0) throw new Error(`baseline package build failed: ${result.stderr}`);
+    const result = await import(pathToFileURL(originalBuilder).href);
+    await result.build(originalDist);
     const originalFiles = await walkFiles(originalDist);
     const relocatedFiles = await walkFiles(distDir);
     if (JSON.stringify(originalFiles) !== JSON.stringify(relocatedFiles)) throw new Error(`relocated output inventory differs: baseline=${originalFiles.length}, current=${relocatedFiles.length}`);

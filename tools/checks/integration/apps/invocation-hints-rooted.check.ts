@@ -1,5 +1,5 @@
 // rooted invocation hint assertions
-import { cp, mkdir, symlink } from "node:fs/promises";
+import { cp, mkdir, symlink, access } from "node:fs/promises";
 import { resolve } from "node:path";
 import { spawnSync, type SpawnSyncOptions } from "node:child_process";
 import { createDeploymentFixture } from "#checks/kit/deployment-fixture.ts";
@@ -16,10 +16,17 @@ import { command } from "#framework/core/io/invocation/advice.ts";
 import { renderFrameAdvice } from "#framework/core/io/invocation/render.ts";
 import { check, checkTrue, finish, isolatedAppsRoot } from "#checks/kit/harness.ts";
 import { runProcess, CHILD_NODE_DEADLINE_MS } from "#checks/kit/spawn.ts";
+import { maskSecrets } from "#framework/core/io/log.ts";
 
 const entryApps = await isolatedAppsRoot("rooted-hints");
 const sourceRoot = await isolatedAppsRoot("rooted-hints-source");
 await cp(resolve(monorepoRoot, "tools"), resolve(sourceRoot.root, "tools"), { recursive: true });
+await mkdir(resolve(sourceRoot.root, "packages"), { recursive: true });
+await cp(resolve(monorepoRoot, "packages", "clawwright"), resolve(sourceRoot.root, "packages", "clawwright"), {
+  recursive: true,
+  filter: (entry) => !["dist", "node_modules"].includes(entry.split(/[\\/]/).at(-1) ?? ""),
+});
+await access(resolve(sourceRoot.root, "packages", "clawwright", "entry", "bin.ts"));
 await cp(resolve(monorepoRoot, "package.json"), resolve(sourceRoot.root, "package.json"));
 await symlink(resolve(monorepoRoot, "node_modules"), resolve(sourceRoot.root, "node_modules"), "junction");
 const GATE = resolve(sourceRoot.root, "tools", "clawwright.ts");
@@ -27,9 +34,14 @@ const SUBDIR = resolve(sourceRoot.root, "docs");
 await mkdir(SUBDIR);
 
 /** Runs the real gate from `cwd` — the committed shim path, exactly as gate-dispatch does. */
-function runGate(args: string[], cwd: string): Promise<string> {
-  return runProcess(process.execPath, ["--experimental-strip-types", GATE, ...args], { cwd, timeoutMs: CHILD_NODE_DEADLINE_MS })
-    .then((result) => result.output);
+async function runGate(args: string[], cwd: string, expectedCode = 0): Promise<string> {
+  const result = await runProcess(process.execPath, ["--experimental-strip-types", GATE, ...args], { cwd, timeoutMs: CHILD_NODE_DEADLINE_MS });
+  check(`gate exit code for ${args[0] ?? "<empty>"}`, result.code, expectedCode);
+  if (result.code !== expectedCode) {
+    const diagnostic = maskSecrets(result.output).slice(-2000).split(/\r?\n/).slice(-20).join("\n    ");
+    process.stderr.write(`    rooted-hints gate exit mismatch:\n    ${diagnostic}\n`);
+  }
+  return result.output;
 }
 
 // entry: the real gate runs against an EMPTY apps root, so a deployment left in the checkout never selects itself
@@ -38,7 +50,7 @@ const docsHelp = await runGate(["help"], SUBDIR);
 check("help from docs/ spells the entry relative to that folder", docsHelp.split(["Usage:", "../clawwright", "<command>", "[options]"].join(" ")).length > 1, true);
 check("help from docs/ carries no root spelling", docsHelp.split(["Usage:", "./clawwright"].join(" ")).length > 1, false);
 
-const docsUnknown = await runGate(["frobnicate"], SUBDIR);
+const docsUnknown = await runGate(["frobnicate"], SUBDIR, 1);
 check("an unknown command's hint from docs/ spells the entry relative to that folder", docsUnknown.split(["run", "../clawwright", "help"].join(" ")).length > 1, true);
 
 const rootHelp = await runGate(["help"], sourceRoot.root);

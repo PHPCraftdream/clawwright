@@ -139,8 +139,8 @@ func TestTask251TransitionsAreExactAndPathBound(t *testing.T) {
 		t.Fatal(err)
 	}
 	transitions := task251Transitions()
-	if len(transitions) != 78 {
-		t.Fatalf("expected 78 reviewed transitions, got %d", len(transitions))
+	if len(transitions) != 79 {
+		t.Fatalf("expected 79 reviewed transitions, got %d", len(transitions))
 	}
 	legacy := make(map[string]inventory, len(transitions))
 	current := make(map[string]inventory, len(transitions))

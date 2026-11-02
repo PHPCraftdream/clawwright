@@ -11,7 +11,7 @@
 // this spawns the real gate (tools/clawwright.ts) with a bounded wait rather than asserting on a
 // direct function call.
 
-import { rm, readFile } from "node:fs/promises";
+import { rm, readFile, access } from "node:fs/promises";
 import { createName } from "#framework/core/values/names.ts";
 import { cp, mkdir, symlink } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
@@ -22,23 +22,34 @@ import { unknownArgumentMessage } from "#framework/core/command/index.ts";
 import { UNKNOWN_COMMAND } from "#framework/integration/gate.ts";
 import { check, finish, isolatedAppsRoot } from "#checks/kit/harness.ts";
 import { CHILD_NODE_DEADLINE_MS, runProcess } from "#checks/kit/spawn.ts";
+import { maskSecrets } from "#framework/core/io/log.ts";
 
 /** Runs the real gate with a hard deadline. stdin stays an open, never-written pipe: a server
  *  wrongly started by --help would block on it, whereas /dev/null's EOF would let it exit and hide
  *  the hang. The deadline is generous — a cold start under a loaded machine is slow, a hang is forever. */
 const childSource = await isolatedAppsRoot("cli-help-source");
 await cp(resolve(monorepoRoot, "tools"), resolve(childSource.root, "tools"), { recursive: true });
+await mkdir(resolve(childSource.root, "packages"), { recursive: true });
+await cp(resolve(monorepoRoot, "packages", "clawwright"), resolve(childSource.root, "packages", "clawwright"), {
+  recursive: true,
+  filter: (entry) => !["dist", "node_modules"].includes(entry.split(/[\\/]/).at(-1) ?? ""),
+});
+await access(resolve(childSource.root, "packages", "clawwright", "entry", "bin.ts"));
 await cp(resolve(monorepoRoot, "package.json"), resolve(childSource.root, "package.json"));
 await symlink(resolve(monorepoRoot, "node_modules"), resolve(childSource.root, "node_modules"), "junction");
 await mkdir(resolve(childSource.root, "apps"));
 
 async function runGate(args: string[], timeoutMs = CHILD_NODE_DEADLINE_MS): Promise<{ code: number | null; stdout: string; timedOut: boolean }> {
-  const { code, output, timedOut } = await runProcess(
+  const result = await runProcess(
     process.execPath,
     ["--experimental-strip-types", resolve(childSource.root, "tools", "clawwright.ts"), ...args],
     { cwd: childSource.root, keepStdinOpen: true, timeoutMs },
   );
-  return { code, stdout: output, timedOut };
+  if (result.code !== 0 && args.includes("--help")) {
+    const diagnostic = maskSecrets(result.output).slice(-2000).split(/\r?\n/).slice(-20).join("\n    ");
+    process.stderr.write(`    cli-help fixture help child exit failure:\n    ${diagnostic}\n`);
+  }
+  return { code: result.code, stdout: result.output, timedOut: result.timedOut };
 }
 
 const deploymentName = `cli-help-check-${randomBytes(4).toString("hex")}`;
