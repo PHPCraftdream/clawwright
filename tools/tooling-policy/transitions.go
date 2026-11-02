@@ -72,7 +72,7 @@ func task251Transitions() map[string]task251Transition {
 		"tools/checks/kit/selection/selection.check.ts": {"6e6a08daa9d6b4f3fd024a35b121d8f17e9f23bb", "0e8b367ee8200f76cd4c09d7a7ecf70e381a23fa"},
 		"tools/checks/kit/self/deployment-fixture.check.ts": {"133629e3e50aaf6119c9c3dd1e7b3b8f2be6bb94", "10634f7d6a94c448bf27e389e6f0f734e88215fa"},
 		"tools/checks/kit/self/shells.check.ts": {"7d91160e258b3d8dee57cc79c06baeca15165c06", "3a2458e90e3b0468e736b0ab8ae82e07007641ff"},
-		"tools/checks/release/release/installed-consumer.check.ts": {"f3e18e2900f0353fe43a3b3e31582a46475bc09b", "e4669133876511d3429df20e314290354a2739f3"},
+		"tools/checks/release/release/installed-consumer.check.ts": {"f3e18e2900f0353fe43a3b3e31582a46475bc09b", "a7cd7f8d75d6b73df2db10bd4339a793eef17d78"},
 		"tools/checks/release/release/package-release.check.ts": {"d82ca05eaf31be9834efebc1e1c0ade943fd95bc", "119bc5d58acf370c05220f9d7a89ac35022c3053"},
 		"tools/checks/release/release/system-command-units.check.ts": {"48906a8ec4b11fea2a62826979a0e2253b2086b3", "45fa96b443c4b2b2d9a96621d5448a2cba974bea"},
 		"tools/checks/release/release/system-install.check.ts": {"138fcb424e78ddec393e5ffa91e9555d6bfeb46c", "ef832a65ebc0581d75cf72d76107f175b79cdc0e"},

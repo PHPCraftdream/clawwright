@@ -332,6 +332,24 @@ export default defineApp({
     const gate = join(checkout, "tools", "clawwright.ts");
     const packageEntry = join(sourcePackage, "entry", "bin.ts");
     const childEnv = { ...process.env, CLAWWRIGHT_CHECKS_APPS_DIR: apps };
+    const resolutionProbe = join(checkout, "resolution-probe.mjs");
+    await writeFile(join(checkout, "resolution-probe.mjs"), `import { registerHooks } from "node:module";
+import { realpathSync } from "node:fs";
+const apps = process.env.CLAWWRIGHT_CHECKS_APPS_DIR;
+console.error("RESOLUTION_PROBE_ROOT", JSON.stringify({ apps, canonical: realpathSync.native(apps) }));
+let remaining = 32;
+registerHooks({ resolve(specifier, context, nextResolve) {
+  const observe = /(?:app|spec|checkout-gate|delegate)\\.ts$/.test(specifier);
+  try {
+    const result = nextResolve(specifier, context);
+    if (observe && remaining-- > 0) console.error("RESOLUTION_PROBE", JSON.stringify({ specifier, parent: context.parentURL, url: result.url }));
+    return result;
+  } catch (error) {
+    if (observe && remaining-- > 0) console.error("RESOLUTION_PROBE_ERROR", JSON.stringify({ specifier, parent: context.parentURL, code: error.code }));
+    throw error;
+  }
+} });
+`, "utf8");
     for (const name of ["legacy", "current"] as const) {
       const result = await run(process.execPath, ["--experimental-strip-types", gate, "--app", name, "compat-probe"], join(apps, name), childEnv);
       check(`${name} app runs through the relocated checkout gate`, result.code, 0);
@@ -340,16 +358,21 @@ export default defineApp({
         process.stderr.write(`    ${diagnostic}\n`);
       }
       for (const identity of ["sameDefineApp", "sameMountPoints", "sameCommands"])
-        check(`${name} app shares canonical ${identity} module state`, result.output.includes(`\"${identity}\":true`), true);
-      check(`${name} compatibility probe identifies its unchanged app`, result.output.includes(`\"marker\":\"${name}\"`), true);
+        check(`${name} app shares canonical ${identity} module state`, result.output.includes(`"${identity}":true`), true);
+      check(`${name} compatibility probe identifies its unchanged app`, result.output.includes(`"marker":"${name}"`), true);
 
       const delegated = await run(process.execPath, ["--experimental-strip-types", packageEntry, "--app", name, "compat-probe"], join(apps, name), childEnv);
       check(`${name} package entry delegates to the relocated checkout gate`, delegated.code, 0);
       if (delegated.code !== 0) {
         const diagnostic = maskSecrets(delegated.output).slice(-2000).split(/\r?\n/).slice(-20).join("\n    ");
         process.stderr.write(`    ${name} delegated invocation failure:\n    ${diagnostic}\n`);
+        const traced = await run(process.execPath, ["--experimental-strip-types", packageEntry, "--app", name, "compat-probe"], join(apps, name), {
+          ...childEnv,
+          NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import=${pathToFileURL(resolutionProbe).href}`,
+        });
+        process.stderr.write(`    ${maskSecrets(traced.output).slice(-10000)}\n`);
       }
-      check(`${name} delegated invocation loads the original app`, delegated.output.includes(`\"marker\":\"${name}\"`), true);
+      check(`${name} delegated invocation loads the original app`, delegated.output.includes(`"marker":"${name}"`), true);
 
       const version = await run(process.execPath, ["--experimental-strip-types", gate, "--app", name, "version", "--json"], join(apps, name), childEnv);
       check(`${name} checkout version JSON succeeds`, version.code, 0);
