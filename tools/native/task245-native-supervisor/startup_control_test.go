@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -422,7 +423,24 @@ func startupControlProbe245() int {
 	return 101
 }
 
-func bootstrapTrackerProbe245() int {
+func bootstrapTrackerProbe245(retainedMetadata bool) int {
+	if retainedMetadata {
+		var metadata syscall.Stat_t
+		if syscall.Fstat(6, &metadata) != nil || metadata.Size != 27 {
+			return 57
+		}
+		flags, _, errno := syscall.Syscall(syscall.SYS_FCNTL, 6, syscall.F_GETFD, 0)
+		if errno != 0 || flags&syscall.FD_CLOEXEC != 0 {
+			return 58
+		}
+		data, err := readLaunchMetadata6(metadata.Size)
+		if err != nil || len(data) != 27 {
+			return 59
+		}
+		if err = syscall.Fstat(6, &metadata); err != syscall.EBADF {
+			return 60
+		}
+	}
 	var header [64]byte
 	if _, err := syscall.Read(4, header[:]); err != nil || string(header[:8]) != "SSINK001" {
 		return 51
@@ -441,6 +459,31 @@ func bootstrapTrackerProbe245() int {
 	if hash == "" {
 		return 52
 	}
+	if retainedMetadata {
+		imageHash := readHash("/proc/self/exe")
+		var image syscall.Stat_t
+		if imageHash == "" || syscall.Fstat(3, &image) != nil || !hashFD3(image, imageHash) || syscall.SetNonblock(4, true) != nil {
+			return 61
+		}
+	}
+	control := os.NewFile(4, "outer-control")
+	defer control.Close()
+	if retainedMetadata {
+		deadline, ok := ctx.Deadline()
+		if !ok || control.SetDeadline(deadline) != nil {
+			return 62
+		}
+		_ = os.Remove("/run/clawwright-native.sock")
+		listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: "/run/clawwright-native.sock", Net: "unix"})
+		if err != nil {
+			return 63
+		}
+		defer listener.Close()
+		defer os.Remove("/run/clawwright-native.sock")
+		if listener.SetDeadline(deadline) != nil {
+			return 64
+		}
+	}
 	registry := &execRegistry245{roles: map[int]string{}}
 	config := workerConfig{
 		Node:         "/node",
@@ -454,7 +497,10 @@ func bootstrapTrackerProbe245() int {
 		ProviderSHA256: hash,
 		registry:     registry,
 	}
-	tracker, pid, err := startGatewayControl(ctx, config, os.NewFile(4, "outer-control"), header)
+	if retainedMetadata {
+		config.SocketPath = "/run/clawwright-native.sock"
+	}
+	tracker, pid, err := startGatewayControl(ctx, config, control, header)
 	if err != nil {
 		return 53
 	}
@@ -486,6 +532,11 @@ func bootstrapTrackerProbe245() int {
 }
 
 func TestDomainInitBootstrapTrackerKernel(t *testing.T) {
+	t.Run("baseline", func(t *testing.T) { testDomainInitBootstrapTrackerKernel(t, false) })
+	t.Run("production-metadata", func(t *testing.T) { testDomainInitBootstrapTrackerKernel(t, true) })
+}
+
+func testDomainInitBootstrapTrackerKernel(t *testing.T, retainedMetadata bool) {
 	initPath, stubPath := os.Getenv("TASK245_INIT"), os.Getenv("TASK240_STUB")
 	if initPath == "" || stubPath == "" || os.Geteuid() != 0 {
 		t.Fatal("TASK245_INIT, TASK240_STUB and root required")
@@ -513,6 +564,9 @@ func TestDomainInitBootstrapTrackerKernel(t *testing.T) {
 		t.Fatal(err)
 	}
 	bootstrapMeta := memfdDomain245(t, "bootstrap-metadata", append(metaBytes, 1, 2), 0444, true)
+	if retainedMetadata {
+		bootstrapMeta = memfdDomain245(t, "bootstrap-metadata-retained", append(metaBytes, 1, 2, 3), 0444, true)
+	}
 	control := os.NewFile(uintptr(pair[1]), "bootstrap-control-child")
 	t.Cleanup(func() {
 		_ = control.Close()

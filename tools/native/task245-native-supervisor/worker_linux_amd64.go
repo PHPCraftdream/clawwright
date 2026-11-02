@@ -85,6 +85,25 @@ func hasExpectedPrivateMounts(data string) bool {
 var domainReadyRecord = [8]byte{'S','S','R','D','Y','0','0','1'}
 var domainAckRecord = [8]byte{'S','S','A','C','K','0','0','1'}
 
+func readLaunchMetadata6(size int64) ([]byte, error) {
+	file := os.NewFile(6, "launch-metadata")
+	if file == nil {
+		return nil, syscall.EBADF
+	}
+	data, readErr := io.ReadAll(io.LimitReader(file, 65537))
+	closeErr := file.Close()
+	if readErr != nil {
+		return nil, readErr
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+	if int64(len(data)) != size {
+		return nil, errDomainWorker
+	}
+	return data, nil
+}
+
 func runConnectedWorker() error {
  bad:=func()error{return errDomainWorker}
  if len(os.Args)!=2||os.Args[1]!="--task245-domain-worker"||len(os.Environ())!=0||os.Geteuid()==0||os.Getpid()!=2||os.Getppid()!=1{return bad()}
@@ -93,7 +112,7 @@ func runConnectedWorker() error {
  if syscall.Fstat(3,&img)!=nil||img.Mode&syscall.S_IFMT!=syscall.S_IFREG||img.Uid!=0||img.Mode&0022!=0||img.Mode&0555!=0555||syscall.Fstat(6,&meta)!=nil||meta.Mode&syscall.S_IFMT!=syscall.S_IFREG||meta.Uid!=0||meta.Mode&0022!=0||meta.Size<2||meta.Size>65536{return bad()}
  for _,fd:=range []uintptr{3,6}{s,_,e:=syscall.Syscall(syscall.SYS_FCNTL,fd,1034,0);if e!=0||s&15!=15{return bad()}}
  domainExit245 = 91
- mf:=os.NewFile(6,"launch-metadata");defer mf.Close();b,e:=io.ReadAll(io.LimitReader(mf,65537));if e!=nil||int64(len(b))!=meta.Size||duplicateJSON(b)!=nil{return bad()}
+ b,e:=readLaunchMetadata6(meta.Size);if e!=nil||duplicateJSON(b)!=nil{return bad()}
  domainExit245 = 92
  var c launchConfig;d:=json.NewDecoder(strings.NewReader(string(b)));d.DisallowUnknownFields();if d.Decode(&c)!=nil||d.Decode(new(any))!=io.EOF{return bad()}
  domainExit245 = 93

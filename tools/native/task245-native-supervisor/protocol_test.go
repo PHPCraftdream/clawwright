@@ -310,7 +310,13 @@ func domainWorkerProbe245() int {
 	var metadata syscall.Stat_t
 	startupProbe := syscall.Fstat(6, &metadata) == nil && metadata.Size == 25
 	bootstrapProbe := syscall.Fstat(6, &metadata) == nil && metadata.Size == 26
-	if !domainFreshNamespaces245() {
+	retainedMetadata := syscall.Fstat(6, &metadata) == nil && metadata.Size == 27
+	if retainedMetadata {
+		var expected [24]byte
+		if n, e := syscall.Pread(6, expected[:], 0); e != nil || n != len(expected) || !domainNamespacesMatch245(expected) {
+			return 42
+		}
+	} else if !domainFreshNamespaces245() {
 		return 40
 	}
 	data, err := os.ReadFile("/proc/self/mountinfo")
@@ -330,8 +336,8 @@ func domainWorkerProbe245() int {
 	if startupProbe {
 		return startupControlProbe245()
 	}
-	if bootstrapProbe {
-		return bootstrapTrackerProbe245()
+	if bootstrapProbe || retainedMetadata {
+		return bootstrapTrackerProbe245(retainedMetadata)
 	}
 	if _, err = syscall.Write(4, []byte("domain-worker-ready")); err != nil {
 		return 38
@@ -380,9 +386,10 @@ func domainFreshNamespaces245() bool {
 	var expected [24]byte
 	_, err := io.ReadFull(meta, expected[:])
 	_ = meta.Close()
-	if err != nil {
-		return false
-	}
+	return err == nil && domainNamespacesMatch245(expected)
+}
+
+func domainNamespacesMatch245(expected [24]byte) bool {
 	for i, name := range []string{"pid", "mnt", "net"} {
 		var self, init syscall.Stat_t
 		if syscall.Stat("/proc/self/ns/"+name, &self) != nil || syscall.Stat("/proc/1/ns/"+name, &init) != nil {
