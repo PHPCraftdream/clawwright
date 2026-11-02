@@ -103,6 +103,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo env -i PATH="$PATH" HOME="$RUNNER_TEMP/native-check-home" GOTOOLCHAIN=local CGO_ENABLED=0 TASK245_INIT="$RUNNER_TEMP/native-domain-init" TASK240_STUB="$RUNNER_TEMP/native-launch-stub" go test -v -count=2 -timeout=90s -run '^TestDomainInit' ./task245-native-supervisor
+          sudo env -i PATH="$PATH" HOME="$RUNNER_TEMP/native-check-home" GOTOOLCHAIN=local CGO_ENABLED=0 TASK240_STUB="$RUNNER_TEMP/native-launch-stub" go test -v -count=2 -timeout=30s -run '^TestTraceConstructor' ./task240-native-admission
           sudo env -i PATH="$PATH" HOME="$RUNNER_TEMP/native-check-home" GOTOOLCHAIN=local CGO_ENABLED=0 go test -v -count=1 -timeout=30s ./task245-acceptance/internal/diagnostics
       - name: Run pure Go source tests
         shell: bash

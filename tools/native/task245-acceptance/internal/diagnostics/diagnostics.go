@@ -164,7 +164,7 @@ func parseRecord(source, line string) (string, bool) {
 		}
 		startup := strings.TrimPrefix(fields[1], "startup=")
 		switch startup {
-		case "context", "node", "stub", "provider", "packet", "gate_pipe", "args_pipe", "fork", "tracker", "args_write", "args_close", "gate_write", "gate_close":
+		case "context", "node", "stub", "provider", "packet", "gate_pipe", "args_pipe", "fork", "tracker", "args_write", "args_close", "gate_write", "gate_close", "tracker_context", "tracker_guard", "tracker_identity", "tracker_tasks", "tracker_seize", "tracker_interrupt", "tracker_wait", "tracker_recheck", "tracker_resume":
 		default:
 			return "", false
 		}

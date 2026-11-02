@@ -158,6 +158,8 @@ func (e *startupFailure) Unwrap() error {
 var startupStages245 = []string{
 	"context", "node", "stub", "provider", "packet", "gate_pipe", "args_pipe",
 	"fork", "tracker", "args_write", "args_close", "gate_write", "gate_close",
+	"tracker_context", "tracker_guard", "tracker_identity", "tracker_tasks",
+	"tracker_seize", "tracker_interrupt", "tracker_wait", "tracker_recheck", "tracker_resume",
 }
 
 func startupStageName(stage uint32) string {
@@ -326,7 +328,11 @@ func startGatewayOwned(ctx context.Context, c workerConfig, w io.Writer, onFailu
  }
 	tracker, e := admission.NewGuardedTraceTracker(ctx, pid, guard)
 	if e != nil {
-		failure := diagnosticFailure("tracker", e)
+		stage := "tracker"
+		if ctor, _, ok := admission.TraceConstructorFailure(e); ok {
+			stage = "tracker_" + ctor
+		}
+		failure := diagnosticFailure(stage, e)
 		_ = syscall.Kill(pid, syscall.SIGKILL)
 		var ws syscall.WaitStatus
 		_, _ = syscall.Wait4(pid, &ws, 0, nil)
@@ -353,7 +359,7 @@ func startGatewayOwned(ctx context.Context, c workerConfig, w io.Writer, onFailu
 }
 func writeStartupDiagnostic(w io.Writer, stage string, err error) {
 	switch stage {
-	case "context", "node", "stub", "provider", "packet", "gate_pipe", "args_pipe", "fork", "tracker", "args_write", "args_close", "gate_write", "gate_close":
+	case "context", "node", "stub", "provider", "packet", "gate_pipe", "args_pipe", "fork", "tracker", "args_write", "args_close", "gate_write", "gate_close", "tracker_context", "tracker_guard", "tracker_identity", "tracker_tasks", "tracker_seize", "tracker_interrupt", "tracker_wait", "tracker_recheck", "tracker_resume":
 	default:
 		return
 	}

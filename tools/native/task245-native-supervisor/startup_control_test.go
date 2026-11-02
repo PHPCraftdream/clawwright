@@ -72,7 +72,7 @@ func TestStartupControlProtocol(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err = sendStartupFailure(tx, header, &startupFailure{stage: startupStageCode("node"), errno: uint32(syscall.ENOENT)}); err != nil {
+	if err = sendStartupFailure(tx, header, &startupFailure{stage: startupStageCode("tracker_seize"), errno: uint32(syscall.EPERM)}); err != nil {
 		t.Fatal(err)
 	}
 	var packet [161]byte
@@ -81,15 +81,15 @@ func TestStartupControlProtocol(t *testing.T) {
 		t.Fatal(err)
 	}
 	failure, ok := parseStartupFailure245(packet[:n], header)
-	if !ok || startupStageName(failure.stage) != "node" || failure.errno != uint32(syscall.ENOENT) {
+	if !ok || startupStageName(failure.stage) != "tracker_seize" || failure.errno != uint32(syscall.EPERM) {
 		t.Fatalf("round trip = %v, %v", failure, ok)
 	}
 
 	var valid [64]byte
 	copy(valid[:8], "OCSTART1")
 	copy(valid[8:56], header[8:56])
-	binary.BigEndian.PutUint32(valid[56:60], startupStageCode("node"))
-	binary.BigEndian.PutUint32(valid[60:64], uint32(syscall.ENOENT))
+	binary.BigEndian.PutUint32(valid[56:60], startupStageCode("tracker_seize"))
+	binary.BigEndian.PutUint32(valid[60:64], uint32(syscall.EPERM))
 	bad := []struct {
 		name   string
 		packet []byte
@@ -104,7 +104,7 @@ func TestStartupControlProtocol(t *testing.T) {
 		{"nonce", append([]byte(nil), valid[:]...)},
 		{"binding", append([]byte(nil), valid[:]...)},
 		{"stage zero", append([]byte(nil), valid[:]...)},
-		{"stage fourteen", append([]byte(nil), valid[:]...)},
+		{"stage twentythree", append([]byte(nil), valid[:]...)},
 		{"errno 4096", append([]byte(nil), valid[:]...)},
 	} {
 		switch tc.name {
@@ -116,8 +116,8 @@ func TestStartupControlProtocol(t *testing.T) {
 			tc.packet[24] ^= 1
 		case "stage zero":
 			binary.BigEndian.PutUint32(tc.packet[56:60], 0)
-		case "stage fourteen":
-			binary.BigEndian.PutUint32(tc.packet[56:60], 14)
+		case "stage twentythree":
+			binary.BigEndian.PutUint32(tc.packet[56:60], 23)
 		case "errno 4096":
 			binary.BigEndian.PutUint32(tc.packet[60:64], 4096)
 		}

@@ -3,10 +3,45 @@
 package admission
 
 import (
+	"context"
 	"encoding/binary"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
+
+func TestTraceConstructorFailure(t *testing.T) {
+	cause := &os.PathError{Op: "open", Path: "/private/path", Err: syscall.ENOENT}
+	err := traceConstructorError("identity", cause)
+	wrapped := fmt.Errorf("wrapped: %w", err)
+	stage, errno, ok := TraceConstructorFailure(wrapped)
+	if !ok || stage != "identity" || errno != syscall.ENOENT {
+		t.Fatalf("failure=(%q,%v,%t)", stage, errno, ok)
+	}
+	if !errors.Is(wrapped, errTrace) || !errors.Is(wrapped, syscall.ENOENT) {
+		t.Fatal("constructor failure did not preserve sentinel and errno")
+	}
+	if strings.Contains(wrapped.Error(), "/private/path") {
+		t.Fatal("constructor error exposed underlying path")
+	}
+	if _, _, ok := TraceConstructorFailure(traceConstructorError("unknown", syscall.EPERM)); ok {
+		t.Fatal("accepted unknown constructor stage")
+	}
+}
+
+func TestTraceConstructorMissingPID(t *testing.T) {
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(time.Second))
+	defer cancel()
+	_, err := NewTraceTracker(ctx, int(^uint(0)>>1))
+	stage, errno, ok := TraceConstructorFailure(err)
+	if !ok || stage != "identity" || errno != syscall.ENOENT || !errors.Is(err, syscall.ENOENT) || !errors.Is(err, errTrace) {
+		t.Fatalf("failure=(%q,%v,%t), err=%v", stage, errno, ok, err)
+	}
+}
 
 func admissionDiag(cookie [2]uint32, peer uint32) []byte {
 	b := make([]byte, 40)

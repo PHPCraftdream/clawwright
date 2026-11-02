@@ -44,6 +44,45 @@ func parseSyscallStop(raw []byte, n int) (syscallStop, error) {
 }
 func readSyscallStop(tid int) (syscallStop, error) { var b [88]byte; n, e := ptrace(ptraceGetSyscallInfo, tid, uintptr(unsafe.Pointer(&b[0])), uintptr(len(b))); if e != nil || n > uintptr(len(b)) { return syscallStop{}, errTrace }; return parseSyscallStop(b[:], int(n)) }
 var errTrace = errors.New("ptrace admission refused")
+
+type TraceConstructorError struct {
+	stage string
+	err   error
+}
+
+func (e *TraceConstructorError) Error() string { return "ptrace admission refused" }
+func (e *TraceConstructorError) Unwrap() []error {
+	if e.err == nil {
+		return []error{errTrace}
+	}
+	return []error{errTrace, e.err}
+}
+
+func traceConstructorError(stage string, err error) error {
+	return &TraceConstructorError{stage: stage, err: err}
+}
+
+func TraceConstructorFailure(err error) (stage string, errno syscall.Errno, ok bool) {
+	var failure *TraceConstructorError
+	if !errors.As(err, &failure) || failure == nil || !validTraceConstructorStage(failure.stage) {
+		return "", 0, false
+	}
+	var se syscall.Errno
+	if errors.As(failure.err, &se) && uintptr(se) <= 4095 {
+		errno = se
+	}
+	return failure.stage, errno, true
+}
+
+func validTraceConstructorStage(stage string) bool {
+	switch stage {
+	case "context", "guard", "identity", "tasks", "seize", "interrupt", "wait", "recheck", "resume":
+		return true
+	default:
+		return false
+	}
+}
+
 type taskIdentity struct { TID, TGID int; StartTicks, ExecGeneration uint64 }
 type traceTask struct { id taskIdentity; stopped, exiting bool; pending syscall.Signal; recvEntry bool; recvMatch bool; recvFD int }
 type traceCommand struct { action uint8; ctx context.Context; snap *traceSnapshot; tid, fd int; reply chan traceReply }
@@ -61,19 +100,120 @@ func ptrace(req,tid int,data uintptr,addrlen ...uintptr)(uintptr,error){var a ui
 
 func NewTraceTracker(ctx context.Context,root int)(*TraceTracker,error){ return newTraceTracker(ctx,root,syscall.Wait4,nil) }
 // NewGuardedTraceTracker enforces the exec policy at ptrace exec stops before the task is resumed.
-func NewGuardedTraceTracker(ctx context.Context,root int, guard func(int,uint64) error)(*TraceTracker,error){ if guard==nil{return nil,errTrace}; return newTraceTracker(ctx,root,syscall.Wait4,guard) }
+func NewGuardedTraceTracker(ctx context.Context, root int, guard func(int, uint64) error) (*TraceTracker, error) {
+	if guard == nil {
+		return nil, traceConstructorError("guard", nil)
+	}
+	return newTraceTracker(ctx, root, syscall.Wait4, guard)
+}
 // The private wait seam lets kernel tests reorder real stops, never authorize delivery.
-func newTraceTracker(ctx context.Context,root int,wait traceWait, guard ...func(int,uint64) error)(*TraceTracker,error){if ctx==nil||root<=0||wait==nil{return nil,errTrace};if _,ok:=ctx.Deadline();!ok||ctx.Err()!=nil{return nil,errTrace};c,cancel:=context.WithCancel(ctx);t:=&TraceTracker{commands:make(chan traceCommand),done:make(chan struct{}),cancel:cancel,root:root,wait:wait};if len(guard)>0 { t.execGuard=guard[0] };ready:=make(chan error,1);go t.loop(c,ready);select{case e:=<-ready:if e!=nil{cancel();return nil,e};return t,nil;case <-c.Done():cancel();return nil,errTrace}}
+func newTraceTracker(ctx context.Context, root int, wait traceWait, guard ...func(int, uint64) error) (*TraceTracker, error) {
+	if ctx == nil || root <= 0 || wait == nil {
+		return nil, traceConstructorError("context", nil)
+	}
+	if _, ok := ctx.Deadline(); !ok || ctx.Err() != nil {
+		return nil, traceConstructorError("context", ctx.Err())
+	}
+	c, cancel := context.WithCancel(ctx)
+	t := &TraceTracker{
+		commands: make(chan traceCommand),
+		done:     make(chan struct{}),
+		cancel:   cancel,
+		root:     root,
+		wait:     wait,
+	}
+	if len(guard) > 0 {
+		t.execGuard = guard[0]
+	}
+	ready := make(chan error, 1)
+	go t.loop(c, ready)
+	select {
+	case e := <-ready:
+		if e != nil {
+			cancel()
+			return nil, e
+		}
+		return t, nil
+	case <-c.Done():
+		cancel()
+		return nil, traceConstructorError("context", c.Err())
+	}
+}
 func(t *TraceTracker)loop(ctx context.Context,ready chan<- error){
 	runtime.LockOSThread();defer close(t.done)
-	rootID,e:=procIdentity(t.root); ents,x:=os.ReadDir("/proc/"+strconv.Itoa(t.root)+"/task");if e!=nil||x!=nil||len(ents)!=1||ents[0].Name()!=strconv.Itoa(t.root)||rootID.TID!=rootID.TGID{ready<-errTrace;return}
-	sig:=make(chan os.Signal,1);signal.Notify(sig,syscall.SIGCHLD);defer signal.Stop(sig)
-	if _,e=ptrace(ptraceSeize,t.root,ptraceOptions);e!=nil{ready<-errTrace;return}
-	owned:=map[int]*traceTask{t.root:{id:rootID}}
-	cleanup:=func(){for tid,task:=range owned{_ = syscall.Tgkill(task.id.TGID,tid,syscall.SIGKILL);if task.stopped{_,_=ptrace(ptraceSyscall,tid,uintptr(syscall.SIGKILL))}};timer:=time.NewTimer(time.Second);defer timer.Stop();for len(owned)>0{for tid:=range owned{var ws syscall.WaitStatus;waited,we:=syscall.Wait4(tid,&ws,waitWall|syscall.WNOHANG,nil);if we==syscall.EINTR{continue};if we==syscall.ECHILD||(waited==tid&&(ws.Exited()||ws.Signaled())){delete(owned,tid);continue};if we==nil&&waited==tid&&ws.Stopped(){_,_=ptrace(ptraceSyscall,tid,uintptr(syscall.SIGKILL))}};if len(owned)==0{return};select{case <-sig:case <-timer.C:return}}}
-	if _,e=ptrace(ptraceInterrupt,t.root,0);e!=nil{cleanup();ready<-errTrace;return}
-	for {if ctx.Err()!=nil{cleanup();ready<-errTrace;return};var ws syscall.WaitStatus;pid,we:=syscall.Wait4(t.root,&ws,waitWall|syscall.WNOHANG,nil);if we==syscall.EINTR{continue};if we!=nil{cleanup();ready<-errTrace;return};if pid==t.root&&ws.Stopped(){owned[t.root].stopped=true;break};select{case <-sig:case <-ctx.Done():cleanup();ready<-errTrace;return}}
-	id,e:=procIdentity(t.root);if e!=nil||id.StartTicks!=rootID.StartTicks{cleanup();ready<-errTrace;return};if _,e=ptrace(ptraceSyscall,t.root,0);e!=nil{cleanup();ready<-errTrace;return};owned[t.root].stopped=false
+	rootID, e := procIdentity(t.root)
+	if e != nil {
+		ready <- traceConstructorError("identity", e)
+		return
+	}
+	ents, x := os.ReadDir("/proc/" + strconv.Itoa(t.root) + "/task")
+	if x != nil {
+		ready <- traceConstructorError("tasks", x)
+		return
+	}
+	if len(ents) != 1 || ents[0].Name() != strconv.Itoa(t.root) || rootID.TID != rootID.TGID {
+		ready <- traceConstructorError("tasks", nil)
+		return
+	}
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGCHLD)
+	defer signal.Stop(sig)
+	if _, e = ptrace(ptraceSeize, t.root, ptraceOptions); e != nil {
+		ready <- traceConstructorError("seize", e)
+		return
+	}
+	owned := map[int]*traceTask{t.root: {id: rootID}}
+	cleanup := func(){for tid,task:=range owned{_ = syscall.Tgkill(task.id.TGID,tid,syscall.SIGKILL);if task.stopped{_,_=ptrace(ptraceSyscall,tid,uintptr(syscall.SIGKILL))}};timer:=time.NewTimer(time.Second);defer timer.Stop();for len(owned)>0{for tid:=range owned{var ws syscall.WaitStatus;waited,we:=syscall.Wait4(tid,&ws,waitWall|syscall.WNOHANG,nil);if we==syscall.EINTR{continue};if we==syscall.ECHILD||(waited==tid&&(ws.Exited()||ws.Signaled())){delete(owned,tid);continue};if we==nil&&waited==tid&&ws.Stopped(){_,_=ptrace(ptraceSyscall,tid,uintptr(syscall.SIGKILL))}};if len(owned)==0{return};select{case <-sig:case <-timer.C:return}}}
+	if _, e = ptrace(ptraceInterrupt, t.root, 0); e != nil {
+		cleanup()
+		ready <- traceConstructorError("interrupt", e)
+		return
+	}
+	for {
+		if ctx.Err() != nil {
+			cleanup()
+			ready <- traceConstructorError("context", ctx.Err())
+			return
+		}
+		var ws syscall.WaitStatus
+		pid, we := syscall.Wait4(t.root, &ws, waitWall|syscall.WNOHANG, nil)
+		if we == syscall.EINTR {
+			continue
+		}
+		if we != nil {
+			cleanup()
+			ready <- traceConstructorError("wait", we)
+			return
+		}
+		if pid == t.root && ws.Stopped() {
+			owned[t.root].stopped = true
+			break
+		}
+		select {
+		case <-sig:
+		case <-ctx.Done():
+			cleanup()
+			ready <- traceConstructorError("context", ctx.Err())
+			return
+		}
+	}
+	id, e := procIdentity(t.root)
+	if e != nil {
+		cleanup()
+		ready <- traceConstructorError("recheck", e)
+		return
+	}
+	if id.StartTicks != rootID.StartTicks {
+		cleanup()
+		ready <- traceConstructorError("recheck", nil)
+		return
+	}
+	if _, e = ptrace(ptraceSyscall, t.root, 0); e != nil {
+		cleanup()
+		ready <- traceConstructorError("resume", e)
+		return
+	}
+	owned[t.root].stopped = false
 	frozen:=false;var generation uint64;var active *traceSnapshot;pending:=map[int]syscall.WaitStatus{};var transferTarget, transferFD int;var transferPending bool
 	drain := func() error {
 		for {

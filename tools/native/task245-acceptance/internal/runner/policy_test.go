@@ -287,7 +287,7 @@ func TestStartupFailureSuppressedConsumerPipeline(t *testing.T) {
 		wantExit         int
 	}{
 		{name: "crossbinding", status: 2, errno: 13, wantExit: 102},
-		{name: "valid", status: 2, errno: 2, wantExit: 101, wantRecord: "task245-worker: startup=node errno=2"},
+		{name: "valid", status: 18, errno: 1, wantExit: 101, wantRecord: "task245-worker: startup=tracker_seize errno=1"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -352,7 +352,7 @@ func TestStartupFailureSuppressedConsumerPipeline(t *testing.T) {
 					t.Fatalf("crossbinding exposed startup record: startup=%q output=%q", gotStartup, outer.String())
 				}
 			} else {
-				want := "task245-container: command_exit=1 container_exit=1\ntask245-profile: checkpoints=absent\ntask245-profile: task245-conductor: event=command_failed exit=1\ntask245-profile: task245-worker: startup=node errno=2\n"
+				want := "task245-container: command_exit=1 container_exit=1\ntask245-profile: checkpoints=absent\ntask245-profile: task245-conductor: event=command_failed exit=1\ntask245-profile: task245-worker: startup=tracker_seize errno=1\n"
 				if gotStartup != tc.wantRecord || outer.String() != want {
 					t.Fatalf("startup=%q output=%q want startup=%q output=%q", gotStartup, outer.String(), tc.wantRecord, want)
 				}

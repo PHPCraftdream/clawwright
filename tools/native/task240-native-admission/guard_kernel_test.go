@@ -123,6 +123,100 @@ func TestGuardedTraceKernelRejectsExec(t *testing.T) {
 	if len(out) != 0 { t.Fatalf("rejected helper produced stdout: %q", out) }
 }
 
+func TestTraceConstructorKernelSeizeRefusal(t *testing.T) {
+	stub := os.Getenv("TASK240_STUB")
+	if stub == "" {
+		t.Fatal("TASK240_STUB must name the immutable CI trace stub")
+	}
+	image, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	imageFile, err := os.Open(image)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer imageFile.Close()
+	info, err := imageFile.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || !info.Mode().IsRegular() || st.Uid != 0 || st.Mode&022 != 0 || st.Mode&0111 == 0 || st.Nlink != 1 {
+		t.Fatalf("approved helper image must satisfy exact fd3 trust rules: %s", image)
+	}
+	gateR, gateW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gateR.Close()
+	defer gateW.Close()
+	specR, specW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer specR.Close()
+	defer specW.Close()
+	null, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer null.Close()
+	cmd := exec.Command(stub)
+	cmd.Env = []string{}
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, null, null
+	cmd.ExtraFiles = []*os.File{imageFile, gateR, specR}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cmd.Process.Release() }()
+	_ = gateR.Close()
+	_ = specR.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	first, err := NewGuardedTraceTracker(ctx, cmd.Process.Pid, func(int, uint64) error { return nil })
+	if err != nil {
+		_ = cmd.Process.Kill()
+		if ctx.Err() == nil {
+			deadline := time.Now().Add(time.Second)
+			for time.Now().Before(deadline) {
+				var status syscall.WaitStatus
+				pid, waitErr := syscall.Wait4(cmd.Process.Pid, &status, syscall.WNOHANG, nil)
+				if pid == cmd.Process.Pid || errors.Is(waitErr, syscall.ECHILD) {
+					break
+				}
+				if waitErr != nil && !errors.Is(waitErr, syscall.EINTR) {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+		t.Fatalf("first seize trusted stub: %v", err)
+	}
+	defer first.Close()
+	second, err := NewGuardedTraceTracker(ctx, cmd.Process.Pid, func(int, uint64) error { return nil })
+	if second != nil {
+		second.Close()
+		t.Fatal("second tracker unexpectedly seized already-owned process")
+	}
+	stage, errno, ok := TraceConstructorFailure(err)
+	if !ok || stage != "seize" || errno != syscall.EPERM || !errors.Is(err, syscall.EPERM) || !errors.Is(err, errTrace) {
+		t.Fatalf("second constructor failure=(%q,%v,%v), err=%v; want seize/EPERM wrapping errTrace", stage, errno, ok, err)
+	}
+	first.Close()
+	select {
+	case <-first.done:
+	case <-ctx.Done():
+		t.Fatalf("first tracker cleanup did not finish: %v", ctx.Err())
+	}
+	if err := syscall.Kill(cmd.Process.Pid, 0); !errors.Is(err, syscall.ESRCH) {
+		t.Fatalf("stub process still exists after tracker cleanup: %v", err)
+	}
+	_ = specW.Close()
+	_ = gateW.Close()
+}
+
+
 func TestLaunchStubWaitsForPacketEOF(t *testing.T) {
 	stub := os.Getenv("TASK240_STUB")
 	if stub == "" { t.Fatal("TASK240_STUB must name the immutable CI trace stub") }

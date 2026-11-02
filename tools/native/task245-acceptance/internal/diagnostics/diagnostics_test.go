@@ -52,7 +52,7 @@ func TestServiceFailureSanitizesAndStrictlyParses(t *testing.T) {
 
 func TestWorkerStartupForwardingChain(t *testing.T) {
 	var capture Capture
-	_, _ = io.WriteString(&capture, "task245-worker: startup=tracker errno=1\n")
+	_, _ = io.WriteString(&capture, "task245-worker: startup=tracker_seize errno=1\n")
 	var report bytes.Buffer
 	if err := ReportFailure(&report, true, "task245-profile: checkpoints=1", capture.Bytes(), nil, "command_failed", 7); err != nil {
 		t.Fatal(err)
@@ -61,7 +61,7 @@ func TestWorkerStartupForwardingChain(t *testing.T) {
 	if err := ContainerFailure(&container, true, 7, 0, report.Bytes()); err != nil {
 		t.Fatal(err)
 	}
-	want := "task245-container: command_exit=7 container_exit=0\ntask245-profile: checkpoints=1\ntask245-profile: task245-conductor: event=command_failed exit=7\ntask245-profile: task245-worker: startup=tracker errno=1\n"
+	want := "task245-container: command_exit=7 container_exit=0\ntask245-profile: checkpoints=1\ntask245-profile: task245-conductor: event=command_failed exit=7\ntask245-profile: task245-worker: startup=tracker_seize errno=1\n"
 	if container.String() != want {
 		t.Fatalf("got %q, want %q", container.String(), want)
 	}
@@ -70,7 +70,7 @@ func TestWorkerStartupForwardingChain(t *testing.T) {
 func TestWorkerMalformedRecordsFiltered(t *testing.T) {
 	for _, raw := range []string{
 		"task245-worker: startup=unknown errno=1\n",
-		"task245-worker: startup=tracker errno=1 trailingsecret\n",
+		"task245-worker: startup=tracker_seize errno=1 trailingsecret\n",
 		"task245-worker: startup=tracker errno=01\n",
 		"task245-worker: startup=tracker errno=4096\n",
 		"task245-worker: startup=tracker errno=x\n",

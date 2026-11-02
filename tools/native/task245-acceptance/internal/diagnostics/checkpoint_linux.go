@@ -14,7 +14,7 @@ import (
 const checkpointAbsent = "task245-profile: checkpoints=absent"
 const startupFailurePath = "/var/lib/ssjack/synthetic/native-startup-failure"
 
-var startupStages = [...]string{"context", "node", "stub", "provider", "packet", "gate_pipe", "args_pipe", "fork", "tracker", "args_write", "args_close", "gate_write", "gate_close"}
+var startupStages = [...]string{"context", "node", "stub", "provider", "packet", "gate_pipe", "args_pipe", "fork", "tracker", "args_write", "args_close", "gate_write", "gate_close", "tracker_context", "tracker_guard", "tracker_identity", "tracker_tasks", "tracker_seize", "tracker_interrupt", "tracker_wait", "tracker_recheck", "tracker_resume"}
 
 func StartupFailure() string {
 	return startupFailureFile(startupFailurePath)
