@@ -6,7 +6,7 @@ import { SsjackTextClient } from "#framework/runtime/transport/remote/text/clien
 import { executeCommand } from "#framework/core/command/execute.ts";
 import { orchestrationCommands } from "#framework/commands/interface/groups/openclawCommands.orchestration.ts";
 import { withOutputSink } from "#framework/core/io/output.ts";
-import { deployText } from "#framework/recipe-kit/index.ts";
+import { deployText, backupText } from "#framework/recipe-kit/index.ts";
 import assert from "node:assert/strict";
 import { createHash, X509Certificate } from "node:crypto";
 import { constants } from "node:fs";
@@ -364,11 +364,21 @@ async function checkTextAdapter(): Promise<void> {
     | "drop"
     | "malformed-json"
     | "wrong-jsonrpc"
-    | "missing-result" = "normal";
+    | "missing-result"
+    | "wire-overflow"
+    | "wire-exact"
+    | "invalid-utf8"
+    | "failed-text"
+    | "missing-text"
+    | "http-rejected"
+    | "truncated" = "normal";
   let wireStatus: "received" | "withheld" | "unknown" = "received";
     let capabilities = ["text_hydrate"];
     let advertisedProfile = "human.profile";
     let hydrateCount = 0;
+    let reverseCount = 0;
+    let copyText = "";
+    let cancelReverse: (() => void) | undefined;
     let captured: Record<string, unknown> | undefined;
     server.on("request", (request, response) => {
       assert.deepEqual(
@@ -389,8 +399,22 @@ async function checkTextAdapter(): Promise<void> {
         else if (method === "tools/call" && params?.name === "transport_info") {
           result = { structuredContent: { protocol: 1, profile: advertisedProfile, capabilities } };
         } else {
-          hydrateCount++;
-          captured = params?.arguments;
+          if (params?.name === "text_reverse_copy") {
+            reverseCount++;
+            captured = params.arguments;
+            cancelReverse?.();
+            const structured = wireStatus === "received" ? { status: wireStatus, text: copyText } : { status: wireStatus };
+            result = { content: [{ type: "text", text: JSON.stringify(structured) }], structuredContent: structured };
+            if (replymode === "failed-text") result = { content: [{ type: "text", text: JSON.stringify({ status: "unknown", text: "not-publishable" }) }], structuredContent: { status: "unknown", text: "not-publishable" } };
+            if (replymode === "missing-text") result = { content: [{ type: "text", text: JSON.stringify({ status: "received" }) }], structuredContent: { status: "received" } };
+          } else {
+            hydrateCount++;
+            captured = params?.arguments;
+          }
+          if (replymode === "wire-overflow") { const encoded = JSON.stringify({ jsonrpc: "2.0", id, result }); response.writeHead(200, { "Content-Type": "application/json" }).end(encoded + " ".repeat(25231361 - Buffer.byteLength(encoded))); return; }
+          if (replymode === "invalid-utf8") { response.writeHead(200, { "Content-Type": "application/json" }).end(Buffer.from([255])); return; }
+          if (replymode === "http-rejected") { response.writeHead(403).end(); return; }
+          if (replymode === "truncated") { response.writeHead(200, { "Content-Type": "application/json" }); response.write('{"jsonrpc":"2.0","id":'); response.destroy(); return; }
           if (replymode === "malformed-json") {
             response.writeHead(200, { "Content-Type": "application/json" });
             response.end("{");
@@ -402,11 +426,12 @@ async function checkTextAdapter(): Promise<void> {
           }
           if (replymode === "missingstructured") result = {};
           else if (replymode === "extra-key") result = { structuredContent: { status: wireStatus, extra: true } };
-          else result = { structuredContent: { status: replymode === "statusinvalid" ? "bogus" : wireStatus } };
+          else if (params?.name !== "text_reverse_copy") result = { structuredContent: { status: replymode === "statusinvalid" ? "bogus" : wireStatus } };
         }
-        const replyId = params?.name === "text_hydrate" && replymode === "wrongid" ? id + 1 : id;
-        const hydration = params?.name === "text_hydrate";
-        const envelope = { jsonrpc: hydration && replymode === "wrong-jsonrpc" ? "1.0" : "2.0", id: replyId, ...(hydration && replymode === "missing-result" ? {} : { result }) };
+        const replyId = ["text_hydrate", "text_reverse_copy"].includes(params?.name ?? "") && replymode === "wrongid" ? id + 1 : id;
+        const textTool = params?.name === "text_hydrate" || params?.name === "text_reverse_copy";
+        const envelope = { jsonrpc: textTool && replymode === "wrong-jsonrpc" ? "1.0" : "2.0", id: replyId, ...(textTool && replymode === "missing-result" ? {} : { result }) };
+        if (replymode === "wire-exact" && params?.name === "text_reverse_copy") { const encoded = JSON.stringify(envelope); response.writeHead(200, { "Content-Type": "application/json" }).end(encoded + " ".repeat(25231360 - Buffer.byteLength(encoded))); return; }
         response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(envelope));
       });
     });
@@ -419,7 +444,34 @@ async function checkTextAdapter(): Promise<void> {
       pin,
       profile: "human.profile",
     });
+    const reverseClient = () => new SsjackTextClient({ endpoint, token: "a".repeat(64), pin, profile: "human.profile" }, "text_reverse_copy");
     try {
+      capabilities = ["text_reverse_copy"];
+      for (const received of ["", "ordinary", "\uFEFFé🙂", valid] as const) {
+        copyText = received;
+        const current = reverseClient();
+        const before = reverseCount;
+        assert.deepEqual(await current.textReverseCopy("fixture.txt", { timeoutMs: 3000 }), { status: "received", text: received });
+        assert.equal(reverseCount, before + 1);
+        assert.deepEqual(Object.keys(captured!).sort(), ["file", "mode", "operation_id"]);
+        assert.equal(captured!.file, "fixture.txt");
+        assert.equal(captured!.mode, "reverse-copy-v1");
+        assert.match(captured!.operation_id as string, /^[A-Za-z0-9_-]{22}$/);
+        await assert.rejects(current.textReverseCopy("fixture.txt"), /SSJACK_TEXT_OPERATION_FAILED/);
+        assert.equal(reverseCount, before + 1);
+      }
+      for (const mode of ["malformed-json", "drop", "missingstructured", "extra-key", "wrongid", "wrong-jsonrpc", "missing-result", "wire-overflow", "invalid-utf8", "failed-text", "missing-text", "http-rejected", "truncated"] as const) {
+        replymode = mode;
+        const before = reverseCount;
+        const current = reverseClient();
+        const response = await current.textReverseCopy("fixture.txt", { timeoutMs: 3000 });
+        assert.deepEqual(response, { status: "unknown" });
+        assert.equal(reverseCount, before + 1);
+        await assert.rejects(current.textReverseCopy("fixture.txt"), /SSJACK_TEXT_OPERATION_FAILED/);
+        assert.equal(reverseCount, before + 1);
+      }
+      replymode = "normal";
+      capabilities = ["text_hydrate"];
       for (const mode of ["normal", "statusinvalid", "wrongid", "missingstructured", "extra-key", "drop", "malformed-json", "wrong-jsonrpc", "missing-result"] as const) {
         replymode = mode;
         wireStatus = "received";
@@ -472,12 +524,12 @@ async function checkTextAdapter(): Promise<void> {
         process.env.SSJACK_APP_CERTIFICATE_SHA256 = pin;
         process.env.SSJACK_TEXT_PROFILE = "human.profile";
         const app = { name: "fixture", description: "fixture", commands: orchestrationCommands };
-        const invoke = (argv: string[]) => executeCommand(app, "deploy-text", { kind: "argv", argv }, { surface: "terminal" });
-        const call = async (argv: string[]) => {
+        const invoke = (argv: string[], command = "deploy-text") => executeCommand(app, command, { kind: "argv", argv }, { surface: "terminal" });
+        const call = async (argv: string[], command = "deploy-text") => {
           const output: string[] = [];
           const result = await withOutputSink((chunk) => {
             output.push(chunk);
-          }, () => invoke(argv));
+          }, () => invoke(argv, command));
           return { result, output: output.join("") };
         };
         const liveContext = new Map(contextNames.map((name) => [name, process.env[name]]));
@@ -519,7 +571,104 @@ async function checkTextAdapter(): Promise<void> {
 
         process.env.SSJACK_TEXT_PROFILE = "human.profile";
         const noRuntime = { dryRun: false, runtime: { runOneOff: async () => { throw new Error("UNEXPECTED_GENERIC_RUNTIME"); } } };
+        capabilities = ["text_reverse_copy"];
+        copyText = valid;
+        const reverseInput = join(scratch, "fixture.txt");
+        const reverseOutput = join(scratch, "new-copy.txt");
+        await writeFile(reverseInput, valid, "utf8");
+        const backupCall = (argv: string[]) => call(argv, "backup-text");
+        const backupArgs = ["--file", reverseInput, "--output", reverseOutput, "--profile", "human.profile"];
+        const beforeReverse = reverseCount;
+        const preDispatchAbort = new AbortController();
+        preDispatchAbort.abort();
+        await assert.rejects(reverseClient().textReverseCopy("fixture.txt", { timeoutMs: 3000, signal: preDispatchAbort.signal }), /SSJACK_TEXT_OPERATION_FAILED/);
+        assert.equal(reverseCount, beforeReverse);
+        const cancellation = new AbortController();
+        cancelReverse = () => cancellation.abort();
+        assert.deepEqual(await reverseClient().textReverseCopy("fixture.txt", { timeoutMs: 3000, signal: cancellation.signal }), { status: "unknown" });
+        cancelReverse = undefined;
+        assert.equal(reverseCount, beforeReverse + 1);
+        const copied = await backupCall(backupArgs);
+        assert.equal(copied.result.error, undefined);
+        assert.equal(copied.result.exitCode, 0);
+        assert.equal(copied.output, '{"status":"received"}\n');
+        assert.equal(await readFile(reverseOutput, "utf8"), valid);
+        assert.equal(await readFile(reverseInput, "utf8"), valid);
+        assert.equal(reverseCount, beforeReverse + 2);
+        copyText = "wrong response";
+        const rejectedCopy = await backupCall(backupArgs);
+        assert.ok(rejectedCopy.result.error);
+        assert.equal(await readFile(reverseOutput, "utf8"), valid);
+        copyText = valid;
+        assert.deepEqual(await backupText(noRuntime as never, { file: reverseInput, profile: 'human.profile' }), { status: 'received', text: valid });
+        for (const status of ["withheld", "unknown"] as const) {
+          wireStatus = status;
+          const response = await reverseClient().textReverseCopy("fixture.txt", { timeoutMs: 3000 });
+          assert.deepEqual(response, status === "withheld" ? { status: "withheld" } : { status: "unknown" });
+          const failedOutput = join(scratch, `failed-${status}.txt`);
+          const failed = await backupCall(["--file", "fixture.txt", "--output", failedOutput, "--profile", "human.profile"]);
+          assert.equal(failed.result.exitCode, 1);
+          assert.equal(failed.output, `{"status":"${status}"}\n`);
+          await assert.rejects(readFile(failedOutput));
+          assert.deepEqual(await backupText(noRuntime as never, { file: "fixture.txt", profile: "human.profile" }), { status });
+        }
+        wireStatus = "received";
+        const boundaryText = String.fromCharCode(1).repeat(1048576);
+        copyText = boundaryText;
+        const boundaryResponse = await reverseClient().textReverseCopy("fixture.txt", { timeoutMs: 3000 });
+        assert.equal(boundaryResponse.status === "received" && boundaryResponse.text === boundaryText, true);
+        replymode = "wire-exact";
+        assert.deepEqual(await reverseClient().textReverseCopy("fixture.txt", { timeoutMs: 3000 }), { status: "received", text: copyText });
+        replymode = "normal";
+        const nativeNow = Date.now;
+        const nativeParse = JSON.parse;
+        try {
+          JSON.parse = ((text: string, reviver?: (this: unknown, key: string, value: unknown) => unknown) => {
+            const value = nativeParse(text, reviver);
+            if (text.includes('"status":"received"') && text.includes('"text":"parse-late"')) Date.now = () => nativeNow() + 3001;
+            return value;
+          }) as typeof JSON.parse;
+          copyText = "parse-late";
+          assert.deepEqual(await reverseClient().textReverseCopy("fixture.txt", { timeoutMs: 3000 }), { status: "unknown" });
+        } finally {
+          JSON.parse = nativeParse;
+          Date.now = nativeNow;
+        }
+        for (const invalidText of ["\0", "\ud800", "x".repeat(1048577)]) {
+          copyText = invalidText;
+          const before = reverseCount;
+          const response = await reverseClient().textReverseCopy("fixture.txt", { timeoutMs: 3000 });
+          assert.deepEqual(response, { status: "unknown" });
+          assert.equal(reverseCount, before + 1);
+        }
+        const reverseBeforeRefusal = reverseCount;
+        capabilities = ["text_hydrate"];
+        await assert.rejects(reverseClient().textReverseCopy("fixture.txt", { timeoutMs: 3000 }), /SSJACK_TEXT_OPERATION_FAILED/);
+        assert.equal(reverseCount, reverseBeforeRefusal);
+        capabilities = ["text_reverse_copy", "exec"];
+        await assert.rejects(reverseClient().textReverseCopy("fixture.txt", { timeoutMs: 3000 }), /SSJACK_TEXT_OPERATION_FAILED/);
+        assert.equal(reverseCount, reverseBeforeRefusal);
+        capabilities = ["text_hydrate"];
         assert.equal(await deployText(noRuntime as never, { file: "fixture.txt", template: valid, profile: "human.profile" }), "received");
+        assert.equal(await deployText(noRuntime as never, { file: "fixture.txt", template: await readFile(reverseOutput, "utf8"), profile: "human.profile" }), "received");
+        for (const unsupported of ["", "ordinary", valid + "x".repeat(32768)]) {
+          const beforeUnsupported = hydrateCount;
+          await assert.rejects(deployText(noRuntime as never, { file: "fixture.txt", template: unsupported, profile: "human.profile" }));
+          assert.equal(hydrateCount, beforeUnsupported);
+        }
+        await assert.rejects(backupText({ ...noRuntime, dryRun: true } as never, { file: reverseInput, profile: "human.profile" }));
+        const priorTextProfile = process.env.SSJACK_TEXT_PROFILE;
+        delete process.env.SSJACK_TEXT_PROFILE;
+        const missingTextProfile = await backupCall(backupArgs);
+        assert.ok(missingTextProfile.result.error);
+        assert.equal(await readFile(reverseOutput, "utf8"), valid);
+        await assert.rejects(backupText(noRuntime as never, { file: reverseInput, profile: "human.profile" }));
+        if (priorTextProfile === undefined) delete process.env.SSJACK_TEXT_PROFILE;
+        else process.env.SSJACK_TEXT_PROFILE = priorTextProfile;
+        const beforeWrongProfile = hydrateCount;
+        await assert.rejects(backupText(noRuntime as never, { file: reverseInput, profile: "wrong.profile" }));
+        await assert.rejects(deployText(noRuntime as never, { file: "fixture.txt", template: valid, profile: "wrong.profile" }));
+        assert.equal(hydrateCount, beforeWrongProfile);
         for (const status of ["unknown", "withheld"] as const) {
           wireStatus = status;
           assert.equal(await deployText(noRuntime as never, { file: "fixture.txt", template: valid, profile: "human.profile" }), status);

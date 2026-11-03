@@ -118,11 +118,11 @@ func task258BaselineReceipts() map[string]string {
 
 func task258CurrentReceipts() map[string]string {
 	return map[string]string{
-		"tools/checks/foundation/packaging/build-output.check.ts":     "3708a8afdce4fd67c0503b767e0c93e28e1aa5f2",
-		"tools/checks/runtime/transport/remote/ssjack-client.check.ts": "62b570a4a7d4a1bd65db05c305fcea9a5b3d44cc",
+		"tools/checks/foundation/packaging/build-output.check.ts":     "f97864ea1ba60fcc6a37c9ef879361f594a53b13",
+		"tools/checks/runtime/transport/remote/ssjack-client.check.ts": "3d44155801326884c412b1522e4acabd097a8caa",
 		"tools/checks/foundation/core/command/needs.check.ts":         "4bf762935e8e8fcbfe6e911bfb6770dd92773876",
-		"tools/checks/completeness/flags-matrix.check.ts":             "b4d0c05ed38e8ba840aa5a4230157ca7d3ab2b4e",
-		"tools/checks/foundation/core/command/spec/effect.check.ts":   "40e76bc2d879a919fe9e5841ff014535f825076f",
+		"tools/checks/completeness/flags-matrix.check.ts":             "9679640e21f664647bced89dec3223044dd8485f",
+		"tools/checks/foundation/core/command/spec/effect.check.ts":   "c7a5c6ee881dc86e7be5fa5c7f53f069fa40ec63",
 	}
 }
 

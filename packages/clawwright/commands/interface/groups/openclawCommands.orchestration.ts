@@ -5,7 +5,7 @@
 import type { AppCommand } from "#src/core/app.ts";
 import { materializeCommands } from "#src/core/command/index.ts";
 
-import { APPLY_CONFIG, SSJACK_TEXT } from "#src/commands/orchestration/config.ts";
+import { APPLY_CONFIG, SSJACK_TEXT, SSJACK_TEXT_BACKUP } from "#src/commands/orchestration/config.ts";
 import { INSPECT, DOCTOR } from "#src/commands/orchestration/inspect/gather.ts";
 import { PLAN } from "#src/commands/orchestration/plan.ts";
 import { APPLY } from "#src/commands/orchestration/apply.ts";
@@ -246,6 +246,12 @@ export const orchestrationCommands: Record<string, AppCommand> = materializeComm
       "Kept separate from `apply`: its {--dry-run} really validates against the target (lockless, " +
       "even before the instance is healthy), and {--dump} {--force} deliberately overwrites an " +
       "existing declaration — `apply` does neither.",
+  },
+  "backup-text": {
+    summary: "Back up selected text through the keeper",
+    group: "change",
+    ...SSJACK_TEXT_BACKUP,
+    details: "The keeper privately reads the explicitly approved source and returns only its keeper-transformed selected copy; no raw fallback is available. The backup is limited to 1 MiB. Restore is supported only by feeding a user-supplied complete canonical reference template (1–16 references, all from the same store and snapshot, total template at most 32 KiB) through the existing deploy-text path. It never resolves latest references. Other content refuses restore; the user owns mapping completeness and escaping.",
   },
   "deploy-text": {
     summary: "Deploy a reference-only text template through SSJack",

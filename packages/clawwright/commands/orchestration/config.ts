@@ -25,7 +25,8 @@ import { text } from "#src/core/values/kinds.ts";
 import { readSsjackTextInput } from "#src/runtime/transport/remote/text/input.ts";
 import { parseCanonicalTextReferences } from "#src/runtime/transport/remote/text/canonical.ts";
 import { ssjackTextEnvironment } from "#src/runtime/transport/remote/ssjack-contract.ts";
-import { ssjackTextBootstrap, SsjackTextClient, type SsjackTextStatus } from "#src/runtime/transport/remote/text/client.ts";
+import { ssjackTextBootstrap, SsjackTextClient, type SsjackTextStatus, type SsjackTextCopyResult } from "#src/runtime/transport/remote/text/client.ts";
+import { publishSsjackText } from "#src/runtime/transport/remote/text/output.ts";
 
 export const APPLY_CONFIG_ARGUMENTS = [
   { name: "dry-run", summary: "Validate without writing", description: "Validate the apply without writing; refused together with --dump", kind: "flag", effect: "read" },
@@ -327,6 +328,19 @@ export async function deploySsjackText(
   }
 }
 
+export async function backupSsjackText(
+  input: { file: string; profile: string },
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): Promise<SsjackTextCopyResult> {
+  try {
+    const bootstrap = ssjackTextBootstrap(ssjackTextEnvironment(env));
+    if (bootstrap === undefined || bootstrap.profile !== input.profile) throw ssjackTextFailure();
+    return await new SsjackTextClient(bootstrap, "text_reverse_copy").textReverseCopy(input.file);
+  } catch {
+    throw ssjackTextFailure();
+  }
+}
+
 async function selectedSsjackText(file: string, templatePath: string, profile: string): Promise<SsjackTextStatus> {
   try {
     const template = await readSsjackTextInput(templatePath);
@@ -335,6 +349,26 @@ async function selectedSsjackText(file: string, templatePath: string, profile: s
     throw ssjackTextFailure();
   }
 }
+
+export const SSJACK_TEXT_BACKUP = commandBody({
+  effect: "change",
+  needs: "nothing",
+  arguments: [
+    { name: "file", description: "Granted source path", kind: "option", valueName: "PATH", required: true, value: text("a granted source path", { leadingDash: "allow" }) },
+    { name: "output", description: "New local output path", kind: "option", valueName: "PATH", required: true, value: text("a local output path", { leadingDash: "allow" }) },
+    { name: "profile", description: "Expected grant profile", kind: "option", valueName: "NAME", required: true, value: text("an expected text profile", { leadingDash: "allow" }) },
+  ],
+  prepare: async (call) => ({ file: call.values.file, output: call.values.output, profile: call.values.profile }),
+  run: async (_scope, plan) => {
+    const result = await backupSsjackText({ file: plan.file, profile: plan.profile });
+    if (result.status === "received") {
+      try { await publishSsjackText(plan.output, result.text); }
+      catch { throw ssjackTextFailure(); }
+    }
+    emit(`${JSON.stringify({ status: result.status })}\n`);
+    return result.status === "received" ? 0 : 1;
+  },
+});
 
 export const SSJACK_TEXT = commandBody({
   effect: "change",

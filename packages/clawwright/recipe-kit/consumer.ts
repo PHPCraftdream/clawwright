@@ -4,7 +4,7 @@ import { parseCanonicalTextReferences } from "#src/runtime/transport/remote/text
 import { ssjackTextEnvironment } from "#src/runtime/transport/remote/ssjack-contract.ts";
 import { ssjackTextBootstrap, SsjackTextClient } from "#src/runtime/transport/remote/text/client.ts";
 import { DEFAULT_OUTPUT_BYTES_MAX, DEFAULT_TIMEOUT_MS, RecipeKitRefusal, REQUEST_BYTES_MAX } from "./types.ts";
-import type { ConsumerRequest, ConsumerResponse, RecipeContext } from "./types.ts";
+import type { BackupTextResult, ConsumerRequest, ConsumerResponse, RecipeContext } from "./types.ts";
 
 /** Fetches through gateway curl; bounds wait/retention, not transport allocation or cancellation.
  * max-filesize cannot guarantee a pre-capture bound for chunked transfers on every curl version.
@@ -79,6 +79,23 @@ export async function consumerFetch(ctx: RecipeContext, request: ConsumerRequest
   }
   const body = redact(parsed.body);
   return { status: parsed.status, headers, body: cap(body, max), truncated: bytes(body) > max };
+}
+
+export interface BackupTextInput {
+  file: string;
+  profile: string;
+}
+
+/** Copy only selected remote text through the explicitly selected SSJack profile. */
+export async function backupText(ctx: RecipeContext, input: BackupTextInput): Promise<BackupTextResult> {
+  if (ctx.dryRun === true) throw new RecipeKitRefusal("invalid-request");
+  try {
+    const bootstrap = ssjackTextBootstrap(ssjackTextEnvironment(process.env));
+    if (bootstrap === undefined || bootstrap.profile !== input.profile) throw new Error();
+    return await new SsjackTextClient(bootstrap, "text_reverse_copy").textReverseCopy(input.file);
+  } catch {
+    throw new RecipeKitRefusal("transport");
+  }
 }
 
 export interface DeployTextInput {

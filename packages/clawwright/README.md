@@ -7,6 +7,11 @@ the deployment and the OpenClaw gateway.
 
 Source, issues and the full guides: https://github.com/PHPCraftdream/clawwright
 
+## SSJack text backup
+
+`backup-text --file <PATH> --output <PATH> --profile <NAME>` backs up selected text via the explicitly granted keeper path. A separate prior human approval of `reverse-copy-v1` at the root is required; launch does not prompt for or authorize approval. Output is published exclusively and never overwrites an existing file. See the [SSJack guide](../../docs/ssjack.md#backup-text-mode) for limits and refusal behavior.
+
+
 ## Install
 
 System-wide, then one folder per deployment:

@@ -62,8 +62,10 @@ async function verifyHistoricalRelocation(currentDist: string): Promise<void> {
       "runtime/transport/remote/text/canonical",
       "runtime/transport/remote/text/client",
       "runtime/transport/remote/text/input",
+      "runtime/transport/remote/text/output",
       "commands/orchestration/config",
       "recipe-kit/consumer",
+      "recipe-kit/types",
       "runtime/transport/remote/ssjack-contract",
       "runtime/transport/transport",
       "recipe-kit/index",
@@ -86,8 +88,10 @@ async function verifyCurrentFeatureOutput(distDir: string): Promise<void> {
     "runtime/transport/remote/text/canonical.ts",
     "runtime/transport/remote/text/client.ts",
     "runtime/transport/remote/text/input.ts",
+    "runtime/transport/remote/text/output.ts",
     "commands/orchestration/config.ts",
     "recipe-kit/consumer.ts",
+    "recipe-kit/types.ts",
   ];
   for (const path of featureSources) {
     const source = await readFile(resolve(monorepoRoot, "packages/clawwright", path), "utf8");
@@ -126,6 +130,22 @@ async function verifyCurrentFeatureOutput(distDir: string): Promise<void> {
   }
   const recipeIndex = await readFile(resolve(distDir, "recipe-kit/index.js"), "utf8");
   if (!recipeIndex.includes("deployText")) throw new Error("recipe-kit public index does not export deployText");
+  if (!recipeIndex.includes("backupText")) throw new Error("recipe-kit public index does not export backupText");
+  const consumerDeclaration = await readFile(resolve(distDir, "recipe-kit/consumer.d.ts"), "utf8");
+  if (!consumerDeclaration.includes("backupText(ctx: RecipeContext, input: BackupTextInput): Promise<BackupTextResult>")) {
+    throw new Error("recipe-kit backupText declaration does not expose BackupTextResult");
+  }
+  if (!consumerDeclaration.includes("export interface BackupTextInput")) {
+    throw new Error("recipe-kit backupText declaration does not expose BackupTextInput");
+  }
+  const indexDeclaration = await readFile(resolve(distDir, "recipe-kit/index.d.ts"), "utf8");
+  if (!indexDeclaration.includes('export type { BackupTextResult } from "./types.js"')) {
+    throw new Error("recipe-kit public index declaration does not export BackupTextResult");
+  }
+  const typesDeclaration = await readFile(resolve(distDir, "recipe-kit/types.d.ts"), "utf8");
+  for (const discriminant of ['status: "received"', 'status: "withheld" | "unknown"', "text: string"]) {
+    if (!typesDeclaration.includes(discriminant)) throw new Error(`BackupTextResult declaration is missing ${discriminant}`);
+  }
 }
 
 async function verifyRelocationParity(distDir: string): Promise<void> {

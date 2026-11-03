@@ -78,3 +78,7 @@ export interface ConsumerRequest {
  * Selected header values share a separate bodyBytesMax budget; their clipping does not set this flag.
  */
 export interface ConsumerResponse { status: number; headers: Record<string, string>; body: string; truncated: boolean }
+/** Backup text is either available or explicitly withheld/unknown. */
+export type BackupTextResult =
+  | { readonly status: "received"; readonly text: string }
+  | { readonly status: "withheld" | "unknown" };

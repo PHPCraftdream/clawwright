@@ -940,6 +940,32 @@
       }
     },
     {
+      "name": "backup-text",
+      "description": "Back up selected text through the keeper\nFull text: help command=backup-text",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "Granted source path"
+          },
+          "output": {
+            "type": "string",
+            "description": "New local output path"
+          },
+          "profile": {
+            "type": "string",
+            "description": "Expected grant profile"
+          }
+        },
+        "required": [
+          "file",
+          "output",
+          "profile"
+        ]
+      }
+    },
+    {
       "name": "deploy-text",
       "description": "Deploy a reference-only text template through SSJack\nFull text: help command=deploy-text",
       "inputSchema": {

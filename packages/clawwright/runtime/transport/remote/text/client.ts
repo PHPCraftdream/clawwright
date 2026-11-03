@@ -14,9 +14,15 @@ export interface SsjackTextBootstrap {
 }
 
 export type SsjackTextStatus = "withheld" | "received" | "unknown";
+export type SsjackTextCopyResult =
+  | { readonly status: "received"; readonly text: string }
+  | { readonly status: "withheld" | "unknown" };
 
 const MCP = "2025-06-18";
 const MAX_REQUEST = 200 * 1024;
+const MAX_REVERSE_REQUEST = 256 * 1024;
+const MAX_REVERSE_RESPONSE = (24 << 20) + (64 << 10);
+const MAX_REVERSE_TEXT = 1024 * 1024;
 const fail = (): UserError => new UserError("SSJACK_TEXT_OPERATION_FAILED");
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -56,11 +62,12 @@ export function ssjackTextBootstrap(
   return bootstrap;
 }
 
-/** A protocol-1 client limited to the text-hydrate operation. */
+/** A protocol-1 client limited to one dedicated text capability. */
 export class SsjackTextClient {
   readonly #endpoint: URL;
   readonly #pin: Buffer;
   readonly #profile: string;
+  readonly #capability: "text_hydrate" | "text_reverse_copy";
   #token: string;
   #agent?: Agent;
   #probe?: TLSSocket;
@@ -70,12 +77,14 @@ export class SsjackTextClient {
   #id = 0;
   readonly #pending = new Set<ClientRequest>();
 
-  constructor(bootstrap: SsjackTextBootstrap) {
+  constructor(bootstrap: SsjackTextBootstrap, capability: "text_hydrate" | "text_reverse_copy" = "text_hydrate") {
     validBootstrap(bootstrap);
+    if (capability !== "text_hydrate" && capability !== "text_reverse_copy") throw fail();
     registerSecret(bootstrap.token);
     this.#endpoint = new URL(bootstrap.endpoint);
     this.#pin = Buffer.from(bootstrap.pin, "hex");
     this.#profile = bootstrap.profile;
+    this.#capability = capability;
     this.#token = bootstrap.token;
   }
 
@@ -93,7 +102,7 @@ export class SsjackTextClient {
     template: string,
     options: { deadline?: number | Date; timeoutMs?: number } = {},
   ): Promise<SsjackTextStatus> {
-    if (this.#attempted || this.#closed) throw fail();
+    if (this.#capability !== "text_hydrate" || this.#attempted || this.#closed) throw fail();
     this.#attempted = true;
     const entered = Date.now();
     const callerDeadline = options.deadline instanceof Date
@@ -154,6 +163,57 @@ export class SsjackTextClient {
     }
   }
 
+  async textReverseCopy(
+    file: string,
+    options: { deadline?: number | Date; timeoutMs?: number; signal?: AbortSignal } = {},
+  ): Promise<SsjackTextCopyResult> {
+    if (this.#capability !== "text_reverse_copy" || this.#attempted || this.#closed) throw fail();
+    this.#attempted = true;
+    const signal = options.signal;
+    if (signal?.aborted) throw fail();
+    const onAbort = (): void => this.close();
+    const entered = Date.now();
+    const callerDeadline = options.deadline instanceof Date ? options.deadline.getTime() : options.deadline;
+    const timeoutMs = options.timeoutMs ?? 60000;
+    if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs) || timeoutMs <= 0) throw fail();
+    const deadline = Math.min(entered + timeoutMs, entered + 60000, callerDeadline ?? Infinity);
+    const remaining = (): number => Math.floor(deadline - Date.now());
+    if (
+      typeof file !== "string" || file.length === 0 || Buffer.byteLength(file, "utf8") > 4096 ||
+      file.includes("\0") || /[\uD800-\uDFFF]/u.test(file) || !Number.isFinite(deadline) || remaining() < 1
+    ) throw fail();
+    let dispatched = false;
+    signal?.addEventListener("abort", onAbort, { once: true });
+    try {
+      await this.#initialize(deadline);
+      if (this.#closed || signal?.aborted) throw fail();
+      let raw: unknown;
+      try {
+        dispatched = true;
+        raw = await this.#tool("text_reverse_copy", {
+          operation_id: randomBytes(16).toString("base64url"), file, mode: "reverse-copy-v1",
+        }, remaining(), true);
+      } catch {
+        if (dispatched) return { status: "unknown" };
+        throw fail();
+      }
+      const late = (): boolean => this.#closed || signal?.aborted === true || remaining() < 1;
+      if (late()) return { status: "unknown" };
+      if (!record(raw)) return { status: "unknown" };
+      if ((raw.status === "withheld" || raw.status === "unknown") && Object.keys(raw).length === 1) return late() ? { status: "unknown" } : { status: raw.status };
+      if (raw.status !== "received" || Object.keys(raw).length !== 2 || typeof raw.text !== "string" ||
+        /[\uD800-\uDFFF]/u.test(raw.text) || raw.text.includes("\0") || Buffer.byteLength(raw.text, "utf8") > MAX_REVERSE_TEXT) return { status: "unknown" };
+      if (late()) return { status: "unknown" };
+      return { status: "received", text: raw.text };
+    } catch {
+      if (dispatched) return { status: "unknown" };
+      throw fail();
+    } finally {
+      signal?.removeEventListener("abort", onAbort);
+      this.close();
+    }
+  }
+
   #initialize(deadline: number): Promise<void> {
     if (this.#closed) return Promise.reject(fail());
     return this.#ready ??= this.#initializeOnce(deadline);
@@ -190,7 +250,7 @@ export class SsjackTextClient {
       info.profile !== this.#profile ||
       !Array.isArray(info.capabilities) ||
       info.capabilities.length !== 1 ||
-      info.capabilities[0] !== "text_hydrate"
+      info.capabilities[0] !== this.#capability
     ) {
       throw fail();
     }
@@ -239,19 +299,43 @@ export class SsjackTextClient {
     });
   }
 
-  async #tool(name: string, args: Record<string, unknown>, timeout: number): Promise<unknown> {
-    const result = await this.#rpc("tools/call", { name, arguments: args }, timeout);
+  async #tool(name: string, args: Record<string, unknown>, timeout: number, reverse = false): Promise<unknown> {
+    const result = await this.#rpc("tools/call", { name, arguments: args }, timeout, reverse);
     if (!record(result) || result.isError === true || !record(result.structuredContent)) throw fail();
+    if (reverse) {
+      if (result.isError !== undefined && result.isError !== false) throw fail();
+      const structured = result.structuredContent;
+      if (!record(structured)) throw fail();
+      const keys = Object.keys(structured);
+      const valid = (value: Record<string, unknown>): boolean => {
+        const valueKeys = Object.keys(value);
+        if ((value.status === "withheld" || value.status === "unknown") && valueKeys.length === 1) return true;
+        return value.status === "received" && valueKeys.length === 2 && typeof value.text === "string" &&
+          !/[\uD800-\uDFFF]/u.test(value.text) && !value.text.includes("\0") && Buffer.byteLength(value.text, "utf8") <= MAX_REVERSE_TEXT;
+      };
+      if (!valid(structured)) throw fail();
+      const content = result.content;
+      if (content !== undefined) {
+        if (!Array.isArray(content) || content.length !== 1 || !record(content[0]) || content[0].type !== "text" || typeof content[0].text !== "string") throw fail();
+        let copy: unknown;
+        try { copy = JSON.parse(content[0].text); } catch { throw fail(); }
+        if (!record(copy) || !valid(copy)) throw fail();
+        const copyKeys = Object.keys(copy);
+        if (copyKeys.length !== keys.length || copyKeys.some((key) => !keys.includes(key)) ||
+          copy.status !== structured.status || copy.text !== structured.text) throw fail();
+      }
+    }
     return result.structuredContent;
   }
 
-  async #rpc(method: string, params: Record<string, unknown>, timeout: number): Promise<unknown> {
+  async #rpc(method: string, params: Record<string, unknown>, timeout: number, reverse = false): Promise<unknown> {
     const id = ++this.#id;
-    const reply = await this.#send({ jsonrpc: "2.0", id, method, params }, timeout);
+    const reply = await this.#send({ jsonrpc: "2.0", id, method, params }, timeout, false, reverse);
     if (
       !record(reply) ||
       reply.jsonrpc !== "2.0" ||
       reply.id !== id ||
+      (reverse && (Object.keys(reply).length !== 3 || !("result" in reply))) ||
       reply.error !== undefined ||
       !("result" in reply)
     ) {
@@ -260,10 +344,10 @@ export class SsjackTextClient {
     return reply.result;
   }
 
-  #send(message: Record<string, unknown>, timeout: number, notification = false): Promise<unknown> {
+  #send(message: Record<string, unknown>, timeout: number, notification = false, reverse = false): Promise<unknown> {
     if (this.#closed || this.#agent === undefined || timeout < 1) return Promise.reject(fail());
     const body = Buffer.from(JSON.stringify(message));
-    if (body.length > MAX_REQUEST) return Promise.reject(fail());
+    if (body.length > (reverse ? MAX_REVERSE_REQUEST : MAX_REQUEST)) return Promise.reject(fail());
     return new Promise((resolve, reject) => {
       let settled = false;
       let size = 0;
@@ -282,18 +366,28 @@ export class SsjackTextClient {
         },
         (response) => {
           const chunks: Buffer[] = [];
-          response.on("data", (chunk: Buffer) => {
-            size += chunk.length;
-            if (size > 65536) {
-              finish(fail());
-              req.destroy();
-            } else {
+          const limit = reverse ? MAX_REVERSE_RESPONSE : 65536;
+          response.on("readable", () => {
+            while (!settled) {
+              const chunk = response.read(Math.min(16384, limit + 1 - size)) as Buffer | null;
+              if (chunk === null) break;
+              size += chunk.length;
+              if (size > limit) {
+                finish(fail());
+                response.destroy();
+                req.destroy();
+                break;
+              }
               chunks.push(chunk);
             }
           });
           response.once("aborted", () => finish(fail()));
           response.once("error", () => finish(fail()));
           response.once("end", () => {
+            if (!response.complete) {
+              finish(fail());
+              return;
+            }
             if (notification && response.statusCode === 202 && size === 0) {
               finish(undefined, undefined);
               return;

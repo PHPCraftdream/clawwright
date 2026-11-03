@@ -94,6 +94,7 @@ over automatically, without the flag.
 | `apply` | `[--set <artifact>] [--expect <checksum>] [--dry-run] [--break-lock] [--break-foreign-lock <hostId>] [--json]` | Apply the plan, then confirm the instance (destructive for some actions) |
 | `rollback` | `[--operation <id>] [--no-restart] [--previous-set] [--break-lock] [--break-foreign-lock <hostId>] [--json] [--dry-run]` | Restore the configuration an operation replaced (destructive for some actions) |
 | `apply-config` | `[--dry-run] [--dump] [--force] [--break-lock] [--break-foreign-lock <hostId>] [--json]` | Apply the deployment's desired-state.json (destructive for some actions) |
+| `backup-text` | `--file <PATH> --output <PATH> --profile <NAME>` | Back up selected text through the keeper |
 | `deploy-text` | `--file <PATH> --template <PATH> --profile <NAME>` | Deploy a reference-only text template through SSJack |
 | `memory` | `<action> [--mode <mode>] [--backend <backend>] [--provider <id>] [--model <model>] [--env <var>] [--model-path <path>] [--model-checksum <sha256>] [--model-source <source>] [--model-version <version>] [--json] [--plugin-version <version>] [--model-max-bytes <bytes>] [--agent <id>] [--all-agents] [--allow-install] [--allow-download] [--deep] [--allow-spend]` | Declare, set up, inspect, index, verify memory (destructive for some actions) |
 | `configure-provider` | `[--provider <id>] [--env <var>] [--force] [--break-lock] [--break-foreign-lock <hostId>] [--json]` | Configure model providers from target env vars |

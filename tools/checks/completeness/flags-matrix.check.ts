@@ -72,6 +72,7 @@ const TABLE: Record<string, FlagPosition> = {
   "provision-agent": position({ json: true, dryRun: false, dryRunReason: "not asked for by U9; every step is idempotent (re-runnable, rewrites declared state)" }),
   deploy: position({ json: true, dryRun: true }),
   "deploy-text": position({ json: false, jsonReason: "returns a compact status for a one-file transfer; it is not a structured deployment report", dryRun: false, dryRunReason: "the destination is an explicit grant and the operation transfers the requested text or refuses" }),
+  "backup-text": position({ json: false, jsonReason: "returns a compact status for a one-file transfer; it is not a structured backup report", dryRun: false, dryRunReason: "the received status is authoritative and publication is exclusive to the local destination; there is no alternate plan to preview" }),
   "mcp-serve": position({ json: false, jsonReason: CONSOLE_REASON, dryRun: false, dryRunReason: CONSOLE_REASON }),
   "mcp-setup": position({ json: true, dryRun: false, dryRunReason: "not asked for by U9; an idempotent merge into local client config files" }),
   expose: position({ json: true, dryRun: false, dryRunReason: "ssh/tailscale already print the exact command instead of running it; --apply is the only mutating path and already needs confirm" }),
