@@ -14,7 +14,7 @@ import { execFileSync } from "node:child_process";
 
 /**
  * The worktree-name grammar. Kept local rather than imported from
- * tools/framework/core/values/names.ts: that module's branded kinds are deployment-domain
+ * packages/clawwright/core/values/names.ts: that module's branded kinds are deployment-domain
  * concepts, but the pattern itself is the repo's portable name rule and must stay identical.
  */
 const NAME_PATTERN = /^[a-z][a-z0-9-]*$/;

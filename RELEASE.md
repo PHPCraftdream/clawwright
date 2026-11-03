@@ -1,6 +1,6 @@
 # Release checklist
 
-This repository publishes `@phpcraftdream/clawwright` from `tools/framework/`.
+This repository publishes `@phpcraftdream/clawwright` from `packages/clawwright/`.
 
 ## Publishing a release (Trusted Publisher, OIDC)
 
@@ -9,7 +9,7 @@ anywhere. npm trusts `PHPCraftdream/clawwright`, workflow `publish.yml`, environ
 (deployments from `v*` tags only), with direct publishing allowed; the repository variable
 `CLAWWRIGHT_ENABLE_TRUSTED_PUBLISHER` is `true`.
 
-1. Bump `tools/framework/package.json`'s version and fold `## Unreleased` in CHANGELOG.md into
+1. Bump `packages/clawwright/package.json`'s version and fold `## Unreleased` in CHANGELOG.md into
    that version's section, through a pull request.
 2. Tag the merged commit and push the tag: `git tag -a v<version> -m "clawwright <version>"`,
    `git push origin v<version>`.

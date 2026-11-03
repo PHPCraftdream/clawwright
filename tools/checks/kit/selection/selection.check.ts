@@ -18,8 +18,8 @@ checkTrue("glob.star.does.not.cross.slash", !matchGlob("docs/*.md", "docs/sub/re
 check("glob.double.star.crosses.segments", matchGlob("docs/**/*.md", "docs/a/b/readme.md"), true);
 check("glob.double.star.crosses.segments", matchGlob("docs/**/*.md", "docs/a/b/readme.md"), true);
 check("glob.double.star.also.matches.zero.directories", matchGlob("docs/**/*.md", "docs/readme.md"), true);
-checkTrue("glob.dir.double.star.matches.deep", matchGlob("tools/framework/**", "tools/framework/core/env.ts"));
-checkTrue("glob.dir.double.star.matches.file.at.root.of.dir", matchGlob("tools/framework/**", "tools/framework/index.ts"));
+checkTrue("glob.dir.double.star.matches.deep", matchGlob("packages/clawwright/**", "packages/clawwright/core/env.ts"));
+checkTrue("glob.dir.double.star.matches.file.at.root.of.dir", matchGlob("packages/clawwright/**", "packages/clawwright/index.ts"));
 check("glob.question.mark.single.char", matchGlob("check-?.ts", "check-1.ts"), true);
 checkTrue("glob.question.mark.rejects.two.chars", !matchGlob("check-?.ts", "check-12.ts"));
 checkTrue("glob.question.mark.does.not.cross.slash", !matchGlob("a/?", "a/b/c"));

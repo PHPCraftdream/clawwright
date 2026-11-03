@@ -38,18 +38,26 @@ const UNNAMED = spaced("(unnamed", "step)");
 const FULL_GUARD = spaced("env.FULL_TIER", "==", "'true'");
 const FAST_GUARD = spaced("env.FULL_TIER", "!=", "'true'");
 const GROUP_EXPRESSION = spaced("ci-${{", "github.workflow", "}}-${{", "github.event_name", "}}-${{", "github.ref", "}}");
-const MERGE_BASE_COMMAND = spaced("check", "--related", "--base", '"$(git', "merge-base", "origin/main", 'HEAD)"');
+const BASH_BASE = 'base="$CHECK_BASE"';
+const BASH_RELATED = spaced("check", "--related", "--base", '"$base"');
+const BASH_FALLBACK = spaced('"$(git', "merge-base", "origin/main", 'HEAD)"');
 // Windows jobs keep a PowerShell step: under bash the MSYS mkdir leads PATH and breaks the instance lock.
 const WINDOWS_JOBS = new Set(["windows-checks", "windows-wsl"]);
+const WINDOWS_BASE = spaced("$base", "=", "$env:CHECK_BASE");
 const WINDOWS_MERGE_BASE = spaced("$base", "=", "git", "merge-base", "origin/main", "HEAD");
 const WINDOWS_RELATED = spaced("check", "--related", "--base", "$base");
 const FAST_STEP_NAME = "Fast tier — typecheck, lint, affected checks";
 
 // Steps allowed in BOTH tiers; every other step must carry the full-tier guard.
+const GO_SETUP = "actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5";
+const GO_STEP = spaced("Set", "up", "Go");
 const BOTH_TIER_STEPS = new Set([
   "Check out",
   "Set up Node",
+  GO_STEP,
   "Install development dependencies",
+  "Fail-closed production license audit",
+  "Run relocation parity checks explicitly",
   "Check timing summary",
   FAST_STEP_NAME,
 ]);
@@ -125,10 +133,9 @@ checkTrue(
   "workflow_dispatch declares a boolean `full` input defaulting to false",
   fullInput.type === "boolean" && fullInput.default === false,
 );
-checkTrue(
-  "schedule trigger present with a cron entry",
-  Array.isArray(on.schedule) && on.schedule.some((entry) => isRecord(entry) && asText(entry.cron) !== ""),
-);
+checkTrue("full verification has no automatic schedule", on.schedule === undefined);
+const baseInput = asRecord(asRecord(dispatch.inputs).base_ref);
+checkTrue("manual related base is optional text", baseInput.type === "string" && baseInput.default === "");
 
 // --- FULL_TIER expression, evaluated rather than string-compared ------------------------------
 
@@ -147,9 +154,12 @@ check(
 );
 const fullTierExpression = unwrapExpression(asText(env.FULL_TIER));
 checkTrue("FULL_TIER line carries an ${{ ... }} expression", fullTierExpression !== "");
-for (const part of ["pull_request", "schedule", "workflow_dispatch"]) {
-  checkTrue(`FULL_TIER expression mentions ${part}`, containsText(fullTierExpression, part));
-}
+checkTrue("FULL_TIER retains explicit manual dispatch", containsText(fullTierExpression, "workflow_dispatch"));
+check(
+  "related base prefers PR base, then previous push, then manual override",
+  unwrapExpression(asText(env.CHECK_BASE)),
+  spaced("github.event.pull_request.base.sha", "||", "github.event.before", "||", "inputs.base_ref"),
+);
 
 // Tokenizer for the tiny expression language below: operands, string literals and operators.
 // Anything else throws, so an unparseable workflow fails the check instead of passing silently.
@@ -177,7 +187,7 @@ function tokenize(expression: string): Token[] {
       i += name[0].length;
       continue;
     }
-    const op = rest.match(/^(\|\||&&|==|!=|\(|\))/);
+    const op = rest.match(/^(\|\||&&|==|!=|\(|\)|,)/);
     if (op !== null) {
       tokens.push({ kind: "op", op: op[1] });
       i += op[1].length;
@@ -190,9 +200,8 @@ function tokenize(expression: string): Token[] {
 
 const KNOWN_OPERANDS = new Set(["github.event_name", "github.ref", "inputs.full"]);
 
-/** Evaluates the FULL_TIER expression against a case. Only (), ||, &&, ==/!= between the three
- *  known operands and single-quoted literals are supported; anything else throws. */
-function evaluateFullTier(expression: string, event: { eventName: string; ref: string; full: boolean }): boolean {
+/** Evaluates the closed tier expression, including GitHub's case-insensitive contains(). */
+function evaluateFullTier(expression: string, event: { eventName: string; ref: string; full: boolean; message?: string }): boolean {
   const tokens = tokenize(expression);
   let pos = 0;
   const peekOp = () => (tokens[pos]?.kind === "op" ? (tokens[pos] as { kind: "op"; op: string }).op : undefined);
@@ -209,6 +218,18 @@ function evaluateFullTier(expression: string, event: { eventName: string; ref: s
       const value = parseOr();
       takeOp(")");
       return value;
+    }
+    if (token.kind === "operand" && token.name === "contains") {
+      takeOp("(");
+      const source = tokens[pos++];
+      if (source === undefined || source.kind !== "operand" || source.name !== "github.event.head_commit.message") {
+        throw new Error("unsupported contains source");
+      }
+      takeOp(",");
+      const needle = tokens[pos++];
+      if (needle === undefined || needle.kind !== "string") throw new Error("contains requires a literal token");
+      takeOp(")");
+      return (event.message ?? "").toLowerCase().includes(needle.value.toLowerCase());
     }
     if (token.kind !== "operand" || !KNOWN_OPERANDS.has(token.name)) {
       throw new Error(`unsupported operand ${JSON.stringify(token)}`);
@@ -255,14 +276,14 @@ function evaluateFullTier(expression: string, event: { eventName: string; ref: s
   return result;
 }
 
-// Cases: [event_name, ref, inputs.full, expected]. Fast tier on pushes (main included: its PR
-// already ran the full tier) and on workflow_dispatch without `full`; full tier for
-// pull_request, schedule and dispatch with full=true.
+// Unmarked events stay scoped; explicit full commits are checked separately below.
 const FULL_TIER_CASES: readonly (readonly [string, string, boolean, boolean])[] = [
   ["push", "refs/heads/topic", false, false],
   ["push", "refs/heads/main", false, false],
-  ["pull_request", "refs/pull/1/merge", false, true],
-  ["schedule", "refs/heads/main", false, true],
+  ["pull_request", "refs/pull/1/merge", false, false],
+  ["pull_request", "refs/pull/1/merge", true, false],
+  ["push", "refs/heads/topic", true, false],
+  ["schedule", "refs/heads/main", false, false],
   ["workflow_dispatch", "refs/heads/main", false, false],
   ["workflow_dispatch", "refs/heads/topic", false, false],
   ["workflow_dispatch", "refs/heads/topic", true, true],
@@ -279,13 +300,28 @@ check(
   FULL_TIER_CASES,
 );
 
+for (const [eventName, message, expected] of [
+  ["push", "[ci:full]", true],
+  ["push", "[ci:FULL]", true],
+  ["push", spaced("finish", "[ci:full]"), true],
+  ["push", "[ci:fuller]", false],
+  ["push", "feature", false],
+  ["pull_request", "[ci:full]", false],
+  ["workflow_dispatch", "[ci:full]", false],
+] as const) {
+  check(`full marker: ${eventName}/${message}`, evaluateFullTier(fullTierExpression, {
+    eventName, message, ref: "refs/heads/topic", full: false,
+  }), expected);
+}
+
 // --- Concurrency ------------------------------------------------------------------------------
 
 const concurrency = asRecord(record.concurrency);
-checkTrue("concurrency group pins workflow + ref", asText(concurrency.group) === GROUP_EXPRESSION);
+checkTrue("concurrency group pins workflow, event, ref and tier", asText(concurrency.group) ===
+  spaced(GROUP_EXPRESSION + "-${{", fullTierExpression, "&&", "'full'", "||", "'scoped'", "}}"));
 check("a newer run of the same event and ref cancels the older one", concurrency["cancel-in-progress"], true);
 const push = asRecord(on.push);
-check("push runs only for main (branches are checked through their pull request)", push.branches, ["main"]);
+check("push checks every feature branch", push.branches, ["**"]);
 
 // --- Per-job step classification ---------------------------------------------------------------
 
@@ -345,7 +381,21 @@ for (const job of EXPECTED_JOBS) {
   const checkout = findStep(steps, "Check out");
   checkTrue(`${job}: checkout is full-depth (fetch-depth: 0)`, asRecord(checkout?.with)["fetch-depth"] === 0);
 
-  // The fast step: explicit merge-base --base, all three commands, and bash on every host.
+  // The fast step validates an explicit base and uses the host's own shell.
+  const licenseAudit = findStep(steps, "Fail-closed production license audit");
+  const go = findStep(steps, GO_STEP);
+  checkTrue(`${job}: mandatory production license audit runs npm run license:audit`, containsText(asText(licenseAudit?.run), "npm run license:audit"));
+  checkTrue(`${job}: mandatory production license audit is unguarded in both tiers`, licenseAudit !== undefined && licenseAudit.if === undefined);
+  checkTrue(`${job}: pinned Go setup precedes audit`, go !== undefined && steps.indexOf(go) < steps.indexOf(licenseAudit!));
+  check(`${job}: Go setup action pin`, go?.uses, GO_SETUP);
+  const goWith = asRecord(go?.with);
+  check(`${job}: Go version`, goWith["go-version"], "1.26.0");
+  check(`${job}: Go setup disables cache`, goWith.cache, false);
+  check(`${job}: Go setup disables latest lookup`, goWith["check-latest"], false);
+  const auditEnv = asRecord(licenseAudit?.env);
+  check(`${job}: audit uses local Go toolchain`, auditEnv.GOTOOLCHAIN, "local");
+  check(`${job}: audit disables cgo`, auditEnv.CGO_ENABLED, "0");
+
   const fast = findStep(steps, FAST_STEP_NAME);
   const fastRun = asText(fast?.run);
   checkTrue(`${job}: has a fast-tier step`, fast !== undefined);
@@ -355,11 +405,13 @@ for (const job of EXPECTED_JOBS) {
   checkTrue(`${job}: fast-tier step runs npm run typecheck`, containsText(fastRun, "npm run typecheck"));
   checkTrue(`${job}: fast-tier step runs npm run lint`, containsText(fastRun, "npm run lint"));
   checkTrue(
-    `${job}: fast-tier step passes an explicit merge-base as --base`,
+    `${job}: fast-tier step passes the event base with a merge-base fallback`,
     windows
-      ? containsText(fastRun, WINDOWS_MERGE_BASE) && containsText(fastRun, WINDOWS_RELATED)
-      : containsText(fastRun, MERGE_BASE_COMMAND),
+      ? containsText(fastRun, WINDOWS_BASE) && containsText(fastRun, WINDOWS_MERGE_BASE) && containsText(fastRun, WINDOWS_RELATED)
+      : containsText(fastRun, BASH_BASE) && containsText(fastRun, BASH_FALLBACK) && containsText(fastRun, BASH_RELATED),
   );
+
+  checkTrue(`${job}: related base must resolve to a commit`, containsText(fastRun, spaced("git", "rev-parse", "--verify")));
 
   const fullGuarded = steps.some((step) =>
     asText(step.if) === FULL_GUARD &&
@@ -373,7 +425,7 @@ for (const job of EXPECTED_JOBS) {
   );
 
   const uses = steps.map((step) => asText(step.uses)).filter((value) => value !== "");
-  check(`${job}: exactly two uses: pins`, uses.length, 2);
+  check(`${job}: action pin count`, uses.length, job === "checks" ? 4 : 3);
   allUses.push(...uses);
 }
 
@@ -384,12 +436,29 @@ const EXPECTED_PINS: readonly string[] = [
   "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
   "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
   "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+  "actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5",
+  "actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5",
+  "actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5",
+  "actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5",
   "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
   "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
   "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
   "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+  "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
 ];
 check("sorted list of action pins across ci.yml", [...allUses].sort(), EXPECTED_PINS);
+
+const linuxSteps = stepsOf(jobs["checks"]);
+const packCandidate = findStep(linuxSteps, spaced("Pack", "the", "verified", "development", "candidate"));
+const retainCandidate = findStep(linuxSteps, spaced("Retain", "the", "development", "candidate"));
+checkTrue("candidate packing requires full tier", asText(packCandidate?.if) === FULL_GUARD);
+checkTrue("candidate packing disables lifecycle scripts", containsText(asText(packCandidate?.run), spaced("npm", "pack", "--ignore-scripts")));
+checkTrue("candidate records checksums and commit", containsText(asText(packCandidate?.run), "sha256sum") && containsText(asText(packCandidate?.run), "BUILD_COMMIT"));
+checkTrue("candidate upload requires full tier", asText(retainCandidate?.if) === FULL_GUARD);
+check("candidate artifact name", asRecord(retainCandidate?.with).name, "clawwright-candidate");
+check("candidate artifact path", asRecord(retainCandidate?.with).path, "artifacts/");
+check("candidate artifact retention", asRecord(retainCandidate?.with)["retention-days"], 7);
+check("candidate artifact absence fails", asRecord(retainCandidate?.with)["if-no-files-found"], "error");
 
 // --- windows-controls: the controls run in parallel shards, full tier only -------------------
 

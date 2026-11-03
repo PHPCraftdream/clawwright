@@ -75,17 +75,20 @@ assert.deepEqual(buildRemoveArgv("c1"), ["rm", "-f", "c1"]);
 
 assert.equal(isHostArtifactPath("node_modules/foo/index.js"), true);
 assert.equal(isHostArtifactPath("a/node_modules/b/c.js"), true);
+assert.equal(isHostArtifactPath("packages/clawwright/dist"), true);
+assert.equal(isHostArtifactPath("packages/clawwright/dist/entry/bin.js"), true);
 assert.equal(isHostArtifactPath("tools/framework/dist"), true);
 assert.equal(isHostArtifactPath("tools/framework/dist/entry/bin.js"), true);
+assert.equal(isHostArtifactPath("tools/framework/distinct-file.ts"), false);
 assert.equal(isHostArtifactPath("tools/clawwright.ts"), false);
 assert.equal(isHostArtifactPath("package.json"), false);
 // Same directory, unrelated name: a prefix match on "dist" alone would wrongly drop this.
-assert.equal(isHostArtifactPath("tools/framework/distinct-file.ts"), false);
+assert.equal(isHostArtifactPath("packages/clawwright/distinct-file.ts"), false);
 
 // --- file-list building: git ls-files' raw stdout, trimmed, blank lines and artifacts out -
 
 assert.deepEqual(
-  filterCleanFileList(["package.json", "", "node_modules/foo/index.js", "tools/framework/dist/entry/bin.js", "tools/dev/check-linux.ts", ""]),
+  filterCleanFileList(["package.json", "", "node_modules/foo/index.js", "packages/clawwright/dist/entry/bin.js", "tools/dev/check-linux.ts", ""]),
   ["package.json", "tools/dev/check-linux.ts"],
 );
 assert.deepEqual(filterCleanFileList([]), []);

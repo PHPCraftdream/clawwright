@@ -70,14 +70,14 @@ await checkThrows("from container: container-only path rejects", () => fromConta
 
 const wsl = new WslPathBridge({ mounts: MOUNTS, distro: "Ubuntu-24.04", automountRoot: "/mnt", onWindows: true });
 
-check("wsl: windows path", await wsl.toTarget("D:\\dev\\Bell\\clawwright"), "/mnt/d/dev/Bell/clawwright");
-check("wsl: windows path, forward slashes", await wsl.toTarget("D:/dev/Bell/clawwright"), "/mnt/d/dev/Bell/clawwright");
+check("wsl: windows path", await wsl.toTarget("D:\\work\\fixture\\clawwright"), "/mnt/d/work/fixture/clawwright");
+check("wsl: windows path, forward slashes", await wsl.toTarget("D:/work/fixture/clawwright"), "/mnt/d/work/fixture/clawwright");
 check("wsl: lowercase drive", await wsl.toTarget("d:\\dev\\x"), "/mnt/d/dev/x");
 check("wsl: spaces survive", await wsl.toTarget("C:\\Program Files\\nodejs"), "/mnt/c/Program Files/nodejs");
 // Git Bash reports this shape; on Windows it is a drive path, not a POSIX one.
-check("wsl: msys form", await wsl.toTarget("/d/dev/Bell/clawwright"), "/mnt/d/dev/Bell/clawwright");
+check("wsl: msys form", await wsl.toTarget("/d/work/fixture/clawwright"), "/mnt/d/work/fixture/clawwright");
 check("wsl: already POSIX passes through", await wsl.toTarget("/srv/openclaw/data"), "/srv/openclaw/data");
-check("wsl: back to windows path", await wsl.toTool("/mnt/d/dev/Bell/x"), "D:\\dev\\Bell\\x");
+check("wsl: back to windows path", await wsl.toTool("/mnt/d/work/fixture/x"), "D:\\work\\fixture\\x");
 check("wsl: distro-only path becomes UNC", await wsl.toTool("/srv/openclaw/data"), "\\\\wsl.localhost\\Ubuntu-24.04\\srv\\openclaw\\data");
 await checkThrows("wsl: relative path rejects", () => wsl.toTarget("tools/clawwright.ts"));
 
@@ -94,16 +94,16 @@ check("wsl (native): posix path untouched", await wslNative.toTarget("/d/dev/x")
 
 const ssh = new SshPathBridge({
   mounts: MOUNTS,
-  localRepo: "D:\\dev\\Bell\\clawwright",
+  localRepo: "D:\\work\\fixture\\clawwright",
   remoteRepo: "/opt/openclaw",
 });
 
-check("ssh: checkout root", await ssh.toTarget("D:\\dev\\Bell\\clawwright"), "/opt/openclaw");
-check("ssh: file in the checkout", await ssh.toTarget("D:\\dev\\Bell\\clawwright\\docker-compose.yml"), "/opt/openclaw/docker-compose.yml");
-check("ssh: forward slashes", await ssh.toTarget("D:/dev/Bell/clawwright/config/x.json"), "/opt/openclaw/config/x.json");
+check("ssh: checkout root", await ssh.toTarget("D:\\work\\fixture\\clawwright"), "/opt/openclaw");
+check("ssh: file in the checkout", await ssh.toTarget("D:\\work\\fixture\\clawwright\\docker-compose.yml"), "/opt/openclaw/docker-compose.yml");
+check("ssh: forward slashes", await ssh.toTarget("D:/work/fixture/clawwright/config/x.json"), "/opt/openclaw/config/x.json");
 // Absolute paths outside the checkout already refer to the server.
 check("ssh: server path passes through", await ssh.toTarget("/srv/openclaw/data"), "/srv/openclaw/data");
-check("ssh: back to the local checkout", await ssh.toTool("/opt/openclaw/clawwright"), "D:\\dev\\Bell\\clawwright\\clawwright");
+check("ssh: back to the local checkout", await ssh.toTool("/opt/openclaw/clawwright"), "D:\\work\\fixture\\clawwright\\clawwright");
 check("ssh: reverse keeps posix form when the checkout is posix", await new SshPathBridge({ mounts: MOUNTS, localRepo: "/mnt/d/dev/x", remoteRepo: "/opt/openclaw" }).toTool("/opt/openclaw/clawwright"), "/mnt/d/dev/x/clawwright");
 await checkThrows("ssh: relative path rejects", () => ssh.toTarget("tools/clawwright.ts"));
 // A server-only path has no local equivalent — better an error than a plausible-looking lie.

@@ -50,6 +50,8 @@ export interface ControlResult {
   readonly matchedFailLine?: string;
   /** The edited run's FAIL lines (capped) — the evidence a fragment verdict is judged on. */
   readonly failLines?: readonly string[];
+  /** Diagnostics captured from an invalid baseline, separate from assertion evidence. */
+  readonly diagnostics?: readonly string[];
   /** SHA-256 of the product file inside the copy, before the edit and after the restore. */
   readonly productHashBefore?: string;
   readonly productHashAfter?: string;
@@ -189,6 +191,12 @@ function failLines(output: string): readonly string[] {
   return output.split("\n").filter((line) => line.startsWith(FAIL_MARKER));
 }
 
+/** Non-verdict diagnostics emitted by the write-isolation baseline ratchet. */
+function baselineDiagnostics(output: string): readonly string[] {
+  const prefix = "write-isolation: ";
+  return output.split("\n").filter((line) => line.startsWith(prefix) && line.includes("unresolved approximation targets:"));
+}
+
 /** Applies, tests and reverts one control against the shared copy. The check file's
  *  repo-relative path selects the baseline outcome recorded by the caller. */
 async function runOne(
@@ -220,7 +228,7 @@ async function runOne(
   if (baseline.code !== 0 || baseline.timedOut || baseline.spawnError !== undefined || failLines(baseline.output).length > 0) {
     // Say why: a load-induced timeout and a real failure need different fixes.
     const why = baseline.timedOut ? "timed out" : baseline.spawnError ?? `exit ${baseline.code}`;
-    return done("invalid-baseline", false, { reason: `invalid control: the check does not pass cleanly on the unedited copy (${why})`, failLines: failLines(baseline.output).slice(0, 5), productHashBefore: beforeHash, productHashAfter: beforeHash });
+    return done("invalid-baseline", false, { reason: `invalid control: the check does not pass cleanly on the unedited copy (${why})`, failLines: failLines(baseline.output).slice(0, 5), diagnostics: baselineDiagnostics(baseline.output), productHashBefore: beforeHash, productHashAfter: beforeHash });
   }
   await writeFile(productPath, text.replaceAll(control.search, control.replace));
   const run = await runCheckFile(tempRoot, control.check, options.timeoutMs);
@@ -348,6 +356,7 @@ async function main(): Promise<number> {
     const declaration = controls.find((control) => control.id === result.id)!;
     process.stdout.write(`${result.id} ${declaration.finding} ${controlVerdict(result)}\n`);
     for (const line of failLinesOf(result)) process.stdout.write(`    ${line}\n`);
+    for (const line of result.diagnostics ?? []) process.stdout.write(`    diagnostic: ${line}\n`);
   }
   if (run.aborted !== undefined) process.stdout.write(`aborted: ${run.aborted}\n`);
   const held = run.results.filter((result) => result.ok).length;

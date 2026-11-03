@@ -40,7 +40,7 @@ async function fileList(root: string, target: string, excludes: readonly string[
 
 const frameworkKept = [
   "clawwright",
-  "tools/framework/service/recipe.ts",
+  "packages/clawwright/service/recipe.ts",
   "tools/checks/integration/apps/app-hooks.check.ts",
   "tools/checks/integration/build/source.ts",
 ];
@@ -53,8 +53,8 @@ const frameworkOmitted = [
   "tools/node_modules/pkg/index.txt",
   "worktrees/agent/private.txt",
   "tools/worktrees/agent/private.txt",
-  "tools/framework/dist/index.txt",
-  "tools/framework/build/index.txt",
+  "packages/clawwright/dist/index.txt",
+  "packages/clawwright/build/index.txt",
   "build/index.txt",
   "dist/index.txt",
   "coverage/report.txt",
@@ -65,8 +65,8 @@ const frameworkOmitted = [
   ".idea/state.txt",
   ".vscode/state.txt",
   "secrets/local.txt",
-  "tools/framework/framework.tgz",
-  "tools/framework/cache.tsbuildinfo",
+  "packages/clawwright/framework.tgz",
+  "packages/clawwright/cache.tsbuildinfo",
 ];
 const recipeKept = [
   "build/recipe.json",
@@ -85,7 +85,7 @@ const recipeOmitted = [
   "example/secrets/local.txt",
 ];
 
-check("framework hides generated checkout roots", ["/build/", "/dist/", "/scratch/", "/tools/framework/dist/"].every((name) => FRAMEWORK_EXCLUDES.includes(name)), true);
+check("framework hides generated checkout roots", ["/build/", "/dist/", "/scratch/", "/packages/clawwright/dist/"].every((name) => FRAMEWORK_EXCLUDES.includes(name)), true);
 check("recipes retain authored build and dist paths", ["/build/", "/dist/", "build/", "dist/", "scratch/"].some((name) => EXCLUDES.includes(name)), false);
 check("both mirrors hide dependencies and worktrees", ["node_modules/", "worktrees/", ".git"].every((name) => EXCLUDES.includes(name)), true);
 check("only the framework hides root apps", FRAMEWORK_EXCLUDES.includes("/apps/") && !EXCLUDES.includes("/apps/"), true);

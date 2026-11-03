@@ -3,7 +3,7 @@
 // holds identically across all three — a divergence between transports is a real bug, not a
 // check that forgot to cover one of them.
 //
-// Every assertion below tests exactly what tools/framework/runtime/transport/exec.ts's
+// Every assertion below tests exactly what packages/clawwright/runtime/transport/exec.ts's
 // Transport interface promises, nothing more: read that file before adding one. Where the
 // interface is silent (e.g. the exact wording of a "file not found" error), this suite checks
 // the shape (it rejects) and not the wording, because the three implementations word it

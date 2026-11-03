@@ -8,7 +8,7 @@ import { warnIfDistStale, warnForEntry } from "#framework/entry/root.ts";
 import { check, finish } from "#checks/kit/harness.ts";
 
 const root = realpathSync.native(mkdtempSync(resolve(realpathSync.native(tmpdir()), "clawwright-stale-dist-")));
-const moduleUrl = new URL("../../../framework/entry/root.ts", import.meta.url).href;
+const moduleUrl = new URL("../../../../packages/clawwright/entry/root.ts", import.meta.url).href;
 const old = new Date("2020-01-01T00:00:00Z");
 const newer = new Date("2020-01-02T00:00:00Z");
 function file(rel: string, date: Date): void {

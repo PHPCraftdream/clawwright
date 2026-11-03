@@ -1,12 +1,10 @@
 name: CI
 
 on:
-  # Branches are checked through their pull request (full tier); a push run on a branch
-  # with an open PR would only duplicate it. main gets the fast tier on push and the
-  # full tier nightly.
+  # Feature and integration revisions use related checks; full verification is explicit.
   push:
     branches:
-      - main
+      - "**"
   pull_request:
   workflow_dispatch:
     inputs:
@@ -14,20 +12,19 @@ on:
         description: "Run the full check suite instead of the fast tier"
         type: boolean
         default: false
-  schedule:
-    # Nightly full-suite gate; time chosen off the hour to dodge scheduler load.
-    - cron: "17 3 * * *"
+      base_ref:
+        description: "Optional related-check base for a manual feature run"
+        type: string
+        default: ''
 
-# The tier is expressed once here: every job's steps key off FULL_TIER.
+# Full verification requires an explicit sprint commit marker or manual dispatch.
 env:
-  # A merge to main already passed the full tier in its pull request: main pushes run the
-  # fast tier, the nightly schedule runs the full tier on main.
-  FULL_TIER: ${{ github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full) }}
+  FULL_TIER: ${{ ((github.event_name == 'workflow_dispatch' && inputs.full) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ci:full]'))) }}
+  CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before || inputs.base_ref }}
 
 concurrency:
-  # One group per event and ref: a newer run supersedes an older one of the same kind, and a
-  # push never cancels the nightly run.
-  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  # Separate event/tier groups prevent scoped pushes from cancelling full verification.
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}-${{ ((github.event_name == 'workflow_dispatch' && inputs.full) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ci:full]'))) && 'full' || 'scoped' }}
   cancel-in-progress: true
 
 permissions:
@@ -44,7 +41,7 @@ jobs:
         node: [24]
     steps:
       - name: Check out
-        # Full depth: the fast tier's --related needs the merge-base with origin/main.
+        # Full depth supports the event base and first-push/manual fallback.
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
@@ -55,19 +52,36 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.0'
+          cache: false
+          check-latest: false
+
       - name: Install development dependencies
         run: npm ci --include=dev
+
+      - name: Fail-closed production license audit
+        env:
+          GOTOOLCHAIN: local
+          CGO_ENABLED: '0'
+        run: npm run license:audit
 
       - name: Fast tier — typecheck, lint, affected checks
         if: env.FULL_TIER != 'true'
         shell: bash
-        # --base takes a revision, not a branch policy: the merge-base with origin/main is
-        # computed here (checkout is fetch-depth: 0, so origin/main is present) and passed
-        # explicitly. check --related never computes a merge-base itself when --base is given.
+        # Use the event's exact base; only first-push/manual runs need merge-base fallback.
         run: |
           npm run typecheck
           npm run lint
-          node --experimental-strip-types tools/clawwright.ts check --related --base "$(git merge-base origin/main HEAD)"
+          base="$CHECK_BASE"
+          if [ -z "$base" ] || [[ "$base" =~ ^0+$ ]]; then base="$(git merge-base origin/main HEAD)"; fi
+          git rev-parse --verify "$base^{commit}" >/dev/null
+          node --experimental-strip-types tools/clawwright.ts check --related --base "$base"
+
+      - name: Run relocation parity checks explicitly
+        run: node --experimental-strip-types tools/clawwright.ts check foundation/packaging/build-output.check.ts release/release/installed-consumer.check.ts release/release/system-command-units.check.ts release/release/system-install.check.ts
 
       # ubuntu-latest ships openssh-client but not always a running sshd: install it if
       # missing, start it, and authorize a passphrase-less key for the `ssh-loopback`
@@ -89,6 +103,10 @@ jobs:
           ssh-keyscan -H localhost >> ~/.ssh/known_hosts 2>/dev/null
           chmod 600 ~/.ssh/known_hosts
           ssh -o BatchMode=yes -o ConnectTimeout=5 localhost true
+
+      - name: Cache the disposable PID namespace fixture
+        if: env.FULL_TIER == 'true'
+        run: docker pull --quiet alpine:3.20
 
       - name: Run checks
         if: env.FULL_TIER == 'true'
@@ -134,6 +152,32 @@ jobs:
         if: env.FULL_TIER == 'true'
         run: npm run pack:check
 
+      - name: Pack the verified development candidate
+        if: env.FULL_TIER == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          (cd packages/clawwright && npm pack --ignore-scripts --pack-destination "$GITHUB_WORKSPACE/artifacts")
+          archive="$(ls artifacts/*.tgz)"
+          tar -tzf "$archive" > "$RUNNER_TEMP/packed-files.txt"
+          for file in LICENSE LICENSE-MIT LICENSE-APACHE NOTICE THIRD_PARTY_NOTICES.md; do
+            grep -qx "package/$file" "$RUNNER_TEMP/packed-files.txt"
+            tar -xOf "$archive" "package/$file" | cmp - "packages/clawwright/$file"
+          done
+          tar -xOf "$archive" package/package.json | cmp - packages/clawwright/package.json
+          printf '%s\n' "$GITHUB_SHA" > artifacts/BUILD_COMMIT
+          (cd artifacts && sha256sum *.tgz > SHA256SUMS)
+
+      - name: Retain the development candidate
+        if: env.FULL_TIER == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: clawwright-candidate
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: error
+
       - name: Check timing summary
         if: always()
         # The E3 run-timings feature: prints the stored ranking even when a check step failed.
@@ -152,7 +196,7 @@ jobs:
         node: [24]
     steps:
       - name: Check out
-        # Full depth: the fast tier's --related needs the merge-base with origin/main.
+        # Full depth supports the event base and first-push/manual fallback.
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
@@ -163,19 +207,33 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.0'
+          cache: false
+          check-latest: false
+
       - name: Install development dependencies
         run: npm ci --include=dev
+
+      - name: Fail-closed production license audit
+        env:
+          GOTOOLCHAIN: local
+          CGO_ENABLED: '0'
+        run: npm run license:audit
 
       - name: Fast tier — typecheck, lint, affected checks
         if: env.FULL_TIER != 'true'
         shell: bash
-        # --base takes a revision, not a branch policy: the merge-base with origin/main is
-        # computed here (checkout is fetch-depth: 0, so origin/main is present) and passed
-        # explicitly. check --related never computes a merge-base itself when --base is given.
+        # Use the event's exact base; only first-push/manual runs need merge-base fallback.
         run: |
           npm run typecheck
           npm run lint
-          node --experimental-strip-types tools/clawwright.ts check --related --base "$(git merge-base origin/main HEAD)"
+          base="$CHECK_BASE"
+          if [ -z "$base" ] || [[ "$base" =~ ^0+$ ]]; then base="$(git merge-base origin/main HEAD)"; fi
+          git rev-parse --verify "$base^{commit}" >/dev/null
+          node --experimental-strip-types tools/clawwright.ts check --related --base "$base"
 
       # `setremotelogin` is the documented way to turn on sshd on GitHub's hosted macOS
       # runners without a GUI session; ASSUMPTION (unverified here — no Actions run available):
@@ -251,7 +309,7 @@ jobs:
         node: [24]
     steps:
       - name: Check out
-        # Full depth: the fast tier's --related needs the merge-base with origin/main.
+        # Full depth supports the event base and first-push/manual fallback.
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
@@ -262,22 +320,39 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.0'
+          cache: false
+          check-latest: false
+
       - name: Install development dependencies
         run: npm ci --include=dev
+
+      - name: Fail-closed production license audit
+        env:
+          GOTOOLCHAIN: local
+          CGO_ENABLED: '0'
+        run: npm run license:audit
 
       - name: Fast tier — typecheck, lint, affected checks
         if: env.FULL_TIER != 'true'
         # Windows keeps its default shell: a bash step puts MSYS coreutils first on PATH, and their
         # mkdir cannot apply modes to Windows paths (the instance lock records ownership with it).
-        # --base takes a revision, not a branch policy: the merge-base with origin/main is computed
-        # here (checkout is fetch-depth: 0, so origin/main is present) and passed explicitly.
+        # Use the event's exact base; only first-push/manual runs need merge-base fallback.
         shell: pwsh
         run: |
           npm run typecheck
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run lint
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $base = git merge-base origin/main HEAD
+          $base = $env:CHECK_BASE
+          if ([string]::IsNullOrWhiteSpace($base) -or $base -match '^0+$') {
+            $base = git merge-base origin/main HEAD
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          git rev-parse --verify "$base^{commit}" | Out-Null
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --experimental-strip-types tools/clawwright.ts check --related --base $base
           exit $LASTEXITCODE
@@ -355,7 +430,7 @@ jobs:
     continue-on-error: true
     steps:
       - name: Check out
-        # Full depth: the fast tier's --related needs the merge-base with origin/main.
+        # Full depth supports the event base and first-push/manual fallback.
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
@@ -366,22 +441,39 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.0'
+          cache: false
+          check-latest: false
+
       - name: Install development dependencies
         run: npm ci --include=dev
+
+      - name: Fail-closed production license audit
+        env:
+          GOTOOLCHAIN: local
+          CGO_ENABLED: '0'
+        run: npm run license:audit
 
       - name: Fast tier — typecheck, lint, affected checks
         if: env.FULL_TIER != 'true'
         # Windows keeps its default shell: a bash step puts MSYS coreutils first on PATH, and their
         # mkdir cannot apply modes to Windows paths (the instance lock records ownership with it).
-        # --base takes a revision, not a branch policy: the merge-base with origin/main is computed
-        # here (checkout is fetch-depth: 0, so origin/main is present) and passed explicitly.
+        # Use the event's exact base; only first-push/manual runs need merge-base fallback.
         shell: pwsh
         run: |
           npm run typecheck
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run lint
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $base = git merge-base origin/main HEAD
+          $base = $env:CHECK_BASE
+          if ([string]::IsNullOrWhiteSpace($base) -or $base -match '^0+$') {
+            $base = git merge-base origin/main HEAD
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          git rev-parse --verify "$base^{commit}" | Out-Null
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --experimental-strip-types tools/clawwright.ts check --related --base $base
           exit $LASTEXITCODE
@@ -422,7 +514,7 @@ jobs:
     # three disjoint round-robin shards that run in parallel. Full tier only: the job-level
     # condition repeats FULL_TIER because the env context is not available in jobs.<id>.if.
     name: "Negative controls (${{ matrix.shard }})"
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full) }}
+    if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.full) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ci:full]'))) }}
     runs-on: windows-latest
     strategy:
       fail-fast: false

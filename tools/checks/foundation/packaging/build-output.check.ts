@@ -13,17 +13,269 @@
 // here is that the shebang is plain, and installed-consumer.check.ts proves the recovery
 // works by running the entry point with stripping explicitly disabled.
 
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import assert from "node:assert/strict";
+import { mkdtemp, readFile, readdir, realpath, rm, mkdir, writeFile, symlink } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { stripTypeScriptTypes } from "node:module";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, relative } from "node:path";
+import { pathToFileURL } from "node:url";
 import { build } from "#tools/build-framework-package.ts";
+import { monorepoRoot } from "#framework/core/env.ts";
+
+const base = "fd59e08fa0fbeb9450b5110c6bd0c08a2404d280";
+const relocationCommit = "97eda786f3209b3795c40d5e0e99f024c736a0fa";
+
+async function walkFiles(dir: string, root = dir): Promise<string[]> {
+  const found: string[] = [];
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const path = resolve(dir, entry.name);
+    if (entry.isDirectory()) found.push(...(await walkFiles(path, root)));
+    else found.push(relative(root, path).replaceAll("\\", "/"));
+  }
+  return found.sort();
+}
+
+async function verifyHistoricalRelocation(currentDist: string): Promise<void> {
+  const parityRoot = await realpath(await mkdtemp(join(tmpdir(), "clawwright-historical-relocation-")));
+  const frozenDist = join(parityRoot, "frozen-dist");
+  const paths = ["packages/clawwright", "tools/build-framework-package.ts", "package.json", "tsconfig.json"];
+  const listing = spawnSync("git", ["ls-tree", "-r", "--name-only", relocationCommit, ...paths], { cwd: monorepoRoot, encoding: "utf8" });
+  if (listing.status !== 0) throw new Error(`cannot list historical relocation revision: ${listing.stderr}`);
+  try {
+    for (const path of listing.stdout.trim().split("\n")) {
+      if (!path) continue;
+      const result = spawnSync("git", ["show", `${relocationCommit}:${path}`], { cwd: monorepoRoot, encoding: "buffer" });
+      if (result.status !== 0) throw new Error(`cannot read historical relocation file ${path}: ${result.stderr.toString()}`);
+      const target = resolve(parityRoot, path);
+      await mkdir(resolve(target, ".."), { recursive: true });
+      await writeFile(target, result.stdout);
+    }
+    await symlink(resolve(monorepoRoot, "node_modules"), join(parityRoot, "node_modules"), "junction");
+    const frozenBuilder = join(parityRoot, "tools", "build-framework-package.ts");
+    const frozenModule = await import(pathToFileURL(frozenBuilder).href) as { build: (outDir: string) => Promise<void> };
+    await frozenModule.build(frozenDist);
+    await verifyRelocationParity(frozenDist);
+    const frozenFiles = await walkFiles(frozenDist);
+    const currentFiles = await walkFiles(currentDist);
+    const allowedFeaturePaths = new Set([
+      "runtime/transport/remote/text/canonical",
+      "runtime/transport/remote/text/client",
+      "runtime/transport/remote/text/input",
+      "runtime/transport/remote/text/output",
+      "commands/orchestration/config",
+      "recipe-kit/consumer",
+      "recipe-kit/types",
+      "runtime/transport/remote/ssjack-contract",
+      "runtime/transport/transport",
+      "recipe-kit/index",
+      "commands/interface/groups/openclawCommands.orchestration",
+    ].flatMap((path) => [`${path}.js`, `${path}.d.ts`]));
+    const allFiles = [...new Set([...frozenFiles, ...currentFiles])].sort();
+    for (const path of allFiles) {
+      if (allowedFeaturePaths.has(path)) continue;
+      if (!frozenFiles.includes(path) || !currentFiles.includes(path)) throw new Error(`built output inventory changed outside the explicit feature allowlist: ${path}`);
+      const [frozen, current] = await Promise.all([readFile(resolve(frozenDist, path)), readFile(resolve(currentDist, path))]);
+      if (!frozen.equals(current)) throw new Error(`built output changed outside the explicit feature allowlist: ${path}`);
+    }
+  } finally {
+    await rm(parityRoot, { recursive: true, force: true });
+  }
+}
+
+async function verifyCurrentFeatureOutput(distDir: string): Promise<void> {
+  const featureSources = [
+    "runtime/transport/remote/text/canonical.ts",
+    "runtime/transport/remote/text/client.ts",
+    "runtime/transport/remote/text/input.ts",
+    "runtime/transport/remote/text/output.ts",
+    "commands/orchestration/config.ts",
+    "recipe-kit/consumer.ts",
+    "recipe-kit/types.ts",
+  ];
+  for (const path of featureSources) {
+    const source = await readFile(resolve(monorepoRoot, "packages/clawwright", path), "utf8");
+    const expected = stripTypeScriptTypes(source, { mode: "strip" }).replace(
+      /((?:from|import)\s*\(?\s*["'])(\.[^"']+|#src\/[^"']+)\.ts(["'])/g,
+      (_match, prefix: string, specifier: string, suffix: string) => {
+        if (specifier.startsWith("#src/")) {
+          const target = resolve(monorepoRoot, "packages/clawwright", specifier.slice("#src/".length));
+          const sourceDir = resolve(monorepoRoot, "packages/clawwright", path, "..");
+          const rel = relative(sourceDir, target).replaceAll("\\", "/");
+          return `${prefix}${rel.startsWith(".") ? rel : `./${rel}`}.js${suffix}`;
+        }
+        return `${prefix}${specifier}.js${suffix}`;
+      },
+    );
+    const output = path.replace(/\.ts$/, ".js");
+    const actual = await readFile(resolve(distDir, output), "utf8");
+    if (actual !== expected) throw new Error(`built feature output differs from current source: ${path}`);
+    await readFile(resolve(distDir, path.replace(/\.ts$/, ".d.ts")));
+  }
+  for (const path of ["runtime/transport/remote/ssjack-contract", "runtime/transport/transport", "recipe-kit/index", "commands/interface/groups/openclawCommands.orchestration"]) {
+    const sourcePath = `${path}.ts`;
+    const source = await readFile(resolve(monorepoRoot, "packages/clawwright", sourcePath), "utf8");
+    const expected = stripTypeScriptTypes(source, { mode: "strip" }).replace(
+      /((?:from|import)\s*\(?\s*["'])(\.[^"']+|#src\/[^"']+)\.ts(["'])/g,
+      (_match, prefix: string, specifier: string, suffix: string) => {
+        if (!specifier.startsWith("#src/")) return `${prefix}${specifier}.js${suffix}`;
+        const target = resolve(monorepoRoot, "packages/clawwright", specifier.slice("#src/".length));
+        const sourceDir = resolve(monorepoRoot, "packages/clawwright", path, "..");
+        const rel = relative(sourceDir, target).replaceAll("\\", "/");
+        return `${prefix}${rel.startsWith(".") ? rel : `./${rel}`}.js${suffix}`;
+      },
+    );
+    if (await readFile(resolve(distDir, `${path}.js`), "utf8") !== expected) throw new Error(`built runtime output differs from current source: ${sourcePath}`);
+    await readFile(resolve(distDir, `${path}.d.ts`));
+  }
+  const recipeIndex = await readFile(resolve(distDir, "recipe-kit/index.js"), "utf8");
+  if (!recipeIndex.includes("deployText")) throw new Error("recipe-kit public index does not export deployText");
+  if (!recipeIndex.includes("backupText")) throw new Error("recipe-kit public index does not export backupText");
+  const declarationTokens = (source: string): string[] => source.match(/\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z_$][\w$]*|[^\s]/g)
+    ?.filter((token) => !token.startsWith("//") && !token.startsWith("/*")) ?? [];
+  const declarationShape = (source: string, start: string[], end: string[]): string[] => {
+    const tokens = declarationTokens(source);
+    const from = tokens.findIndex((_token, index) => start.every((expected, offset) => tokens[index + offset] === expected));
+    if (from < 0) return [];
+    let braces = 0;
+    for (let index = from; index < tokens.length; index++) {
+      if (tokens[index] === "{") braces++;
+      else if (tokens[index] === "}") braces--;
+      if (braces === 0 && end.every((expected, offset) => tokens[index + offset] === expected)) {
+        return tokens.slice(from, index + end.length).filter((token, offset, shape) => token !== "|" || shape[offset - 1] !== "=");
+      }
+    }
+    return [];
+  };
+  const consumerDeclaration = await readFile(resolve(distDir, "recipe-kit/consumer.d.ts"), "utf8");
+  assert.deepEqual(declarationShape(consumerDeclaration,
+    ["export", "declare", "function", "backupText", "("], [")", ":", "Promise", "<", "BackupTextResult", ">", ";"]),
+  ["export", "declare", "function", "backupText", "(", "ctx", ":", "RecipeContext", ",", "input", ":", "BackupTextInput", ")", ":", "Promise", "<", "BackupTextResult", ">", ";"]);
+  assert.deepEqual(declarationShape(consumerDeclaration, ["export", "interface", "BackupTextInput", "{"], ["}"]),
+    ["export", "interface", "BackupTextInput", "{", "file", ":", "string", ";", "profile", ":", "string", ";", "}"]);
+  const indexDeclaration = await readFile(resolve(distDir, "recipe-kit/index.d.ts"), "utf8");
+  assert.deepEqual(declarationShape(indexDeclaration, ["export", "type", "{", "BackupTextResult", "}"], ["from", '"./types.js"', ";"]),
+    ["export", "type", "{", "BackupTextResult", "}", "from", '"./types.js"', ";"]);
+  const typesDeclaration = await readFile(resolve(distDir, "recipe-kit/types.d.ts"), "utf8");
+  assert.deepEqual(declarationShape(typesDeclaration, ["export", "type", "BackupTextResult", "="], [";"]),
+    ["export", "type", "BackupTextResult", "=", "{", "readonly", "status", ":", '"received"', ";", "readonly", "text", ":", "string", ";", "}", "|", "{", "readonly", "status", ":", '"withheld"', "|", '"unknown"', ";", "}", ";"]);
+}
+
+async function verifyRelocationParity(distDir: string): Promise<void> {
+  const parityRoot = await realpath(await mkdtemp(join(tmpdir(), "clawwright-relocation-parity-")));
+  const originalBuilder = join(parityRoot, "tools", "build-framework-package.ts");
+  const originalDist = join(parityRoot, "original-dist");
+
+  async function baselineFile(path: string): Promise<Buffer> {
+    const result = spawnSync("git", ["show", `${base}:${path}`], { cwd: monorepoRoot, encoding: "buffer" });
+    if (result.status !== 0) throw new Error(`cannot read baseline ${path}: ${result.stderr.toString()}`);
+    return result.stdout;
+  }
+
+  try {
+    const listing = spawnSync("git", ["ls-tree", "-r", "--name-only", base, "tools/framework"], { cwd: monorepoRoot, encoding: "utf8" });
+    if (listing.status !== 0) throw new Error(`cannot list baseline package: ${listing.stderr}`);
+    for (const path of listing.stdout.trim().split("\n")) {
+      if (!path) continue;
+      const target = resolve(parityRoot, path);
+      await mkdir(resolve(target, ".."), { recursive: true });
+      await writeFile(target, await baselineFile(path));
+    }
+    await mkdir(join(parityRoot, "tools"), { recursive: true });
+    await writeFile(originalBuilder, await baselineFile("tools/build-framework-package.ts"));
+    await writeFile(resolve(parityRoot, "tsconfig.json"), await baselineFile("tsconfig.json"));
+    await writeFile(resolve(parityRoot, "package.json"), await baselineFile("package.json"));
+    await symlink(resolve(monorepoRoot, "node_modules"), join(parityRoot, "node_modules"), "junction");
+
+    const oldPackage = JSON.parse((await baselineFile("tools/framework/package.json")).toString("utf8")) as Record<string, unknown>;
+    const newPackage = JSON.parse(await readFile(resolve(monorepoRoot, "packages/clawwright/package.json"), "utf8")) as Record<string, unknown>;
+    const oldRepo = oldPackage.repository as Record<string, unknown>;
+    const newRepo = newPackage.repository as Record<string, unknown>;
+    if (oldRepo.directory !== "tools/framework" || newRepo.directory !== "packages/clawwright") throw new Error("package repository directory relocation changed unexpectedly");
+    oldRepo.directory = newRepo.directory;
+    const oldScripts = oldPackage.scripts as Record<string, unknown>;
+    const newScripts = newPackage.scripts as Record<string, unknown>;
+    const oldPrepack = ["node", "--experimental-strip-types", "../build-framework-package.ts"];
+    const newPrepack = ["node", "--experimental-strip-types", "../../tools/build-framework-package.ts"];
+    if (typeof oldScripts.prepack !== "string" || typeof newScripts.prepack !== "string"
+      || JSON.stringify(oldScripts.prepack.split(" ")) !== JSON.stringify(oldPrepack)
+      || JSON.stringify(newScripts.prepack.split(" ")) !== JSON.stringify(newPrepack)) throw new Error("package prepack relocation changed unexpectedly");
+    oldScripts.prepack = newScripts.prepack;
+    if (JSON.stringify(oldPackage) !== JSON.stringify(newPackage)) throw new Error("package manifest has changes beyond repository.directory and prepack relocation");
+
+    const result = await import(pathToFileURL(originalBuilder).href);
+    await result.build(originalDist);
+    const originalFiles = await walkFiles(originalDist);
+    const relocatedFiles = await walkFiles(distDir);
+    if (JSON.stringify(originalFiles) !== JSON.stringify(relocatedFiles)) throw new Error(`relocated output inventory differs: baseline=${originalFiles.length}, current=${relocatedFiles.length}`);
+
+    const frameOld = 'resolve(dir, "tools", "framework", "package.json")';
+    const frameNew = 'resolve(dir, "packages", "clawwright", "package.json")';
+    const resolveOld = 'resolve(root, "tools", "framework", "package.json")';
+    const resolveNew = 'resolve(root, "packages", "clawwright", "package.json")';
+    const scaffoldOld = 'return JSON.stringify(`../../tools/framework/${module}`);';
+    const scaffoldNew = 'return JSON.stringify(`../../packages/clawwright/${module}`);';
+    // The build's rewriteSpecifiers regex also rewrites import-like text inside this generated comment.
+    const scaffoldSeamOld = '// checkout-sourced for importsCheckoutSourcesIn: import { defineApp } from "../../tools/framework/core/app.js";';
+    const scaffoldSeamNew = '// checkout-sourced for importsCheckoutSourcesIn: import { defineApp } from "../../packages/clawwright/core/app.js";';
+    const scaffoldResolveOld = 'pathToFileURL(resolve(monorepoRoot, "tools", "framework", module)).href';
+    const scaffoldResolveNew = 'pathToFileURL(resolve(monorepoRoot, "packages", "clawwright", module)).href';
+    const versionOld = 'const tools = dirname(dir);\n  if (basename(tools) === "tools" && existsSync(resolve(tools, "clawwright.ts"))) return { source: "checkout", path: dirname(tools) };';
+    const versionNew = 'const root = dirname(dirname(dir));\n  if (basename(dir) === "clawwright" && basename(dirname(dir)) === "packages" && existsSync(resolve(root, "tools", "clawwright.ts"))) return { source: "checkout", path: root };';
+    const privacyOld = 'base === "tools/framework" && (entry.name === "dist" || entry.name === "build")';
+    const privacyNew = 'base === "packages/clawwright" && (entry.name === "dist" || entry.name === "build")';
+    // The compatibility resolver intentionally adds behavior, unlike the path-only moves.
+    // Pin both reviewed sources; the installed-consumer check exercises its old/new CLI paths.
+    const oldDelegate = (await baselineFile("tools/framework/entry/delegate.ts")).toString("utf8").replaceAll("\r\n", "\n");
+    const newDelegate = (await readFile(resolve(monorepoRoot, "packages/clawwright/entry/delegate.ts"), "utf8")).replaceAll("\r\n", "\n");
+    const digest = (source: string): string => createHash("sha256").update(source).digest("hex");
+    if (digest(oldDelegate) !== "d095cac086459b161289e0d67fe5acb77928ca54ee7cfeccd250fcbc0fba4a7d"
+      || digest(newDelegate) !== "0e3b960ea943eaec1fab25f18acb3685823d36cafa22b4dea25ef550d24e819b") {
+      throw new Error("compatibility resolver differs from the reviewed source pair");
+    }
+    const expectedDelegate = stripTypeScriptTypes(newDelegate, { mode: "strip" }).replace(
+      /((?:from|import)\s*\(?\s*["'])(\.[^"']+)\.ts(["'])/g,
+      "$1$2.js$3",
+    );
+    const anchors = new Map<string, [string, string][]>([
+      ["core/io/invocation/frame.js", [[frameOld, frameNew]]],
+      ["entry/checkout-gate.js", [["../../checks/kit", "../../../tools/checks/kit"]]],
+      ["entry/resolve.js", [["tools\\/framework\\/", "(?:packages\\/clawwright|tools\\/framework)\\/"], [resolveOld, resolveNew]]],
+      ["integration/deployment/scaffold.js", [[scaffoldResolveOld, scaffoldResolveNew], [scaffoldOld, scaffoldNew], [scaffoldSeamOld, scaffoldSeamNew]]],
+      ["integration/version.js", [[versionOld, versionNew]]],
+      ["security/privacy/deploy-boundary.js", [["/tools/framework/dist/", "/packages/clawwright/dist/"], ["/tools/framework/build/", "/packages/clawwright/build/"], [privacyOld, privacyNew]]],
+    ]);
+    for (const path of originalFiles) {
+      const oldText = await readFile(resolve(originalDist, path));
+      const currentText = await readFile(resolve(distDir, path));
+      if (path === "entry/delegate.js") {
+        if (currentText.toString("utf8") !== expectedDelegate) throw new Error("built compatibility resolver differs from the reviewed source");
+        continue;
+      }
+      const pathAnchors = anchors.get(path) ?? [];
+      if (pathAnchors.length === 0 && !oldText.equals(currentText)) throw new Error(`built output unexpectedly changed: ${path}`);
+      let expected = oldText.toString("utf8");
+      for (const [before, after] of pathAnchors) {
+        const count = expected.split(before).length - 1;
+        if (count !== 1) throw new Error(`expected one baseline relocation anchor in ${path}, found ${count}: ${before}`);
+        expected = expected.replace(before, after);
+      }
+      if (expected !== currentText.toString("utf8")) throw new Error(`built output differs beyond exact relocation anchors: ${path}`);
+    }
+  } finally {
+    await rm(parityRoot, { recursive: true, force: true });
+  }
+}
 
 // A fresh build, exactly what `npm run build` produces, into a temp root removed in finally —
 // never whatever a previous build left in the checkout's dist/.
-const distDir = await mkdtemp(join(tmpdir(), "clawwright-build-output-"));
+const distDir = await realpath(await mkdtemp(join(tmpdir(), "clawwright-build-output-")));
 
 try {
   await build(distDir);
+  await verifyHistoricalRelocation(distDir);
+  await verifyCurrentFeatureOutput(distDir);
 
   // Recipe-kit public declarations must remain self-contained and Node-free.
   const recipeDeclarations = ["index", "types", "app", "consumer"];
@@ -35,22 +287,22 @@ try {
       throw new Error(`recipe-kit ${name} declaration leaks a private or Node-dependent type`);
     }
   }
+  const consumerDeclaration = await readFile(resolve(distDir, "recipe-kit", "consumer.d.ts"), "utf8");
+  if (!consumerDeclaration.includes("deployText") || !consumerDeclaration.includes("DeployTextInput")) throw new Error("recipe consumer declaration does not expose deployText");
   await readFile(resolve(distDir, "recipe-kit", "index.js"), "utf8");
   process.stderr.write("recipe-kit runtime entry and Node-free declaration graph passed\n");
 
   const binPath = resolve(distDir, "entry", "bin.js");
   const firstLine = (await readFile(binPath, "utf8")).split("\n")[0];
-
   if (firstLine.trim() !== "#!/usr/bin/env node") {
     throw new Error(
       `dist/entry/bin.js must start with "#!/usr/bin/env node" (got: ${JSON.stringify(firstLine)}) — ` +
         "anything else, `env -S` above all, is not executable on a busybox system such as Alpine",
     );
   }
-
   process.stderr.write("build output starts with a shebang every POSIX system can execute\n");
 
-  // The source tree uses "#src/..." subpath imports (tools/framework/package.json's own
+  // The source tree uses "#src/..." subpath imports (packages/clawwright/package.json's own
   // "imports" map) for readability. dist/ ships with no package.json of its own, so a
   // literal "#src/" specifier surviving into a built file would fail at runtime with
   // ERR_INVALID_MODULE_SPECIFIER / ERR_MODULE_NOT_FOUND — build-framework-package.ts's
@@ -63,8 +315,7 @@ try {
       throw new Error(`dist/${relPath} still contains a "#src/" subpath-import specifier — it must be rewritten to a plain relative path before shipping`);
     }
   }
-
-  process.stderr.write("build output carries no unresolved \"#src/\" subpath-import specifiers\n");
+  process.stderr.write('build output carries no unresolved "#src/" subpath-import specifiers\n');
 } finally {
   await rm(distDir, { recursive: true, force: true });
 }

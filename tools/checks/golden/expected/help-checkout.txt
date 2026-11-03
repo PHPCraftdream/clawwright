@@ -26,6 +26,8 @@
       apply                Apply the plan, then confirm the instance *
       rollback             Restore the configuration an operation replaced *
       apply-config         Apply the deployment's desired-state.json *
+      backup-text          Back up selected text through the keeper
+      deploy-text          Deploy a reference-only text template through SSJack
       memory               Declare, set up, inspect, index, verify memory *
       configure-provider   Configure model providers from target env vars
       secrets              Show required secrets and their state *
@@ -541,6 +543,24 @@
     Kept separate from `apply`: its --dry-run really validates against the target (lockless, even before the instance is healthy), and --dump --force deliberately overwrites an existing declaration — `apply` does neither.
     
     This command can replace or destroy state, depending on the flags given.
+
+=== backup-text --help ===
+==> backup-text — Back up selected text through the keeper
+    Usage: ./clawwright backup-text --file <PATH> --output <PATH> --profile <NAME>
+      --file <PATH>          Granted source path (required)
+      --output <PATH>        New local output path (required)
+      --profile <NAME>       Expected grant profile (required)
+    
+    The keeper privately reads the explicitly approved source and returns only its keeper-transformed selected copy; no raw fallback is available. The backup is limited to 1 MiB. Restore is supported only by feeding a user-supplied complete canonical reference template (1–16 references, all from the same store and snapshot, total template at most 32 KiB) through the existing deploy-text path. It never resolves latest references. Other content refuses restore; the user owns mapping completeness and escaping.
+
+=== deploy-text --help ===
+==> deploy-text — Deploy a reference-only text template through SSJack
+    Usage: ./clawwright deploy-text --file <PATH> --template <PATH> --profile <NAME>
+      --file <PATH>          Destination granted by the remote profile (required)
+      --template <PATH>      Local reference-only text template (required)
+      --profile <NAME>       Expected grant profile (required)
+    
+    Submits the local UTF-8 template literally through the explicitly selected text-hydrate profile. This does not support structured desired-state config or recipe placeholders.
 
 === expose --help ===
 ==> expose — Expose the gateway: SSH tunnel or tailscale

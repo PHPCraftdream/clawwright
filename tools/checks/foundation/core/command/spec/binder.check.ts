@@ -581,7 +581,7 @@ const dispatch = (() => {
 })();
 checkTrue("the first-refusal dispatch case was derived from the declarations", dispatch !== undefined && dispatch.single !== undefined);
 if (dispatch !== undefined && dispatch.single !== undefined) {
-  const moduleUrl = (name: string): string => new URL("../../../../../framework/" + name + ".ts", import.meta.url).href;
+  const moduleUrl = (name: string): string => new URL("../../../../../../packages/clawwright/" + name + ".ts", import.meta.url).href;
   const script = [
     "const { serveMcp } = await import(" + JSON.stringify(moduleUrl("integration/mcp/server")) + ");",
     "const { openclawCommands } = await import(" + JSON.stringify(moduleUrl("commands/interface/index")) + ");",

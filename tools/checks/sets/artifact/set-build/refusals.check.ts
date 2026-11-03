@@ -2,15 +2,17 @@
 // for another image, an unreadable secret source, and a failed rebuild that must not destroy the
 // artifact already there.
 
-import { mkdir, readdir, writeFile, rm, rmdir, readFile } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { mkdir, mkdtemp, readdir, writeFile, rm, rmdir, readFile } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { tmpdir } from "node:os";
 import { buildSet, withTarRunner } from "#framework/commands/sets/set.ts";
 import type { ExecOptions, ExecResult } from "#framework/runtime/transport/transport.ts";
 import type { Context } from "#framework/core/context.ts";
 import { check, finish, requires } from "#checks/kit/harness.ts";
-import { ctx, DIGEST, STORE_KEY, TOKEN, createBuildDeployment, removeBuildDeployment, tarList } from "#checks/sets/artifact/set-build/fixture.ts";
+import { ctx, DIGEST, STORE_KEY, TOKEN, populateBuildDeployment, removeBuildDeployment, tarList } from "#checks/sets/artifact/set-build/fixture.ts";
 
-const deployment = await createBuildDeployment();
+const deployment = await mkdtemp(join(tmpdir(), "clawwright-set-build-check-"));
+await populateBuildDeployment(deployment);
 
 try {
   // --- a desired-state.json that is syntactically valid JSON but not a list of {path,value}

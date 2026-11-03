@@ -155,7 +155,7 @@ try {
 
 // --- set try: the exact same ordering requirement, at a lower cost than another full run --
 //
-// set try's own bring-up (tools/framework/commands/sets/set-try.ts) makes the identical two
+// set try's own bring-up (packages/clawwright/commands/sets/set-try.ts) makes the identical two
 // calls for the identical reason — its provider comes from the SAME desired-state.json a set
 // carries. Driving it behaviourally here would mean building a real, checksum-valid set
 // artifact and unpacking it just to prove a two-line reorder already proven above; that cost
@@ -164,7 +164,7 @@ try {
 // source-order check is honest about being exactly that, not a second behavioural proof.
 {
   const setTrySource = await (await import("node:fs/promises")).readFile(
-    new URL("../../../../framework/commands/sets/set-try.ts", import.meta.url),
+    new URL("../../../../../packages/clawwright/commands/sets/set-try.ts", import.meta.url),
     "utf8",
   );
   const applyAt = setTrySource.indexOf("await applyConfig(tryCtx, [], { restartAdvice: false });");

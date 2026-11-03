@@ -8,13 +8,13 @@ import type { ControlDecl } from "./controls.ts";
 
 export const STAGE7_ACCEPT_CONTROLS: readonly ControlDecl[] = [
   { id: "C194", finding: "R1-A-1", note: "pwsh apostrophes must double: POSIX '\\'' escaping in a pwsh line is a parse error there",
-    product: "tools/framework/core/io/invocation/render.ts", search: `return \`'\${word.replaceAll("'", "''")}'\`;`, replace: "return shellQuote(word);",
+    product: "packages/clawwright/core/io/invocation/render.ts", search: `return \`'\${word.replaceAll("'", "''")}'\`;`, replace: "return shellQuote(word);",
     check: "tools/checks/surfaces/advice/real-shells.check.ts", fragment: "R1-A-1: dollar + apostrophe root: the real shell ran the line (pwsh)" },
   { id: "C195", finding: "R1-A-1 D6/O1", note: "the in-bash fallback line must quote by the POSIX rule, not the pwsh rule of the shell the advice names",
-    product: "tools/framework/core/io/invocation/render.ts", search: "const posixOnly = inBash || (f.shells.length === 1 && f.shells[0] === \"posix\");", replace: "const posixOnly = f.shells.length === 1 && f.shells[0] === \"posix\";",
+    product: "packages/clawwright/core/io/invocation/render.ts", search: "const posixOnly = inBash || (f.shells.length === 1 && f.shells[0] === \"posix\");", replace: "const posixOnly = f.shells.length === 1 && f.shells[0] === \"posix\";",
     check: "tools/checks/surfaces/advice/real-shells.check.ts", fragment: "R1-A-1: pwsh-named fallback exact argv in bash: the real shell ran the line (bash)" },
   { id: "C196", finding: "R1-A-1 cmd", note: "an embedded quote in a cmd line must be spelled as a doubled quote: a backslash-quote closes cmd's quoting and lets the next & run a second command",
-    product: "tools/framework/core/io/invocation/render.ts", search: "`${\"\\\\\".repeat(backslashes * 2)}\"\"`", replace: "`${\"\\\\\".repeat(backslashes)}\\\\\"`",
+    product: "packages/clawwright/core/io/invocation/render.ts", search: "`${\"\\\\\".repeat(backslashes * 2)}\"\"`", replace: "`${\"\\\\\".repeat(backslashes)}\\\\\"`",
     check: "tools/checks/surfaces/advice/real-shells.check.ts", fragment: "R1-A-1: quote then ampersand, cmd: intended-argv" },
   {
     id: "C200", finding: "R1-C",
@@ -97,8 +97,8 @@ export const STAGE7_ACCEPT_CONTROLS: readonly ControlDecl[] = [
     id: "C206", finding: "rf7-tails-V",
     note: "Restore the dist exclusion; the dist self-check must fail.", product: "tools/checks/kit/run.ts",
     search: "const IGNORED_STATUS_EXCLUDES = [\"node_modules\", \"apps\", \"worktrees\", \".rush\", \".check-timings.json\"];",
-    replace: "const IGNORED_STATUS_EXCLUDES = [\"node_modules\", \"apps\", \"worktrees\", \"tools/framework/dist\", \".rush\", \".check-timings.json\"];",
-    check: "tools/checks/kit/capabilities/run-guard.check.ts", fragment: "a new file under tools/framework/dist is reported",
+    replace: "const IGNORED_STATUS_EXCLUDES = [\"node_modules\", \"apps\", \"worktrees\", \"packages/clawwright/dist\", \".rush\", \".check-timings.json\"];",
+    check: "tools/checks/kit/capabilities/run-guard.check.ts", fragment: "a new file under packages/clawwright/dist is reported",
   },
   {
     id: "C207", finding: "rf7-tails-V",
@@ -109,21 +109,21 @@ export const STAGE7_ACCEPT_CONTROLS: readonly ControlDecl[] = [
   },
   {
     id: "C208", finding: "rf7-tails-V",
-    note: "Bypass the counted reader in inspect's declared state; the dynamic count assertion must fail.", product: "tools/framework/commands/orchestration/inspect/declared.ts",
+    note: "Bypass the counted reader in inspect's declared state; the dynamic count assertion must fail.", product: "packages/clawwright/commands/orchestration/inspect/declared.ts",
     search: "suspiciousEnvLines(await readEnvFileText())",
     replace: "suspiciousEnvLines(await readFile(envFile(), \"utf8\"))",
     check: "tools/checks/foundation/core/command/needs.check.ts", fragment: "reads the .env through the counted reader exactly once",
   },
   {
     id: "C209", finding: "rf7-tails-V",
-    note: "Bypass the counted reader in the secrets apply path; the static sweep must fail.", product: "tools/framework/commands/management/configuration/secrets.ts",
+    note: "Bypass the counted reader in the secrets apply path; the static sweep must fail.", product: "packages/clawwright/commands/management/configuration/secrets.ts",
     search: "let content = await readEnvFileText();",
     replace: "let content = await readFile(envFile(), \"utf8\");",
     check: "tools/checks/foundation/core/command/needs.check.ts", fragment: "no product file reads envFile() past the counted reader",
   },
   {
     id: "C225", finding: "R2-B-1",
-    note: "Drop text's control-character refusal; the sweep's NUL case for verify <archive> must stop past parse.", product: "tools/framework/core/values/kinds.ts",
+    note: "Drop text's control-character refusal; the sweep's NUL case for verify <archive> must stop past parse.", product: "packages/clawwright/core/values/kinds.ts",
     search: "  }, invalid, { controls: refused });",
     replace: "  }, invalid, { controls: /(?!)/ });",
     check: "tools/checks/foundation/core/command/pipeline/property/property-control-chars.check.ts", fragment: "verify: <archive> \"a\\u0000b\": MCP stops at the parse stage",
@@ -137,21 +137,21 @@ export const STAGE7_ACCEPT_CONTROLS: readonly ControlDecl[] = [
   },
   {
     id: "C227", finding: "R2-B-1",
-    note: "Bypass the uniform kind wrapper; bootstrap --break-foreign-lock with a NUL must stop past parse.", product: "tools/framework/core/values/kinds.ts",
+    note: "Bypass the uniform kind wrapper; bootstrap --break-foreign-lock with a NUL must stop past parse.", product: "packages/clawwright/core/values/kinds.ts",
     search: "controls.test(raw)) throw",
     replace: "controls.test(\"\")) throw",
     check: "tools/checks/foundation/core/command/pipeline/property/property-control-chars.check.ts", fragment: "bootstrap: --break-foreign-lock \"a\\u0000b\": MCP stops at the parse stage",
   },
   {
     id: "C228", finding: "R2-B-1",
-    note: "Let multi-line text accept every control character; exec <args…> with a NUL must stop past parse.", product: "tools/framework/core/values/kinds.ts",
+    note: "Let multi-line text accept every control character; exec <args…> with a NUL must stop past parse.", product: "packages/clawwright/core/values/kinds.ts",
     search: "options.lines === \"multi\" ? CONTROL_BUT_LINES : CONTROL;",
     replace: "options.lines === \"multi\" ? /(?!)/ : CONTROL;",
     check: "tools/checks/foundation/core/command/pipeline/property/property-control-chars.check.ts", fragment: "exec: <args…> \"a\\u0000b\": MCP stops at the parse stage",
   },
   {
     id: "C229", finding: "R2-B-1",
-    note: "Print the raw value in the control-character refusal; the refusal must never carry a raw control character.", product: "tools/framework/core/values/kinds.ts",
+    note: "Print the raw value in the control-character refusal; the refusal must never carry a raw control character.", product: "packages/clawwright/core/values/kinds.ts",
     search: "not \"${shown(raw)}\"",
     replace: "not \"${raw}\"",
     check: "tools/checks/foundation/core/command/pipeline/property/property-control-chars.check.ts", fragment: "the message carries no raw control character",
@@ -188,7 +188,7 @@ export const STAGE7_ACCEPT_CONTROLS: readonly ControlDecl[] = [
   },
   {
     id: "C217", finding: "R2-C",
-    note: "Reallow dollar-variable repository text; the reviewer repo$HOME refusal must fail.", product: "tools/framework/runtime/docker/image-ref.ts",
+    note: "Reallow dollar-variable repository text; the reviewer repo$HOME refusal must fail.", product: "packages/clawwright/runtime/docker/image-ref.ts",
     search: "  if (!REPOSITORY.test(repository)) return undefined;",
     replace: "  if (!REPOSITORY.test(repository.replace(/\\$[A-Za-z_][A-Za-z0-9_]*/g, \"x\"))) return undefined;",
     check: "tools/checks/runtime/connection-facts/upgrade/image-ref.check.ts", fragment: "reviewer repository refused: repo$HOME",
@@ -219,18 +219,18 @@ export const STAGE7_ACCEPT_CONTROLS: readonly ControlDecl[] = [
   },
   {
     id: "C242", finding: "rf7-tails-u", note: "Restore target-context status advice; recovery diagnostic kind and argv must fail.",
-    product: "tools/framework/commands/operate/recover-env/bootstrap.ts", search: 'override readonly advice = [command(["recover-env", "--dry-run"])];', replace: 'override readonly advice = [command("status")];',
+    product: "packages/clawwright/commands/operate/recover-env/bootstrap.ts", search: 'override readonly advice = [command(["recover-env", "--dry-run"])];', replace: 'override readonly advice = [command("status")];',
     check: "tools/checks/kit/self/recovery-advice.check.ts", fragment: "every local recovery unknown carries diagnostic kind and argv",
   },
   {
     id: "C244", finding: "rf7-tails-u", note: "Bypass secrets apply counted reader; dynamic calibration must fail independently of static sweep.",
-    product: "tools/framework/commands/management/configuration/secrets.ts", search: "let content = await readEnvFileText();", replace: 'let content = await readFile(envFile(), "utf8");',
+    product: "packages/clawwright/commands/management/configuration/secrets.ts", search: "let content = await readEnvFileText();", replace: 'let content = await readFile(envFile(), "utf8");',
     check: "tools/checks/foundation/core/command/needs.check.ts", fragment: "secrets apply reads the .env through the counted reader exactly once",
   },
   {
     id: "C230", finding: "R1-A-2",
     note: "Restore the previous-call cwd selection guard; fresh advice after a flag-selected aux must still bypass demo.",
-    product: "tools/framework/core/io/invocation/render.ts",
+    product: "packages/clawwright/core/io/invocation/render.ts",
     search: "    && resolvesByCwd(frame.launch, on.program);",
     replace: "    && frame.app.state === \"selected\" && frame.app.by === \"cwd\"\n    && resolvesByCwd(frame.launch, on.program);",
     check: "tools/checks/surfaces/advice/advice-anchor.check.ts",
@@ -239,7 +239,7 @@ export const STAGE7_ACCEPT_CONTROLS: readonly ControlDecl[] = [
   {
     id: "C231", finding: "R1-A-1 native pwsh",
     note: "Drop legacy native handoff protection; the real npm .ps1 wrapper must receive exact argv.",
-    product: "tools/framework/core/io/invocation/render.ts",
+    product: "packages/clawwright/core/io/invocation/render.ts",
     search: `if (only === "pwsh" && needsLegacy(word))`,
     replace: `if (false && needsLegacy(word))`,
     check: "tools/checks/surfaces/advice/real-shells.check.ts",
@@ -248,7 +248,7 @@ export const STAGE7_ACCEPT_CONTROLS: readonly ControlDecl[] = [
   {
     id: "C232", finding: "R1-A-2 inherited selector",
     note: "Ignore inherited flag/env/sole app when detecting a fresh-paste conflict; inherited aux advice must use O2 too.",
-    product: "tools/framework/core/io/invocation/render.ts",
+    product: "packages/clawwright/core/io/invocation/render.ts",
     search: `  const targetApp = advice.app ?? (!isGateCommand(advice.argv[0]) && options?.deploymentFree !== true\n    && frame.app.state === "selected" && ["flag", "env", "sole"].includes(frame.app.by)\n    ? frame.app.name : undefined);`,
     replace: "  const targetApp = advice.app;",
     check: "tools/checks/surfaces/advice/advice-anchor.check.ts",
@@ -257,7 +257,7 @@ export const STAGE7_ACCEPT_CONTROLS: readonly ControlDecl[] = [
   {
     id: "C233", finding: "R1-A-1 native trailing backslash",
     note: "Keep quote protection but drop spaced trailing-backslash protection for legacy native pwsh handoff.",
-    product: "tools/framework/core/io/invocation/render.ts",
+    product: "packages/clawwright/core/io/invocation/render.ts",
     search: ` && word.endsWith("\\\\"))`,
     replace: ` && false)`,
     check: "tools/checks/surfaces/advice/real-shells.check.ts",
@@ -266,7 +266,7 @@ export const STAGE7_ACCEPT_CONTROLS: readonly ControlDecl[] = [
   {
     id: "C234", finding: "R1-A-1 native backslash before quote",
     note: "Keep doubled embedded quotes but stop doubling preceding backslashes; native handoff loses the literal backslash before quote.",
-    product: "tools/framework/core/io/invocation/render.ts",
+    product: "packages/clawwright/core/io/invocation/render.ts",
     search: "`${\"\\\\\".repeat(backslashes * 2)}\"\"`",
     replace: "`${\"\\\\\".repeat(backslashes)}\"\"`",
     check: "tools/checks/surfaces/advice/real-shells.check.ts",
@@ -275,7 +275,7 @@ export const STAGE7_ACCEPT_CONTROLS: readonly ControlDecl[] = [
   {
     id: "C235", finding: "R1-A-3 scoped preference",
     note: "Drop scoped Legacy preference; the static row assertion must fail without PS7.",
-    product: "tools/framework/core/io/invocation/render.ts",
+    product: "packages/clawwright/core/io/invocation/render.ts",
     search: "$PSNativeCommandArgumentPassing = 'Legacy'; ${text}",
     replace: "${text}",
     check: "tools/checks/surfaces/advice/real-shells.check.ts",
@@ -284,7 +284,7 @@ export const STAGE7_ACCEPT_CONTROLS: readonly ControlDecl[] = [
   {
     id: "C236", finding: "R1-A-2 external cwd",
     note: "Erase the frame by-cwd value outside apps; external deployment advice must retain O2.",
-    product: "tools/framework/core/io/invocation/render.ts",
+    product: "packages/clawwright/core/io/invocation/render.ts",
     search: '    if (!isAbsolute(underApps) && segments[0] !== ".." && segments[0] !== "") cwdApp = segments[0];',
     replace: '    cwdApp = !isAbsolute(underApps) && segments[0] !== ".." && segments[0] !== "" ? segments[0] : undefined;',
     check: "tools/checks/surfaces/advice/advice-anchor.check.ts",
@@ -323,7 +323,7 @@ export const STAGE7_ACCEPT_CONTROLS: readonly ControlDecl[] = [
   {
     id: "C270", finding: "R3-B-1",
     note: "Restore flat merged tokenization; invalid recipe new Advice must emit no machine step.",
-    product: "tools/framework/integration/mcp/call.ts",
+    product: "packages/clawwright/integration/mcp/call.ts",
     search: "    return commandBinding.inverseCall(shape, argv.slice(1), argv[0]);",
     replace: `    const declared = command.arguments ?? [];
     const verbatim = declared.some((argument) => argument.kind === "variadic" && "verbatim" in argument && argument.verbatim === true);
@@ -343,7 +343,7 @@ export const STAGE7_ACCEPT_CONTROLS: readonly ControlDecl[] = [
   {
     id: "C271", finding: "R3-B-1 raw projection",
     note: "Restore legacy and variadic conversion in the outgoing raw projection.",
-    product: "tools/framework/core/command/parse/index.ts",
+    product: "packages/clawwright/core/command/parse/index.ts",
     search: "...raw };",
     replace: "...toParsedArgs(tokens.entries) };",
     check: "tools/checks/integration/mcp/dispatch/mcp-envelope.check.ts",
@@ -351,7 +351,7 @@ export const STAGE7_ACCEPT_CONTROLS: readonly ControlDecl[] = [
   },
   {
     id: "C250", finding: "R3-A-1", note: "Restore the unavailable installed-command override for a checkout conflict.",
-    product: "tools/framework/core/io/invocation/render.ts",
+    product: "packages/clawwright/core/io/invocation/render.ts",
     search: '  // Arguments quote by the frame\'s shells, not by the program\'s spelling: a frame that',
     replace: '  if (cwdConflict) program = "clawwright";\n  // Arguments quote by the frame\'s shells, not by the program\'s spelling: a frame that',
     check: "tools/checks/surfaces/advice/checkout-paste.check.ts", fragment: "R3-A-1: checkout-only rendered paste exit 0",

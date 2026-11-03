@@ -84,6 +84,8 @@ const TABLE: Readonly<Record<string, readonly Row[]>> = {
   ],
   "provision-agent": [[[], "change"], [["x"], "change"]],
   deploy: [[[], "destroy"], [["host"], "destroy"], [["host", "--dry-run"], "read"]],
+  "deploy-text": [[ ["--file", "/approved/config", "--template", "template.txt", "--profile", "approved"], "change"]],
+  "backup-text": [[ ["--file", "/approved/config", "--output", "copy.txt", "--profile", "approved"], "change"]],
   "mcp-serve": [[[], "change"]],
   "mcp-setup": [[[], "change"]],
   "mcp-creds": [[[], "read"], [["--token"], "read"]],

@@ -61,12 +61,12 @@ function withOnPath(directory: string): NodeJS.ProcessEnv {
   return env;
 }
 
-const expected = (JSON.parse(await readFile(resolve(monorepoRoot, "tools", "framework", "package.json"), "utf8")) as { version: string }).version;
+const expected = (JSON.parse(await readFile(resolve(monorepoRoot, "packages", "clawwright", "package.json"), "utf8")) as { version: string }).version;
 // Real paths: macOS tmpdir() sits behind the /var symlink, while a child's cwd and module paths are real.
 const prefix = await realpath(await mkdtemp(join(tmpdir(), "clawwright-system-install-")));
 const outside = await realpath(await mkdtemp(join(tmpdir(), "clawwright-system-apps-")));
 const checkoutApp = `sys-install-check-${randomBytes(4).toString("hex")}`;
-// A synthetic checkout for the apps/-parent probes: same geometry as the real one (tools/framework
+// A synthetic checkout for the apps/-parent probes: same geometry as the real one (packages/clawwright
 // manifest + tools/clawwright.ts beside it), with the gate a shim handing off to the real gate, so
 // the hand-over and takeover logic runs physically while every deployment lands in the temp tree.
 const sc = await realpath(await mkdtemp(join(tmpdir(), "clawwright-system-checkout-")));
@@ -75,8 +75,9 @@ const scApps = join(sc, "apps");
 // assignment inside the try block.
 let packRoot: string | undefined;
 const realGate = resolve(monorepoRoot, "tools", "clawwright.ts");
-await mkdir(join(sc, "tools", "framework"), { recursive: true });
-await writeFile(join(sc, "tools", "framework", "package.json"), JSON.stringify({ name: "@phpcraftdream/clawwright" }), "utf8");
+await mkdir(join(sc, "packages", "clawwright"), { recursive: true });
+await mkdir(join(sc, "tools"), { recursive: true });
+await writeFile(join(sc, "packages", "clawwright", "package.json"), JSON.stringify({ name: "@phpcraftdream/clawwright" }), "utf8");
 await writeFile(
   join(sc, "tools", "clawwright.ts"),
   `// Check-only shim: stands in for the real gate at this synthetic checkout's root.\n` +
@@ -114,12 +115,12 @@ function tail(result: Run): void {
 // prepack build's dist/ lands in the temp tree, never in this checkout.
 try {
   // --- the pack: a temp copy of the packing tree -----------------------------------------
-  // tools/framework's prepack (tools/build-framework-package.ts) and the installer
+  // packages/clawwright's prepack (tools/build-framework-package.ts) and the installer
   // (tools/dev/install-system.ts) both derive every path from their own import.meta.url —
   // nothing is pinned to the real checkout — so copying the layout they expect and running the
   // copied installer keeps the produced tarball byte-equivalent while dist/ is rebuilt in the
   // temp tree. The layout each piece reads:
-  //   tools/framework/**            sources, tsconfig.declaration.json, package.json, README.md,
+  //   packages/clawwright/**            sources, tsconfig.declaration.json, package.json, README.md,
   //                                 LICENSE*, NOTICE, THIRD_PARTY_NOTICES.md, docker-compose.yml,
   //                                 .env.example (npm pack's "files" + build script's copies)
   //   tsconfig.json                 repo root, extended by tsconfig.declaration.json; tsgo runs
@@ -131,7 +132,9 @@ try {
   //                                 resolves them upward, so one link at the temp root suffices
   packRoot = await mkdtemp(join(tmpdir(), "clawwright-pack-"));
   await mkdir(join(packRoot, "tools", "dev"), { recursive: true });
-  await cp(resolve(monorepoRoot, "tools", "framework"), join(packRoot, "tools", "framework"), {
+  await mkdir(join(packRoot, "tools"), { recursive: true });
+  await mkdir(join(packRoot, "packages", "clawwright"), { recursive: true });
+  await cp(resolve(monorepoRoot, "packages", "clawwright"), join(packRoot, "packages", "clawwright"), {
     recursive: true,
     filter: (entry) => {
       const name = basename(entry);
@@ -342,8 +345,19 @@ try {
   check("in apps/<name> of a checkout the checkout's own gate answers", inApp.code === 0 && inApp.output.includes("new-app"), true);
   if (!inApp.output.includes(usageFooterHint(installedHint))) process.stderr.write(`help in the app printed: ${inApp.output}\n`);
   check("and its hints keep the name the user typed", inApp.output.includes(usageFooterHint(installedHint)), true);
+  const checkoutVersion = await run(process.execPath, ["--experimental-strip-types", realGate, "version", "--json"], monorepoRoot);
+  tail(checkoutVersion);
+  check("the public checkout version command exits 0", checkoutVersion.code, 0);
+  const checkoutVersionInfo = lastJson(checkoutVersion);
+  check("the public checkout version command reports the checkout root", [checkoutVersionInfo.source, checkoutVersionInfo.path], ["checkout", await realpath(monorepoRoot)]);
+  const checkoutChecks = await run(process.execPath, ["--experimental-strip-types", realGate, "check", "--list"], monorepoRoot);
+  tail(checkoutChecks);
+  check("the public checkout check --list resolves and runs its repository check runner", checkoutChecks.code, 0);
+  check("check --list includes a known tools/checks-relative label", checkoutChecks.output.includes("foundation/packaging/build-output.check.ts"), true);
   const checkoutInfo = lastJson(await clawwright(["version", "--json"], resolve(scApps, checkoutApp)));
   check("version --json in a checkout app says checkout and the checkout root", [checkoutInfo.source, checkoutInfo.path], ["checkout", await realpath(monorepoRoot)]);
+  const publicHelp = await clawwright(["help"], fresh);
+  check("installed public CLI help succeeds", publicHelp.code, 0);
   // --app is passed on once: the same name as the cwd's is kept, another one is refused.
   const appDir = resolve(scApps, checkoutApp);
   const sameApp = await clawwright(["--app", checkoutApp, "help"], appDir);
@@ -375,7 +389,7 @@ try {
   const strayDir = resolve(scApps, `.${checkoutApp}-stray`, "nested");
   await mkdir(strayDir, { recursive: true });
   try {
-    await writeFile(join(strayDir, "app.ts"), 'import { defineApp } from "../../../tools/framework/core/app.ts";\nexport default defineApp({});\n', "utf8");
+    await writeFile(join(strayDir, "app.ts"), 'import { defineApp } from "../../../packages/clawwright/core/app.ts";\nexport default defineApp({});\n', "utf8");
     const stray = await clawwright(["status"], strayDir);
     check("a checkout-style app.ts that the gate cannot take over is refused", stray.code === 1 && stray.output.includes(FOREIGN_SOURCES_NOTE) && !stray.output.includes(CANNOT_LOAD), true);
     const strayVersion = await clawwright(["version"], strayDir);

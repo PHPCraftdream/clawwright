@@ -1,5 +1,5 @@
-// Local-tar ownership hygiene for tools/framework, enforced as an invariant: the single
-// owner of LOCAL tar spawns is tools/framework/set/artifacts/tar.ts — no other file may
+// Local-tar ownership hygiene for packages/clawwright, enforced as an invariant: the single
+// owner of LOCAL tar spawns is packages/clawwright/set/artifacts/tar.ts — no other file may
 // hand a local process runner the literal program "tar" (tar over ctx.transport runs on
 // the target and is legitimate). The owner itself must pass every "-C" value through
 // tarLocalPath(...) (rf6-fix33). The analysis lives in local-tar-rules.ts; this file
@@ -14,7 +14,7 @@ import { check, finish } from "#checks/kit/harness.ts";
 import { analyze } from "./local-tar-rules.ts";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../..");
-const frameworkRoot = resolve(repoRoot, "tools", "framework");
+const frameworkRoot = resolve(repoRoot, "packages", "clawwright");
 
 async function walk(dir: string): Promise<string[]> {
   const files: string[] = [];
@@ -176,7 +176,7 @@ function isSkipped(relativePath: string): boolean {
 // Must stay empty — any hit fails the check by name; tighten the rule instead.
 const ALLOW: readonly string[] = [];
 
-const OWNER = "tools/framework/set/artifacts/tar.ts";
+const OWNER = "packages/clawwright/set/artifacts/tar.ts";
 // The guard's own file is excluded from the real scan: its self-check table contains the
 // flagged patterns by construction (that is exactly what SELF_CASES asserts the analyzer
 // flags), so scanning it only re-reports the self-check snippets.

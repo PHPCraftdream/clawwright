@@ -14,7 +14,7 @@
 // With neither set and no "openclaw" deployment, a checkout with exactly one deployment
 // under apps/ uses it automatically.
 
-import { main } from "./framework/entry/cli.ts";
+import { main } from "../packages/clawwright/entry/cli.ts";
 import {
   runGateCommand,
   gateHelpLines,
@@ -22,23 +22,23 @@ import {
   beforeBareDoubleDash,
   APP_ORDER,
   type GateCommand,
-} from "./framework/integration/gate.ts";
-import { APP_FLAG_SUMMARY, helpEntryLine } from "./framework/core/io/help-render.ts";
-import type { ArgumentSpec } from "./framework/core/command/spec.ts";
-import { reportError, info, UserError } from "./framework/core/io/log.ts";
-import { command } from "./framework/core/io/invocation/advice.ts";
-import { checkoutGateFrame, frameFromInvocation, launchFromHandover, type Frame } from "./framework/core/io/invocation/frame.ts";
-import { frameFacts, installFrame, takeInvocationFromEnv } from "./framework/core/io/invocation/index.ts";
-import { useGateCommands } from "./framework/core/io/invocation/render.ts";
-import { monorepoRoot, appsRootFor } from "./framework/core/env.ts";
-import { useDeployment } from "./framework/runtime/deployment.ts";
-import { openclawCommands } from "./framework/commands/interface/index.ts";
-import { normalizeVersionAlias } from "./framework/integration/version.ts";
-import type { AppDefinition } from "./framework/core/app.ts";
-import { resolveFrameworkFromSources } from "./framework/entry/delegate.ts";
-import { isVerbatim } from "./framework/core/command/parse/index.ts";
-import { nodeFs, resolveCheckoutEntry } from "./framework/entry/resolve.ts";
-import { checkoutGate } from "./framework/entry/registry.ts";
+} from "../packages/clawwright/integration/gate.ts";
+import { APP_FLAG_SUMMARY, helpEntryLine } from "../packages/clawwright/core/io/help-render.ts";
+import type { ArgumentSpec } from "../packages/clawwright/core/command/spec.ts";
+import { reportError, info, UserError } from "../packages/clawwright/core/io/log.ts";
+import { command } from "../packages/clawwright/core/io/invocation/advice.ts";
+import { checkoutGateFrame, frameFromInvocation, launchFromHandover, type Frame } from "../packages/clawwright/core/io/invocation/frame.ts";
+import { frameFacts, installFrame, takeInvocationFromEnv } from "../packages/clawwright/core/io/invocation/index.ts";
+import { useGateCommands } from "../packages/clawwright/core/io/invocation/render.ts";
+import { monorepoRoot, appsRootFor } from "../packages/clawwright/core/env.ts";
+import { useDeployment } from "../packages/clawwright/runtime/deployment.ts";
+import { openclawCommands } from "../packages/clawwright/commands/interface/index.ts";
+import { normalizeVersionAlias } from "../packages/clawwright/integration/version.ts";
+import type { AppDefinition } from "../packages/clawwright/core/app.ts";
+import { resolveFrameworkFromSources } from "../packages/clawwright/entry/delegate.ts";
+import { isVerbatim } from "../packages/clawwright/core/command/parse/index.ts";
+import { nodeFs, resolveCheckoutEntry } from "../packages/clawwright/entry/resolve.ts";
+import { checkoutGate } from "../packages/clawwright/entry/registry.ts";
 import { pathToFileURL } from "node:url";
 import { resolve as pathResolve } from "node:path";
 

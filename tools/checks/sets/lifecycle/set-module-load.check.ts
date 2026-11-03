@@ -13,7 +13,7 @@ import { monorepoRoot } from "#framework/core/env.ts";
 import { check, finish, isolatedAppsRoot } from "#checks/kit/harness.ts";
 import { runProcess } from "#checks/kit/spawn.ts";
 
-const framework = (...parts: string[]) => resolve(monorepoRoot, "tools", "framework", ...parts);
+const framework = (...parts: string[]) => resolve(monorepoRoot, "packages", "clawwright", ...parts);
 const CYCLES: Record<string, string[]> = {
   // load.ts owns loading and integrity; install.ts imports it and must never be reached by
   // it — not even transitively (load.ts loads the acceptance grammar lazily for this reason).

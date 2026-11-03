@@ -198,14 +198,15 @@ try {
   // A checkout copy from apps/<name> two levels under a checkout root holding the launcher:
   // the geometry must exist inside the temp root, since the walk-up no longer finds the real
   // checkout from there. The markers checkoutGateIn() requires (entry/resolve.ts:241-250):
-  // tools/clawwright.ts beside tools/framework/package.json named @phpcraftdream/clawwright; plus
+  // tools/clawwright.ts beside packages/clawwright/package.json named @phpcraftdream/clawwright; plus
   // the ./clawwright launcher at the checkout root that the program spelling names. The
   // checkout is passed explicitly — classifyCopy() pins copy.path to the running checkout,
   // and bin.ts hands defaultInvocation() exactly this walked-to checkout (bin.ts:46).
   const fakeCheckout = resolve(apps.root, "synthetic-checkout");
-  await mkdir(resolve(fakeCheckout, "tools", "framework"), { recursive: true });
+  await mkdir(resolve(fakeCheckout, "tools"), { recursive: true });
+  await mkdir(resolve(fakeCheckout, "packages", "clawwright"), { recursive: true });
   await mkdir(resolve(fakeCheckout, "apps", "invocation-hints-probe"), { recursive: true });
-  await writeFile(resolve(fakeCheckout, "tools", "framework", "package.json"), JSON.stringify({ name: "@phpcraftdream/clawwright" }));
+  await writeFile(resolve(fakeCheckout, "packages", "clawwright", "package.json"), JSON.stringify({ name: "@phpcraftdream/clawwright" }));
   await writeFile(resolve(fakeCheckout, "tools", "clawwright.ts"), "");
   await writeFile(resolve(fakeCheckout, "clawwright"), "");
   const probeAppRoot = resolve(fakeCheckout, "apps", "invocation-hints-probe");

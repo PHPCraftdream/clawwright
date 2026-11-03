@@ -16,7 +16,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const moduleUrl = (name: string): string => new URL(`../../../../framework/${name}.ts`, import.meta.url).href;
+const moduleUrl = (name: string): string => new URL(`../../../../../packages/clawwright/${name}.ts`, import.meta.url).href;
 
 function runScript(script: string, input: string): Promise<ProcessResult> {
   return runProcess(process.execPath, ["--input-type=module", "-e", script], { cwd: tmpdir(), input: `${input}\n` });

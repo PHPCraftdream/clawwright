@@ -34,9 +34,9 @@ function renderAdviceAtOwnRoot(): string {
   const on: Invocation = { program: "./clawwright", mode: "checkout", audience: "terminal" };
   const files: Record<string, string> = {
     [`${root}/tools/clawwright.ts`]: "// gate",
-    [`${root}/tools/framework/package.json`]: JSON.stringify({ name: "@phpcraftdream/clawwright" }),
+    [`${root}/packages/clawwright/package.json`]: JSON.stringify({ name: "@phpcraftdream/clawwright" }),
   };
-  const dirs = [`${root}/tools`, `${root}/tools/framework`];
+  const dirs = [`${root}/packages`, `${root}/packages/clawwright`];
   const normalize = (path: string): string => path.replaceAll("\\", "/").replace(/^[A-Za-z]:/, "");
   const frame = {
     ...frameFromInvocation(on, { ...frameFacts(), cwd: root, places: { checkoutRoot: root } }),
@@ -538,14 +538,15 @@ async function gatewayPortOf(root: string): Promise<number> {
   const fake = join(base, "checkout");
   const newDep = join(fake, "apps", "newdep");
   await mkdir(newDep, { recursive: true });
-  await mkdir(resolve(fake, "tools", "framework"), { recursive: true });
-  await writeFile(resolve(fake, "tools", "framework", "package.json"), JSON.stringify({ name: "@phpcraftdream/clawwright" }), "utf8");
+  await mkdir(resolve(fake, "tools"), { recursive: true });
+  await mkdir(resolve(fake, "packages", "clawwright"), { recursive: true });
+  await writeFile(resolve(fake, "packages", "clawwright", "package.json"), JSON.stringify({ name: "@phpcraftdream/clawwright" }), "utf8");
   await writeFile(resolve(fake, "tools", "clawwright.ts"), "// gate", "utf8");
   try {
     const refused = await new Promise<string>((resolvePromise) => {
       const child = spawn(
         process.execPath,
-        ["--experimental-strip-types", resolve(monorepoRoot, "tools", "framework", "entry", "bin.ts"), "init"],
+        ["--experimental-strip-types", resolve(monorepoRoot, "packages", "clawwright", "entry", "bin.ts"), "init"],
         { cwd: newDep, stdio: ["ignore", "pipe", "pipe"] },
       );
       let output = "";
@@ -586,9 +587,9 @@ async function gatewayPortOf(root: string): Promise<number> {
   const nested = `${fakeRoot}/deep/nested/sub`;
   const files: Record<string, string> = {
     [`${fakeRoot}/tools/clawwright.ts`]: "// gate",
-    [`${fakeRoot}/tools/framework/package.json`]: JSON.stringify({ name: "@phpcraftdream/clawwright" }),
+    [`${fakeRoot}/packages/clawwright/package.json`]: JSON.stringify({ name: "@phpcraftdream/clawwright" }),
   };
-  const dirs = [`${fakeRoot}/tools`, `${fakeRoot}/tools/framework`, nested];
+  const dirs = [`${fakeRoot}/packages`, `${fakeRoot}/packages/clawwright`, nested];
   const normalize = (path: string): string => path.replaceAll("\\", "/").replace(/^[A-Za-z]:/, "");
   const fs: FsProbe = {
     exists: (path) => normalize(path) in files || dirs.includes(normalize(path)),

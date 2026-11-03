@@ -1,4 +1,4 @@
-// Builds tools/framework/ into a publishable npm package.
+// Builds packages/clawwright/ into a publishable npm package.
 //
 // This repo's own ./clawwright runs the framework's TypeScript directly, no build step —
 // but Node refuses to type-strip anything it loads from inside node_modules
@@ -6,7 +6,7 @@
 // .ts sources), so installed-as-dependency needs one. Node strips types for the JS build;
 // tsgo emits the declaration graph; both use published .js import paths.
 //
-// Output goes to tools/framework/dist/ by default — git-ignored, regenerated on demand, never
+// Output goes to packages/clawwright/dist/ by default — git-ignored, regenerated on demand, never
 // hand-edited. `build(outDir)` takes another root (the build-output check builds into an OS
 // temp dir so running a check never writes into the checkout); executing this file directly
 // (`npm run build`, the package's prepack) builds into the default.
@@ -18,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { stripTypeScriptTypes } from "node:module";
 
 const toolsDir = dirname(fileURLToPath(import.meta.url));
-const frameworkDir = resolve(toolsDir, "framework");
+const frameworkDir = resolve(toolsDir, "../packages/clawwright");
 const distDir = resolve(frameworkDir, "dist");
 const declarationConfig = resolve(frameworkDir, "tsconfig.declaration.json");
 const tsgo = resolve(frameworkDir, "../../node_modules/@typescript/native-preview/bin/tsgo");
@@ -40,7 +40,7 @@ async function collectTsFiles(dir: string): Promise<string[]> {
 
 /** Only rewrites the extension inside a quoted static/dynamic import/export specifier —
  *  never comments or unrelated strings, so this isn't a blanket ".ts" -> ".js" replace.
- *  Also resolves "#src/..." subpath imports (tools/framework/package.json's own "imports"
+ *  Also resolves "#src/..." subpath imports (packages/clawwright/package.json's own "imports"
  *  map, source-tree only) down to a plain relative path — dist/ ships with no package.json
  *  of its own, so nothing in it can rely on "#src/" resolving at runtime. */
 function rewriteSpecifiers(code: string, fileDir: string, sourceRoot = frameworkDir): string {
@@ -103,7 +103,7 @@ async function collectFiles(dir: string, suffix: string): Promise<string[]> {
   return files;
 }
 
-/** Builds the package into `outDir` (default tools/framework/dist/), replacing whatever is there. */
+/** Builds the package into `outDir` (default packages/clawwright/dist/), replacing whatever is there. */
 export async function build(outDir: string = distDir): Promise<void> {
   outDir = resolve(outDir);
   await rm(outDir, { recursive: true, force: true });

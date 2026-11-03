@@ -1,4 +1,4 @@
-// A file under tools/framework must not mix `#src/` subpath imports (package.json's own
+// A file under packages/clawwright must not mix `#src/` subpath imports (package.json's own
 // "imports" map, framework-root-relative) with `../` relative imports — one style per file,
 // so a reader does not have to hold two path grammars for the same module.
 
@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { check, finish } from "#checks/kit/harness.ts";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../..");
-const frameworkRoot = resolve(repoRoot, "tools", "framework");
+const frameworkRoot = resolve(repoRoot, "packages", "clawwright");
 
 async function walk(dir: string): Promise<string[]> {
   const files: string[] = [];
@@ -43,5 +43,5 @@ for (const file of files.sort()) {
   if (hasSrcStyle && hasRelativeStyle) offenders.push(relative(repoRoot, file).replaceAll("\\", "/"));
 }
 
-check("no file under tools/framework mixes #src/ and ../ imports", offenders, []);
+check("no file under packages/clawwright mixes #src/ and ../ imports", offenders, []);
 finish("import style");

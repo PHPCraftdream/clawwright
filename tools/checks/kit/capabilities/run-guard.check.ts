@@ -78,8 +78,8 @@ check(
 
 check(
   "a tracked or untracked change is named by its porcelain line",
-  diffSnapshots(snapshot(), snapshot({ gitStatus: " M tools/framework/core/env.ts\n" })),
-  ["git status gained:  M tools/framework/core/env.ts"],
+  diffSnapshots(snapshot(), snapshot({ gitStatus: " M packages/clawwright/core/env.ts\n" })),
+  ["git status gained:  M packages/clawwright/core/env.ts"],
 );
 check(
   "gained and lost porcelain lines are both listed, sorted",
@@ -131,7 +131,7 @@ const root = await mkdtemp(join(tmpdir(), "clawwright-runguard-"));
 try {
   const git = await runProcess("git", ["init", "-q"], { cwd: root, timeoutMs: 60_000 });
   if (git.code !== 0) throw new Error("throwaway git init failed: " + git.output);
-  await writeFile(join(root, ".gitignore"), ".claude/\n*.token\nnode_modules/\ntools/framework/dist/\n");
+  await writeFile(join(root, ".gitignore"), ".claude/\n*.token\nnode_modules/\npackages/clawwright/dist/\n");
   const apps = join(root, "apps");
   await mkdir(join(apps, "existing"), { recursive: true });
   await writeFile(join(apps, "existing", "data.env"), "alpha\n");
@@ -197,10 +197,10 @@ try {
 
     // dist is no longer pruned: a file written there between snapshots is reported.
     const beforeDist = await snapshotCheckout(root);
-    await mkdir(join(root, "tools", "framework", "dist", "entry"), { recursive: true });
-    await writeFile(join(root, "tools", "framework", "dist", "entry", "bin.js"), "AAAA");
+    await mkdir(join(root, "packages", "clawwright", "dist", "entry"), { recursive: true });
+    await writeFile(join(root, "packages", "clawwright", "dist", "entry", "bin.js"), "AAAA");
     const afterDist = await snapshotCheckout(root);
-    check("a new file under tools/framework/dist is reported", diffSnapshots(beforeDist, afterDist).some((line) => line.includes("tools/framework/dist/entry/bin.js")), true);
+    check("a new file under packages/clawwright/dist is reported", diffSnapshots(beforeDist, afterDist).some((line) => line.includes("packages/clawwright/dist/entry/bin.js")), true);
   }
 
   await requires("symlink", "the walk records symlinks without following them", async () => {

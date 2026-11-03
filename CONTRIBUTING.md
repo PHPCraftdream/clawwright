@@ -42,16 +42,32 @@ before a release.
 
 ### CI tiers
 
-CI runs two tiers. The full suite gates pull requests, the nightly `schedule` on `main`, and
-`workflow_dispatch` runs with the `full` input. The fast tier — typecheck, lint, and
-`check --related` against `origin/main`, which includes the always-run fast tier of checks —
-runs on pushes to `main` and on a dispatch without `full`. A branch gets CI through its pull
-request only: a push run beside the pull-request run would just repeat it. A merge to `main`
-already passed the full tier in its pull request; anything two merged pull requests break only
-together is caught by the nightly full run. A newer run of the same event and ref cancels the
-older one. Because `--related` needs the merge-base, CI checks out with full depth, computes
-the merge-base with `origin/main` explicitly, and passes it as `--base`. Each job prints the check timing summary (`check --timings`)
-at the end of its log, also on failure.
+CI runs two tiers. Feature pushes, pull requests and manual runs without `full` use the
+fast tier: typecheck, lint, mandatory license audit and `check --related`, including its
+always-run checks. The exact base is the PR base SHA or the push's previous SHA. A manual
+feature run can supply `base_ref`; only a missing/zero base falls back to the merge-base
+with `origin/main`. Full-depth checkout and commit validation are mandatory. Unknown or
+unresolvable revisions fail instead of silently skipping checks. Pull-request checks cover
+the complete integration delta, while push checks cover the new feature delta.
+
+At sprint completion, put `[ci:full]` in the pushed HEAD commit message, in its subject
+or body, to request the full tier instead of scoped checks. GitHub's `contains` comparison
+is case-insensitive; use the lowercase spelling consistently. For example, add a separate
+paragraph with `git commit -m "feat: complete the sprint" -m "[ci:full]"`. Do not mention
+the token incidentally in an ordinary feature commit. Only push events evaluate this
+commit token; PR checks stay diff-scoped. Branch names alone never select full verification.
+
+Manual full verification remains available through **Actions -> CI -> Run workflow**,
+selecting the branch and `full=true`, or `gh workflow run ci.yml --ref <branch> -f full=true`.
+Watch its result with background `gh run watch <run-id> --exit-status`. There is no nightly
+full run and a green feature run does not establish full readiness. Full still includes
+SSH/Docker/WSL capability provisioning, controls shards, package/system-install checks and
+candidate artifacts; publishing retains its separate full verification. Do not remove
+required branch checks or treat scoped results as proof that the full suite passed.
+
+Newer runs cancel older runs only within the same event, ref and tier. Ordinary scoped
+pushes cannot cancel marked or manual full verification. Each job prints `check --timings`
+at the end, including failures. Do not request full runs for each feature.
 
 ## Writing a check
 
@@ -196,7 +212,7 @@ Pick the run by the moment, not by habit:
 | A task is done, before committing | `npm run check:fast` | type check, lint, the always-run structural checks (layout, architecture ratchets, static hygiene, needs) and the checks related to the diff |
 | A change touches a command declaration, the MCP surface, goldens, docs or packaging | add the family explicitly: `./clawwright check mcp golden completion flags property binder help docs packaging` | whole-surface checks are reached by rules, not by imports |
 | A stage or sprint ends, before a push to `main` or a release | the full suite: `npm test` | the gate; invisible dependencies are only covered here |
-| A push to a feature branch | open a pull request: CI runs the full tier on it (a branch without a pull request gets no CI run) | see "CI tiers" |
+| A push to a feature branch | CI runs the fast tier against the previous push SHA; a PR also checks the integration delta | see "CI tiers" |
 
 Read the exit code of the run itself, not the tail of its output: a pipeline reports the last
 command's status, and the summary line of a long log hides a failed file above it.
@@ -231,7 +247,7 @@ as JSON for upload as an artifact; `OC_CHECK_TIMINGS=off` disables the repositor
 
 ## CI jobs and the host × target matrix
 
-`.github/workflows/ci.yml` runs four jobs on every pull request, `main` push and nightly run (see "CI tiers" above), one per named cell of the
+`.github/workflows/ci.yml` runs four native-host jobs on feature pushes, pull requests and manual runs (see "CI tiers" above), one per named cell of the
 host × target matrix in `docs/guide/requirements.md` ("Windows, `local`" is refused by the
 framework itself, so it has no job); `.github/workflows/windows-full.yml` is a fifth,
 manual (`workflow_dispatch`) job on a self-hosted runner with a real WSL2 distro and Docker.
@@ -267,7 +283,7 @@ change; it needs Docker (Desktop on Windows/macOS, Engine on Linux) and otherwis
 the next step rather than failing unhelpfully. It reproduces the ubuntu job's checks and
 typecheck/lint steps inside the official `node:24` image, from a clean `git
 ls-files -co --exclude-standard` snapshot (never the host's own `node_modules/` or
-`tools/framework/dist/`) — never the whole working tree. Filter it exactly like `check`:
+`packages/clawwright/dist/`) — never the whole working tree. Filter it exactly like `check`:
 `npm run check:linux -- backup`. It does not install Docker inside the container or mount the
 host's Docker socket, so the handful of checks that specifically probe for a local Docker
 daemon skip their tool-dependent assertions here, the same as they do on a bare runner with no
@@ -281,20 +297,20 @@ module — hitting either one means the directory has stopped mapping onto a sin
 the fix is to regroup by meaning: pull the files that share a real topic into a named
 subdirectory (`runtime/docker/` for the Docker runtime and its diagnostics, `security/privacy/`
 for what must never leave a deployment, and so on), not to drop a new file into whichever
-directory still has a free slot. `tools/checks/` mirrors `tools/framework/` by meaning, not by
+directory still has a free slot. `tools/checks/` mirrors `packages/clawwright/` by meaning, not by
 identical paths: a check lives next to the concept it tests, not necessarily inside a
-directory of the same name as the module it happens to import. `tools/framework/` itself has
+directory of the same name as the module it happens to import. `packages/clawwright/` itself has
 no source files of its own directly under it, so the cap does not apply at that root — new
 top-level groupings still need a name that describes what belongs there, not "wherever fits".
 
 A command a message, an error or a `details` text tells the user to run goes through the advice model and its one
-renderer (`tools/framework/core/io/invocation/` — `command`/`shellLine`/`manual` as data, `renderAdvice`/`commandLine`
+renderer (`packages/clawwright/core/io/invocation/` — `command`/`shellLine`/`manual` as data, `renderAdvice`/`commandLine`
 as text); a hand-written program spelling freezes one invocation into every other one. A line for another shell, host
 or scheduler is `shellLine` and nothing rewrites it — cron, `schtasks` and a remote `deploy` line reach the output layer
 exactly as built. Help prose names a command as a `{clawwright …}` token and its own flags as `{--flag}`, so one text
 reads right under every invocation. The ratchets in `tools/checks/architecture/` enforce this: a literal program
 spelling outside the renderer fails `check architecture` (`dotClawwrightLiterals`), and
-`tools/framework/core/io/invocation/render.ts` is the only exemption that table names.
+`packages/clawwright/core/io/invocation/render.ts` is the only exemption that table names.
 
 The command table in `docs/guide/commands.md`, between its `<!-- commands:begin … -->` and
 `<!-- commands:end -->` markers, and the command list in `README.md`, between its
@@ -337,7 +353,7 @@ unchanged product.
 
 A check's expectation must not be computed by the same product function or table the check
 guards. When the EXPECTED operand and the ACTUAL operand of a `check()`/`assert.*` call share
-a symbol imported from `tools/framework`, one product mutation moves both sides and the
+a symbol imported from `packages/clawwright`, one product mutation moves both sides and the
 assertion can no longer fail — it restates the product instead of guarding it (review rounds
 18-19: `CRONTAB_FAILURES[28] ?? SCHEDULER_TRANSACTION_FAILED`, `engineDistroNote(...)`,
 `crontabUpdateFailure(...)` used as expectations). Prefer an independent expectation: a
@@ -377,7 +393,7 @@ ratchet. New prose ratchets are written against the tokenizer.
 ## Pull requests
 
 Explain the user-visible behavior, security implications, and validation performed. Keep
-generated `tools/framework/dist/` output out of commits. Do not include `.env`, secret stores,
+generated `packages/clawwright/dist/` output out of commits. Do not include `.env`, secret stores,
 archives, snapshots, MCP client settings, or deployment data.
 
 Changes to archive extraction, remote commands, MCP dispatch, credentials, ownership, or

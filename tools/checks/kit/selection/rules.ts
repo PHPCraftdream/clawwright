@@ -47,7 +47,7 @@ export function matchGlob(pattern: string, path: string): boolean {
 // --- the rule table -----------------------------------------------------------------------------
 
 /** Check files that exercise the framework by spawning the CLI as a child process; the spawn
- *  boundary erases the import edge from tools/framework to their assertions. */
+ *  boundary erases the import edge from packages/clawwright to their assertions. */
 const SPAWN_BASED_CHECKS: readonly string[] = [
   "foundation/cli/cli-help.check.ts",
   "foundation/cli/gate-dispatch.check.ts",
@@ -78,7 +78,7 @@ const SPAWN_BASED_CHECKS: readonly string[] = [
 /** The rule table, in table order. */
 export const RULES: readonly Rule[] = [
   {
-    changed: ["tools/framework/**"],
+    changed: ["tools/clawwright.ts", "packages/clawwright/**", "tools/dev/**"],
     select: SPAWN_BASED_CHECKS,
     reason: "these checks spawn the CLI as a child process, so no import edge ties them to framework files",
   },
@@ -93,7 +93,7 @@ export const RULES: readonly Rule[] = [
     reason: "golden expectations live next to the check as committed fixtures, not as an import graph edge",
   },
   {
-    changed: ["package.json", "package-lock.json", "tsconfig.json", ".github/**"],
+    changed: ["package.json", "package-lock.json", "tsconfig.json", "tools/build-framework-package.ts", ".github/**"],
     select: ["foundation/packaging/", "release/release/", "foundation/layout.check.ts"],
     reason: "packaging, release and layout checks read repo-level config and CI files directly, never via imports",
   },
@@ -103,7 +103,7 @@ export const RULES: readonly Rule[] = [
     reason: "the workflow-structure check parses ci.yml as text, with no import edge from the YAML",
   },
   {
-    changed: ["tools/framework/commands/**"],
+    changed: ["packages/clawwright/commands/**"],
     select: [
       "integration/mcp/",
       "golden/",

@@ -82,6 +82,19 @@ Every installed distribution is probed; one that could not be reached, or a dist
 listing that failed outright, is reported by name too — an unanswered probe is never read as
 "not exposed".
 
+## CLI process identity
+
+The one-shot `cli` and persistent `cli-helper` services share the gateway's PID namespace as
+well as its network and state mounts. OpenClaw's state-owner locks record process IDs and
+start times: a process in a different PID namespace can mistake a live owner for a stale
+one and invalidate the gateway's SQLite ownership during an inspection. Sharing only files
+and networking is not sufficient.
+
+This is `pid: service:gateway`, never host PID access or privileged mode. Existing helpers
+must be recreated when adopting this definition. If an earlier sidecar already invalidated
+the state-owner lock, stop that helper and restart the gateway before checking again; do not
+delete live locks or weaken ownership validation.
+
 ## Target userland
 
 The GNU/Linux-specific commands above assume a *GNU* userland specifically — being Linux is
@@ -113,7 +126,7 @@ target-reached sibling of `LOCAL_TARGET_UNSUPPORTED` above. It is checked only b
   quoting, file round trips, a timeout that actually ends the target process, unreachable-target
   classification — and three capability-gated files run it against a real
   `LocalTransport`/`WslTransport`/`SshTransport`: `local.check.ts` (needs `linux-host`),
-  `wsl.check.ts` (needs `wsl` + `windows-host`), `ssh.check.ts` (needs `ssh-loopback`). Each
+  `wsl.check.ts` (needs `wsl` + `windows-host`), `remote/ssh.check.ts` (needs `ssh-loopback`). Each
   skips with a `SKIP` line, not a failure, on a host that cannot satisfy it.
 * **`npm run check:linux`** — reproduces `ci.yml`'s Linux job inside the official `node:24`
   Docker image, on any host that has Docker: the closest thing to running the Linux-host row

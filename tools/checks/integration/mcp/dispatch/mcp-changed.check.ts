@@ -14,7 +14,7 @@ const tally = stageTally();
 // Resolve against the monorepo root, not process.cwd(): the check is invoked from tools/,
 // where cwd-relative "tools/..." would double the segment and the child's imports would
 // fail with ERR_MODULE_NOT_FOUND before any PIPELINE_STAGE line.
-const moduleUrl = (name: string): string => pathToFileURL(join(monorepoRoot, "tools", "framework", name)).href;
+const moduleUrl = (name: string): string => pathToFileURL(join(monorepoRoot, "packages", "clawwright", name)).href;
 const script = (root: string): string => `
   const { serveMcp } = await import(${JSON.stringify(moduleUrl("integration/mcp/server.ts"))});
   const { useDeployment } = await import(${JSON.stringify(moduleUrl("runtime/deployment.ts"))});

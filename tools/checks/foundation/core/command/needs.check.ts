@@ -284,22 +284,36 @@ try {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) { await sweep(path); continue; }
       const rel = relative(monorepoRoot, path).split("\\").join("/");
-      if (!entry.name.endsWith(".ts") || rel === "tools/framework/core/env.ts") continue;
+      if (!entry.name.endsWith(".ts") || rel === "packages/clawwright/core/env.ts") continue;
       (await readFile(path, "utf8")).split("\n").forEach((line, index) => {
         if (/\breadFile\([ \t]*envFile\(\)/.test(line)) offenders.push(`${rel}:${index + 1}`);
       });
     }
   };
-  await sweep(join(monorepoRoot, "tools", "framework"));
+  await sweep(join(monorepoRoot, "packages", "clawwright"));
   check("no product file reads envFile() past the counted reader", offenders, []);
 
   await writeFile(memoryDeclarationPath, memoryDeclaration, "utf8");
   // Before the target sweep, use syntactically valid but Settings-invalid content. Its
   // strict parse lets bootstrap provision, then context refuses for missing OC_DATA_DIR.
   await writeFile(join(fixtureRoot, ".env"), "SOME_KEY=value\n", "utf8");
+  const templatePath = join(fixtureRoot, "text-template.txt");
+  await writeFile(templatePath, `{"$ssjack":{"format":"ssjack-secret-ref-v1","object_id":"${"a".repeat(32)}","snapshot_id":"${"a".repeat(32)}","store_id":"${"a".repeat(32)}","version_id":"${"a".repeat(32)}"}}`, "utf8");
   const impossible: string[] = [];
 
-  for (const unit of units.filter((candidate) => needsOf(candidate) !== "local")) {
+  for (const unit of units.filter((candidate) => needsOf(candidate) === "nothing")) {
+    const built = validArgs(unit, fixture.root);
+    if ("template" in built.args) built.args.template = templatePath;
+    if ("file" in built.args) built.args.file = "fixture.txt";
+    if ("profile" in built.args) built.args.profile = "fixture.profile";
+    resetEnvReads();
+    if (built.reason) impossible.push(`${unit.label}: ${built.reason}`);
+    const result = await runNamed(unit.command, built.args);
+    checkTrue(`${unit.label}: needs nothing reaches run without reading .env or contacting target`,
+      result.execution.stage === "run" && envReads() === 0 && result.contacts.length === 0);
+  }
+
+  for (const unit of units.filter((candidate) => needsOf(candidate) !== "local" && needsOf(candidate) !== "nothing")) {
     const setup = unit.command === "memory" && unit.action === "setup";
     if (setup) await writeFile(memoryDeclarationPath, JSON.stringify([
       { path: "memory.backend", value: "builtin" }, { path: "agents.defaults.memorySearch", value: { enabled: true, provider: "local", model: "/home/node/.openclaw/models/model.gguf", fallback: "none", local: { modelPath: "/home/node/.openclaw/models/model.gguf" }, query: { hybrid: { enabled: true } }, store: { vector: { enabled: true } } } },

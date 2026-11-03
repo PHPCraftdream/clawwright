@@ -1,27 +1,14 @@
 /// <reference lib="es2024.promise" />
 // Real CLI dispatch and control-mcp stdio; only the external Docker executable is replaced.
 // The fixture reads bounded logs from disk and executes a child option consumer, not argv echoes.
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import assert from "node:assert/strict";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { main } from "#framework/entry/cli.ts";
-import { openclawCommands } from "#framework/commands/interface/index.ts";
-import { useDeployment } from "#framework/runtime/deployment.ts";
-import { LocalTransport, spawnLocal, hostPlatform, type ExecOptions } from "#framework/runtime/transport/transport.ts";
-import { check, finish } from "#checks/kit/harness.ts";
+import { check, finish, requires } from "#checks/kit/harness.ts";
 import { runProcess } from "#checks/kit/spawn.ts";
-
-const self = fileURLToPath(import.meta.url);
-if (process.argv[2] === "--dispatch") {
-  const [root, shim, ...argv] = process.argv.slice(3);
-  useDeployment(root);
-  hostPlatform.current = "linux"; // Controlled executable, not a real local target.
-  LocalTransport.prototype.exec = function (command: string, args: string[], options: ExecOptions = {}) {
-    return spawnLocal(process.execPath, [shim, root, command, ...args], options);
-  };
-  await main({ name: "literal-options", description: "Controlled argument consumer", commands: openclawCommands, service: { name: "gateway" } }, argv);
-} else {
+const dispatch = fileURLToPath(new URL("../progress/option-dispatch.ts", import.meta.url));
   // Every dispatch gets its own throwaway deployment root with identical fixture content: the
   // runs go concurrent (at most four children at once), so no two children may share a writable
   // root — each root carries the same .env/logs.txt/shim and a pre-created data directory.
@@ -31,9 +18,23 @@ if (process.argv[2] === "--dispatch") {
     await writeFile(join(root, ".env"), `OC_TARGET_LOCATION=local\nOC_DATA_DIR=${join(root, "data")}\nOC_COMPOSE_PROJECT=literal-options\nOPENCLAW_GATEWAY_TOKEN=controlled-fixture-only\n`);
     await writeFile(join(root, "logs.txt"), "diagnostic --tail=5\nunrelated line\n");
     await writeFile(shim, `
-import { mkdirSync, readFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
+import { dirname, isAbsolute, relative, resolve } from 'node:path';
 const [root, command, ...args] = process.argv.slice(2);
-if (command === 'mkdir') mkdirSync(args.at(-1), { mode: 0o700 });
+function fixtureTarget(path) {
+  const base = realpathSync(root);
+  const target = resolve(base, relative(resolve(root), resolve(path)));
+  const inside = p => { const r = relative(base, p); return r !== '' && r !== '..' && !r.startsWith('../') && !r.startsWith('..\\\\') && !isAbsolute(r); };
+  if (!inside(target)) throw new Error('FIXTURE_OUTSIDE_ROOT');
+  let parent = target;
+  while (parent !== base) {
+    try { const info = lstatSync(parent); if (info.isSymbolicLink()) throw new Error('FIXTURE_SYMLINK'); const actual = realpathSync(parent); if (actual !== base && !inside(actual)) throw new Error('FIXTURE_OUTSIDE_ROOT'); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    parent = dirname(parent);
+  }
+  return target;
+}
+if (command === 'mkdir') mkdirSync(fixtureTarget(args.at(-1)), { mode: 0o700 });
 else if (command !== 'docker') process.exit(90);
 else if (args[0] === 'ps' || (args[0] === 'compose' && args.includes('ps'))) process.stdout.write('fixture-container\\n');
 else if (args[0] === 'inspect') process.stdout.write('true healthy\\n');
@@ -54,17 +55,54 @@ else if (args[0] === 'compose' && args.includes('logs')) {
   }
   async function run(argv: string[], input = ""): Promise<{ code: number | null; stdout: string; stderr: string }> {
     const root = await mkdtemp(join(tmpdir(), "clawwright-option-literals-"));
-    await fillFixture(root);
-    const shim = join(root, "docker-fixture.mjs");
     try {
-    const result = await runProcess(process.execPath, ["--experimental-strip-types", self, "--dispatch", root, shim, ...argv], {
-      cwd: root, env: { ...process.env, OC_DEBUG: "0" }, input, timeoutMs: 60000,
-    });
-    if (result.error !== undefined) throw result.error;
-    return result;
+      await fillFixture(root);
+      const shim = join(root, "docker-fixture.mjs");
+      const result = await runProcess(process.execPath, ["--experimental-strip-types", dispatch, root, shim, ...argv], {
+        cwd: root, env: { ...process.env, OC_DEBUG: "0" }, input, timeoutMs: 60000,
+      });
+      if (result.error !== undefined) throw result.error;
+      return result;
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  }
+  const guardRoot = await mkdtemp(join(tmpdir(), "clawwright-option-guard-"));
+  let guardOutside: string | undefined;
+  try {
+    guardOutside = await mkdtemp(join(tmpdir(), "clawwright-option-outside-"));
+    await fillFixture(guardRoot);
+    const sentinel = join(guardOutside, "sentinel");
+    await writeFile(sentinel, "unchanged");
+    const shim = join(guardRoot, "docker-fixture.mjs");
+    const invoke = (target: string) => runProcess(process.execPath, [shim, guardRoot, "mkdir", target], { cwd: guardRoot, timeoutMs: 60000 });
+    const result = await invoke(join(guardOutside, "new"));
+    if (result.error !== undefined) throw result.error;
+    assert.notEqual(result.code, 0);
+    assert.match(result.stderr, /FIXTURE_OUTSIDE_ROOT/);
+    await assert.rejects(() => stat(join(guardOutside!, "new")), { code: "ENOENT" });
+    assert.equal(await readFile(sentinel, "utf8"), "unchanged");
+    const positive = join(guardRoot, "shim-positive");
+    const accepted = await invoke(positive);
+    if (accepted.error !== undefined) throw accepted.error;
+    assert.equal(accepted.code, 0, accepted.stderr);
+    assert.equal((await stat(positive)).isDirectory(), true);
+    await requires("symlink", "option shim refuses symlink ancestors", async () => {
+      await mkdir(join(guardRoot, "real-dir"));
+      await symlink(join(guardRoot, "real-dir"), join(guardRoot, "alias"), "junction");
+      const refused = await invoke(join(guardRoot, "alias", "new"));
+      if (refused.error !== undefined) throw refused.error;
+      assert.notEqual(refused.code, 0);
+      assert.match(refused.stderr, /FIXTURE_SYMLINK/);
+      await assert.rejects(() => stat(join(guardRoot, "real-dir", "new")), { code: "ENOENT" });
+    });
+    const overrides = await runProcess(process.execPath, ["--experimental-strip-types", dispatch, guardRoot, shim, "--fixture-guard-probe", guardOutside], { cwd: guardRoot, timeoutMs: 60000 });
+    if (overrides.error !== undefined) throw overrides.error;
+    assert.equal(overrides.code, 0, overrides.stderr);
+    assert.equal(overrides.stdout, "FIXTURE_GUARD_OK\n");
+  } finally {
+    try { await rm(guardRoot, { recursive: true, force: true }); }
+    finally { if (guardOutside !== undefined) await rm(guardOutside, { recursive: true, force: true }); }
   }
   // Each task below owns a disjoint set of checks and spawns its own child(ren) against its own
   // root, so the dispatches run concurrently with at most four children alive at a time. Only
@@ -121,4 +159,3 @@ else if (args[0] === 'compose' && args.includes('logs')) {
     for (let task = queue.shift(); task !== undefined; task = queue.shift()) await task();
   }));
   finish("literal options");
-}

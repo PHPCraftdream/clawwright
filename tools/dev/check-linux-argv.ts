@@ -63,11 +63,13 @@ export function buildRemoveArgv(containerName: string): string[] {
   return ["rm", "-f", containerName];
 }
 
-/** node_modules and tools/framework/dist must be built fresh in the container, not
+/** node_modules and packages/clawwright/dist must be built fresh in the container, not
  *  inherited from the dev machine — mirrors .gitignore, a defense-in-depth filter atop
  *  `git ls-files -co --exclude-standard`, which should already exclude both. */
 export function isHostArtifactPath(relPath: string): boolean {
-  return relPath.split("/").includes("node_modules") || relPath === "tools/framework/dist" || relPath.startsWith("tools/framework/dist/");
+  return relPath.split("/").includes("node_modules")
+    || relPath === "packages/clawwright/dist" || relPath.startsWith("packages/clawwright/dist/")
+    || relPath === "tools/framework/dist" || relPath.startsWith("tools/framework/dist/");
 }
 
 /** Cleans up `git ls-files -co --exclude-standard`'s raw stdout: drops blank lines (a

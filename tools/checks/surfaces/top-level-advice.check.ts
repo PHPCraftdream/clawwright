@@ -202,7 +202,7 @@ async function walk(dir: string): Promise<string[]> {
 
 const exemptLeft = new Map(Object.entries(EXEMPT).map(([file, entries]) => [file, new Set(Object.keys(entries))]));
 const offenders: string[] = [];
-for (const full of await walk(resolve(monorepoRoot, "tools", "framework"))) {
+for (const full of await walk(resolve(monorepoRoot, "packages", "clawwright"))) {
   const file = relative(monorepoRoot, full).split("\\").join("/");
   const source = await readFile(full, "utf8");
   const sourceLines = source.split("\n");

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { monorepoRoot } from "#framework/core/env.ts";
 import { check, finish } from "#checks/kit/harness.ts";
 
-const ROOTS = [join(monorepoRoot, "tools", "framework"), join(monorepoRoot, "docs", "guide")];
+const ROOTS = [join(monorepoRoot, "packages", "clawwright"), join(monorepoRoot, "docs", "guide")];
 const PHRASE = /serve\s+reset/g;
 
 const offenders: string[] = [];

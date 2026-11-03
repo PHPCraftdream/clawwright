@@ -76,9 +76,9 @@ const HEAD_SCAFFOLD_STORED = [
   "//",
   "// Run it with:  ./clawwright --app demo status",
   "",
-  "import { defineApp } from \"../../tools/framework/core/app.ts\";",
-  "import { mountPoints } from \"../../tools/framework/runtime/mounts.ts\";",
-  "import { openclawCommands } from \"../../tools/framework/commands/interface/index.ts\";",
+  "import { defineApp } from \"../../packages/clawwright/core/app.ts\";",
+  "import { mountPoints } from \"../../packages/clawwright/runtime/mounts.ts\";",
+  "import { openclawCommands } from \"../../packages/clawwright/commands/interface/index.ts\";",
   "",
   "export default defineApp({",
   "  name: \"demo\",",
@@ -349,19 +349,19 @@ check("a checkout-rooted job runs the checkout shim at the checkout root",
 // scheduledTargetFrame / the fixed shim launch in init.ts).
 
 const DURABLE_MODULES = [
-  "tools/framework/commands/operate/schedule.ts",
-  "tools/framework/commands/operate/watch/install.ts",
-  "tools/framework/commands/lifecycle/backup/install.ts",
-  "tools/framework/integration/completion/index.ts",
-  "tools/framework/integration/completion/bash.ts",
-  "tools/framework/integration/completion/pwsh.ts",
-  "tools/framework/integration/deployment/init.ts",
-  "tools/framework/integration/deployment/scaffold.ts",
+  "packages/clawwright/commands/operate/schedule.ts",
+  "packages/clawwright/commands/operate/watch/install.ts",
+  "packages/clawwright/commands/lifecycle/backup/install.ts",
+  "packages/clawwright/integration/completion/index.ts",
+  "packages/clawwright/integration/completion/bash.ts",
+  "packages/clawwright/integration/completion/pwsh.ts",
+  "packages/clawwright/integration/deployment/init.ts",
+  "packages/clawwright/integration/deployment/scaffold.ts",
   // S1.5b: deploy's server-side lines spell from the remote checkout's own frame
   // (targetFrame in deploy/{sync,arguments}.ts); the operator-side ssh tunnel line and the
   // printed `deploy` mirror hint are spoken at the operator's own terminal, not stored.
-  "tools/framework/commands/management/deploy/sync.ts",
-  "tools/framework/commands/management/deploy/arguments.ts",
+  "packages/clawwright/commands/management/deploy/sync.ts",
+  "packages/clawwright/commands/management/deploy/arguments.ts",
 ] as const;
 
 function ambientReads(source: string): number {

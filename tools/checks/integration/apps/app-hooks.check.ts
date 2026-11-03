@@ -214,7 +214,7 @@ OPENCLAW_GATEWAY_TOKEN=synthetic-gateway-token
   assert.equal(applied, "APP_SECRET=from-store\n");
 
   // The MCP entry point receives the same hooks and dispatches a real command with them.
-  const moduleUrl = (name: string) => new URL(`../../../framework/${name}.ts`, import.meta.url).href;
+  const moduleUrl = (name: string) => new URL(`../../../../packages/clawwright/${name}.ts`, import.meta.url).href;
   const mcpScript = `
     const { serveMcp } = await import(${JSON.stringify(moduleUrl("integration/mcp/server"))});
     const { useDeployment } = await import(${JSON.stringify(moduleUrl("runtime/deployment"))});

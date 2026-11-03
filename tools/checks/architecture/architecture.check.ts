@@ -101,7 +101,7 @@ async function walk(dir: string): Promise<string[]> {
 
 const rel = (full: string): string => relative(root, full).split("\\").join("/");
 
-const frameworkFiles = await walk(resolve(root, "tools", "framework"));
+const frameworkFiles = await walk(resolve(root, "packages", "clawwright"));
 const checkFiles = (await walk(resolve(root, "tools", "checks")))
   .map(rel)
   .filter((file) => !file.startsWith("tools/checks/architecture/") && !file.startsWith("tools/checks/golden/"));
@@ -187,7 +187,7 @@ for (const selfCheck of SCANNER_SELF_CHECKS) {
   checkTrue(`scanner self-check: ${selfCheck.name}`, selfCheck.expect({ ...scan, imports: importedFrameworkSymbols(selfCheck.source) }));
 }
 
-// 1. `./clawwright` literals in tools/framework and in the checkout entry — stage 4
+// 1. `./clawwright` literals in packages/clawwright and in the checkout entry — stage 4
 // (Advice): the command name must reach output only through one renderer, so this goes to 0
 // outside it. An occurrence on an `exempt` line (the shim naming itself, the completion
 // registration) is left out of the per-file counts but still counted in the total, and the
@@ -223,7 +223,7 @@ for (const [file, lines] of exemptLeft) {
 report(perFileRatchet("dotClawwrightLiterals", baseline.dotClawwrightLiterals.files, literalAfter));
 report(ratchet("dotClawwrightLiterals.total", baseline.dotClawwrightLiterals.total, literalTotal, [], []));
 
-// 1a. The same literal in the static non-.ts product files under tools/framework (yml/yaml/
+// 1a. The same literal in the static non-.ts product files under packages/clawwright (yml/yaml/
 // sh/json/md/txt, plus dot/extensionless text files — .env.example ships into every
 // deployment) — the compose `:?` guard message named a program rendered by docker compose,
 // where it does not exist, and the .ts-only scan above never saw it. The dot/extensionless
@@ -255,7 +255,7 @@ const nonTsExemptLeft = new Map<string, Map<string, number>>(
 );
 const nonTsAfter = new Map<string, number>();
 let nonTsTotal = 0;
-for (const full of await walkTextFiles(resolve(root, "tools", "framework"))) {
+for (const full of await walkTextFiles(resolve(root, "packages", "clawwright"))) {
   const content = await readFile(full, "utf8");
   const left = nonTsExemptLeft.get(rel(full));
   let counted = 0;
@@ -300,13 +300,13 @@ interface ProseSource {
 /** The files that own a proseFlags count: the five command groups plus the two gate
  *  declarations whose details are read from a module rather than a group file. */
 const PROSE_SOURCES: Record<string, readonly ProseSource[]> = {
-  "tools/framework/commands/interface/groups/openclawCommands.lifecycle.ts": Object.values(lifecycleCommands),
-  "tools/framework/commands/interface/groups/openclawCommands.management.ts": Object.values(managementCommands),
-  "tools/framework/commands/interface/groups/openclawCommands.orchestration.ts": Object.values(orchestrationCommands),
-  "tools/framework/commands/interface/groups/openclawCommands.operate.ts": Object.values(operateCommands),
-  "tools/framework/commands/interface/groups/openclawCommands.sets.ts": Object.values(setsCommands),
-  "tools/framework/entry/checkout-gate.ts": checkoutGateCommands,
-  "tools/framework/integration/version.ts": [versionGateCommand],
+  "packages/clawwright/commands/interface/groups/openclawCommands.lifecycle.ts": Object.values(lifecycleCommands),
+  "packages/clawwright/commands/interface/groups/openclawCommands.management.ts": Object.values(managementCommands),
+  "packages/clawwright/commands/interface/groups/openclawCommands.orchestration.ts": Object.values(orchestrationCommands),
+  "packages/clawwright/commands/interface/groups/openclawCommands.operate.ts": Object.values(operateCommands),
+  "packages/clawwright/commands/interface/groups/openclawCommands.sets.ts": Object.values(setsCommands),
+  "packages/clawwright/entry/checkout-gate.ts": checkoutGateCommands,
+  "packages/clawwright/integration/version.ts": [versionGateCommand],
 };
 /** Every name the dispatcher can resolve: a code span quoting one of them is our own prose,
  *  anything else (`openclaw channels status --json`, `tailscale status --json`) belongs to
@@ -429,7 +429,7 @@ const imageExemptLeft = new Map<string, Map<string, number>>(
 const imageAfter = new Map<string, number>();
 let imageTotal = 0;
 for (const full of frameworkFiles) {
-  if (rel(full) === "tools/framework/runtime/docker/image-ref.ts") continue;
+  if (rel(full) === "packages/clawwright/runtime/docker/image-ref.ts") continue;
   const content = await readFile(full, "utf8");
   const left = imageExemptLeft.get(rel(full));
   let counted = 0;
@@ -581,7 +581,7 @@ const RAW_SCAN = new RegExp([
   String.raw`new Set\(${ARGV_RECEIVER}\)\.has`,
   String.raw`\b${ARGV_RECEIVER}\.join\(" "\)`,
 ].join("|"));
-const rawScanRoots = ["entry", "integration", "core", "commands"].map((dir) => resolve(root, "tools", "framework", dir));
+const rawScanRoots = ["entry", "integration", "core", "commands"].map((dir) => resolve(root, "packages", "clawwright", dir));
 const rawScanExemptLeft = new Map<string, Map<string, number>>(
   Object.entries(baseline.rawArgvScans.exempt).map(([file, entry]) => [file, new Map(Object.entries(entry.lines))]),
 );
@@ -623,7 +623,7 @@ report(perFileRatchet("rawArgvScans", baseline.rawArgvScans.files, rawScanAfter)
 report(ratchet("rawArgvScans.total", baseline.rawArgvScans.total, rawScanTotal, [], []));
 
 // 10. ownProductExpectations — stage 7 S0.5 (independent expectations): the EXPECTED operand
-// of a check()/assert.* must not be computed from the same tools/framework symbol the ACTUAL
+// of a check()/assert.* must not be computed from the same packages/clawwright symbol the ACTUAL
 // operand uses — one product mutation would move both sides. Exempt: a file a registered
 // negative control covers (controls.ts `check` field), and a `// control: <id>` marker for
 // an existing control id; every exemption is printed, an unknown control id fails here.

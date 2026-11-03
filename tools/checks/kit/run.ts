@@ -172,7 +172,7 @@ export interface CheckoutSnapshot {
 // Ignored space the guard does not chase: node_modules is installed dependency space, apps/ is
 // the deployment tree the walk above already covers, worktrees/ holds whole sibling checkouts on
 // hosts that have one, and .rush/ is the orchestration harness state (locks, sessions) that
-// concurrent rush runs rewrite. tools/framework/dist is observed like any other ignored space: no
+// concurrent rush runs rewrite. packages/clawwright/dist is observed like any other ignored space: no
 // check writes it (build-output and the release pack checks build into OS temp). The excludes
 // prune before git walks — the .check-timings.json entry keeps the git-status excludes consistent —
 // so the ignored pass stays as cheap as the tracked one. .check-timings.json is the runner's own

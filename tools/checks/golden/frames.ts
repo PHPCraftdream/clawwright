@@ -46,7 +46,7 @@ const DEMO = `${ROOT}/apps/demo`;
  *  with node:path and the host here may be Windows. */
 const LAYOUT = [
   `${ROOT}/tools/clawwright.ts`,
-  `${ROOT}/tools/framework/package.json`,
+  `${ROOT}/packages/clawwright/package.json`,
   `${ROOT}/clawwright`,
   `${DEMO}/app.ts`,
   `${APP_LOCAL}/app.ts`,

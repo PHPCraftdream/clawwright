@@ -78,7 +78,7 @@ try {
   assert.equal(recipesDir(), defaultRoot);
 
   // MCP dispatch uses the same application root as the console path.
-  const moduleUrl = (name: string) => new URL(`../../../framework/${name}.ts`, import.meta.url).href;
+  const moduleUrl = (name: string) => new URL(`../../../../packages/clawwright/${name}.ts`, import.meta.url).href;
   const script = `
     const { serveMcp } = await import(${JSON.stringify(moduleUrl("integration/mcp/server"))});
     const { useDeployment } = await import(${JSON.stringify(moduleUrl("runtime/deployment"))});

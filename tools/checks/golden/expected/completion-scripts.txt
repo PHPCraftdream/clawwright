@@ -3,7 +3,7 @@
 # Install: eval "$(./clawwright completion bash)"
 _clawwright_lookup() {
   case "$1" in
-      "top") _clawwright_reply="accept apply apply-config backup bootstrap check cli cli-start cli-stop completion configure-provider control-mcp deploy destroy doctor down exec expose files help host incident inspect list lock logs mcp-creds mcp-serve mcp-setup memory new-app operations plan provision-agent pull push recipe recover-env remove-app restart restore rollback secrets set smoke status up upgrade verify version watch --version -v --app" ;;
+      "top") _clawwright_reply="accept apply apply-config backup backup-text bootstrap check cli cli-start cli-stop completion configure-provider control-mcp deploy deploy-text destroy doctor down exec expose files help host incident inspect list lock logs mcp-creds mcp-serve mcp-setup memory new-app operations plan provision-agent pull push recipe recover-env remove-app restart restore rollback secrets set smoke status up upgrade verify version watch --version -v --app" ;;
     "first bootstrap") _clawwright_reply="--break-foreign-lock --break-lock --check --help --json --no-pull" ;;
     "first up") _clawwright_reply="--break-foreign-lock --break-lock --help" ;;
     "first restart") _clawwright_reply="--break-foreign-lock --break-lock --help" ;;
@@ -25,6 +25,8 @@ _clawwright_lookup() {
     "first rollback") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --help --json --no-restart --operation --previous-set" ;;
     "first operations") _clawwright_reply="--break-foreign-lock --break-lock --confirmed --help --json --limit --takeover-lock" ;;
     "first apply-config") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --dump --force --help --json" ;;
+    "first backup-text") _clawwright_reply="--file --help --output --profile" ;;
+    "first deploy-text") _clawwright_reply="--file --help --profile --template" ;;
     "first expose") _clawwright_reply="--help ssh status tailscale" ;;
     "first watch") _clawwright_reply="--help check install status test uninstall" ;;
     "first incident") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --help --json --keep-exposure --tail" ;;
@@ -54,7 +56,7 @@ _clawwright_lookup() {
     "first version") _clawwright_reply="--help --json --verbose" ;;
     "first completion") _clawwright_reply="--help bash pwsh zsh" ;;
     "first control-mcp") _clawwright_reply="--help" ;;
-    "first help") _clawwright_reply="--help accept apply apply-config backup bootstrap check cli cli-start cli-stop completion configure-provider control-mcp deploy destroy doctor down exec expose files help host incident inspect list lock logs mcp-creds mcp-serve mcp-setup memory new-app operations plan provision-agent pull push recipe recover-env remove-app restart restore rollback secrets set smoke status up upgrade verify version watch" ;;
+    "first help") _clawwright_reply="--help accept apply apply-config backup backup-text bootstrap check cli cli-start cli-stop completion configure-provider control-mcp deploy deploy-text destroy doctor down exec expose files help host incident inspect list lock logs mcp-creds mcp-serve mcp-setup memory new-app operations plan provision-agent pull push recipe recover-env remove-app restart restore rollback secrets set smoke status up upgrade verify version watch" ;;
     "after bootstrap *") _clawwright_reply="--break-foreign-lock --break-lock --check --help --json --no-pull" ;;
     "after up *") _clawwright_reply="--break-foreign-lock --break-lock --help" ;;
     "after restart *") _clawwright_reply="--break-foreign-lock --break-lock --help" ;;
@@ -81,6 +83,8 @@ _clawwright_lookup() {
     "after rollback *") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --help --json --no-restart --operation --previous-set" ;;
     "after operations *") _clawwright_reply="--break-foreign-lock --break-lock --confirmed --help --json --limit --takeover-lock" ;;
     "after apply-config *") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --dump --force --help --json" ;;
+    "after backup-text *") _clawwright_reply="--file --help --output --profile" ;;
+    "after deploy-text *") _clawwright_reply="--file --help --profile --template" ;;
     "after expose ssh") _clawwright_reply="--help --local-port --run" ;;
     "after expose tailscale") _clawwright_reply="--apply --break-foreign-lock --break-lock --help" ;;
     "after expose status") _clawwright_reply="--help --json" ;;
@@ -173,6 +177,8 @@ _clawwright_lookup() {
     "valueOptions rollback") _clawwright_reply="--operation --break-foreign-lock" ;;
     "valueOptions operations") _clawwright_reply="--limit --break-foreign-lock" ;;
     "valueOptions apply-config") _clawwright_reply="--break-foreign-lock" ;;
+    "valueOptions backup-text") _clawwright_reply="--file --output --profile" ;;
+    "valueOptions deploy-text") _clawwright_reply="--file --template --profile" ;;
     "valueOptions expose") _clawwright_reply="--local-port --break-foreign-lock" ;;
     "valueOptions watch") _clawwright_reply="--interval --break-foreign-lock" ;;
     "valueOptions incident") _clawwright_reply="--tail --break-foreign-lock" ;;
@@ -283,7 +289,7 @@ autoload -Uz bashcompinit
 bashcompinit
 _clawwright_lookup() {
   case "$1" in
-      "top") _clawwright_reply="accept apply apply-config backup bootstrap check cli cli-start cli-stop completion configure-provider control-mcp deploy destroy doctor down exec expose files help host incident inspect list lock logs mcp-creds mcp-serve mcp-setup memory new-app operations plan provision-agent pull push recipe recover-env remove-app restart restore rollback secrets set smoke status up upgrade verify version watch --version -v --app" ;;
+      "top") _clawwright_reply="accept apply apply-config backup backup-text bootstrap check cli cli-start cli-stop completion configure-provider control-mcp deploy deploy-text destroy doctor down exec expose files help host incident inspect list lock logs mcp-creds mcp-serve mcp-setup memory new-app operations plan provision-agent pull push recipe recover-env remove-app restart restore rollback secrets set smoke status up upgrade verify version watch --version -v --app" ;;
     "first bootstrap") _clawwright_reply="--break-foreign-lock --break-lock --check --help --json --no-pull" ;;
     "first up") _clawwright_reply="--break-foreign-lock --break-lock --help" ;;
     "first restart") _clawwright_reply="--break-foreign-lock --break-lock --help" ;;
@@ -305,6 +311,8 @@ _clawwright_lookup() {
     "first rollback") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --help --json --no-restart --operation --previous-set" ;;
     "first operations") _clawwright_reply="--break-foreign-lock --break-lock --confirmed --help --json --limit --takeover-lock" ;;
     "first apply-config") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --dump --force --help --json" ;;
+    "first backup-text") _clawwright_reply="--file --help --output --profile" ;;
+    "first deploy-text") _clawwright_reply="--file --help --profile --template" ;;
     "first expose") _clawwright_reply="--help ssh status tailscale" ;;
     "first watch") _clawwright_reply="--help check install status test uninstall" ;;
     "first incident") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --help --json --keep-exposure --tail" ;;
@@ -334,7 +342,7 @@ _clawwright_lookup() {
     "first version") _clawwright_reply="--help --json --verbose" ;;
     "first completion") _clawwright_reply="--help bash pwsh zsh" ;;
     "first control-mcp") _clawwright_reply="--help" ;;
-    "first help") _clawwright_reply="--help accept apply apply-config backup bootstrap check cli cli-start cli-stop completion configure-provider control-mcp deploy destroy doctor down exec expose files help host incident inspect list lock logs mcp-creds mcp-serve mcp-setup memory new-app operations plan provision-agent pull push recipe recover-env remove-app restart restore rollback secrets set smoke status up upgrade verify version watch" ;;
+    "first help") _clawwright_reply="--help accept apply apply-config backup backup-text bootstrap check cli cli-start cli-stop completion configure-provider control-mcp deploy deploy-text destroy doctor down exec expose files help host incident inspect list lock logs mcp-creds mcp-serve mcp-setup memory new-app operations plan provision-agent pull push recipe recover-env remove-app restart restore rollback secrets set smoke status up upgrade verify version watch" ;;
     "after bootstrap *") _clawwright_reply="--break-foreign-lock --break-lock --check --help --json --no-pull" ;;
     "after up *") _clawwright_reply="--break-foreign-lock --break-lock --help" ;;
     "after restart *") _clawwright_reply="--break-foreign-lock --break-lock --help" ;;
@@ -361,6 +369,8 @@ _clawwright_lookup() {
     "after rollback *") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --help --json --no-restart --operation --previous-set" ;;
     "after operations *") _clawwright_reply="--break-foreign-lock --break-lock --confirmed --help --json --limit --takeover-lock" ;;
     "after apply-config *") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --dump --force --help --json" ;;
+    "after backup-text *") _clawwright_reply="--file --help --output --profile" ;;
+    "after deploy-text *") _clawwright_reply="--file --help --profile --template" ;;
     "after expose ssh") _clawwright_reply="--help --local-port --run" ;;
     "after expose tailscale") _clawwright_reply="--apply --break-foreign-lock --break-lock --help" ;;
     "after expose status") _clawwright_reply="--help --json" ;;
@@ -453,6 +463,8 @@ _clawwright_lookup() {
     "valueOptions rollback") _clawwright_reply="--operation --break-foreign-lock" ;;
     "valueOptions operations") _clawwright_reply="--limit --break-foreign-lock" ;;
     "valueOptions apply-config") _clawwright_reply="--break-foreign-lock" ;;
+    "valueOptions backup-text") _clawwright_reply="--file --output --profile" ;;
+    "valueOptions deploy-text") _clawwright_reply="--file --template --profile" ;;
     "valueOptions expose") _clawwright_reply="--local-port --break-foreign-lock" ;;
     "valueOptions watch") _clawwright_reply="--interval --break-foreign-lock" ;;
     "valueOptions incident") _clawwright_reply="--tail --break-foreign-lock" ;;
@@ -557,7 +569,7 @@ complete -F _clawwright_complete ./clawwright
 # clawwright PowerShell completion — generated from the command declarations.
 # Install: run ./clawwright completion pwsh in Git Bash, save the output to a file, and dot-source it from PowerShell
 $clawwrightApp = $true
-$clawwrightTop = @("accept", "apply", "apply-config", "backup", "bootstrap", "check", "cli", "cli-start", "cli-stop", "completion", "configure-provider", "control-mcp", "deploy", "destroy", "doctor", "down", "exec", "expose", "files", "help", "host", "incident", "inspect", "list", "lock", "logs", "mcp-creds", "mcp-serve", "mcp-setup", "memory", "new-app", "operations", "plan", "provision-agent", "pull", "push", "recipe", "recover-env", "remove-app", "restart", "restore", "rollback", "secrets", "set", "smoke", "status", "up", "upgrade", "verify", "version", "watch", "--version", "-v", "--app")
+$clawwrightTop = @("accept", "apply", "apply-config", "backup", "backup-text", "bootstrap", "check", "cli", "cli-start", "cli-stop", "completion", "configure-provider", "control-mcp", "deploy", "deploy-text", "destroy", "doctor", "down", "exec", "expose", "files", "help", "host", "incident", "inspect", "list", "lock", "logs", "mcp-creds", "mcp-serve", "mcp-setup", "memory", "new-app", "operations", "plan", "provision-agent", "pull", "push", "recipe", "recover-env", "remove-app", "restart", "restore", "rollback", "secrets", "set", "smoke", "status", "up", "upgrade", "verify", "version", "watch", "--version", "-v", "--app")
 $clawwrightFirst = [hashtable]::new(@{
   "bootstrap" = @("--break-foreign-lock", "--break-lock", "--check", "--help", "--json", "--no-pull")
   "up" = @("--break-foreign-lock", "--break-lock", "--help")
@@ -580,6 +592,8 @@ $clawwrightFirst = [hashtable]::new(@{
   "rollback" = @("--break-foreign-lock", "--break-lock", "--dry-run", "--help", "--json", "--no-restart", "--operation", "--previous-set")
   "operations" = @("--break-foreign-lock", "--break-lock", "--confirmed", "--help", "--json", "--limit", "--takeover-lock")
   "apply-config" = @("--break-foreign-lock", "--break-lock", "--dry-run", "--dump", "--force", "--help", "--json")
+  "backup-text" = @("--file", "--help", "--output", "--profile")
+  "deploy-text" = @("--file", "--help", "--profile", "--template")
   "expose" = @("--help", "ssh", "status", "tailscale")
   "watch" = @("--help", "check", "install", "status", "test", "uninstall")
   "incident" = @("--break-foreign-lock", "--break-lock", "--dry-run", "--help", "--json", "--keep-exposure", "--tail")
@@ -609,7 +623,7 @@ $clawwrightFirst = [hashtable]::new(@{
   "version" = @("--help", "--json", "--verbose")
   "completion" = @("--help", "bash", "pwsh", "zsh")
   "control-mcp" = @("--help")
-  "help" = @("--help", "accept", "apply", "apply-config", "backup", "bootstrap", "check", "cli", "cli-start", "cli-stop", "completion", "configure-provider", "control-mcp", "deploy", "destroy", "doctor", "down", "exec", "expose", "files", "help", "host", "incident", "inspect", "list", "lock", "logs", "mcp-creds", "mcp-serve", "mcp-setup", "memory", "new-app", "operations", "plan", "provision-agent", "pull", "push", "recipe", "recover-env", "remove-app", "restart", "restore", "rollback", "secrets", "set", "smoke", "status", "up", "upgrade", "verify", "version", "watch")
+  "help" = @("--help", "accept", "apply", "apply-config", "backup", "backup-text", "bootstrap", "check", "cli", "cli-start", "cli-stop", "completion", "configure-provider", "control-mcp", "deploy", "deploy-text", "destroy", "doctor", "down", "exec", "expose", "files", "help", "host", "incident", "inspect", "list", "lock", "logs", "mcp-creds", "mcp-serve", "mcp-setup", "memory", "new-app", "operations", "plan", "provision-agent", "pull", "push", "recipe", "recover-env", "remove-app", "restart", "restore", "rollback", "secrets", "set", "smoke", "status", "up", "upgrade", "verify", "version", "watch")
 }, [System.StringComparer]::Ordinal)
 $clawwrightAfter = [hashtable]::new(@{
   "bootstrap *" = @("--break-foreign-lock", "--break-lock", "--check", "--help", "--json", "--no-pull")
@@ -638,6 +652,8 @@ $clawwrightAfter = [hashtable]::new(@{
   "rollback *" = @("--break-foreign-lock", "--break-lock", "--dry-run", "--help", "--json", "--no-restart", "--operation", "--previous-set")
   "operations *" = @("--break-foreign-lock", "--break-lock", "--confirmed", "--help", "--json", "--limit", "--takeover-lock")
   "apply-config *" = @("--break-foreign-lock", "--break-lock", "--dry-run", "--dump", "--force", "--help", "--json")
+  "backup-text *" = @("--file", "--help", "--output", "--profile")
+  "deploy-text *" = @("--file", "--help", "--profile", "--template")
   "expose ssh" = @("--help", "--local-port", "--run")
   "expose tailscale" = @("--apply", "--break-foreign-lock", "--break-lock", "--help")
   "expose status" = @("--help", "--json")
@@ -736,6 +752,8 @@ $clawwrightValueOptions = [hashtable]::new(@{
   "rollback" = @("--operation", "--break-foreign-lock")
   "operations" = @("--limit", "--break-foreign-lock")
   "apply-config" = @("--break-foreign-lock")
+  "backup-text" = @("--file", "--output", "--profile")
+  "deploy-text" = @("--file", "--template", "--profile")
   "expose" = @("--local-port", "--break-foreign-lock")
   "watch" = @("--interval", "--break-foreign-lock")
   "incident" = @("--tail", "--break-foreign-lock")
@@ -853,7 +871,7 @@ Register-ArgumentCompleter -Native -CommandName clawwright, ./clawwright -Script
 # Install: eval "$(clawwright completion bash)"
 _clawwright_lookup() {
   case "$1" in
-      "top") _clawwright_reply="accept apply apply-config backup bootstrap cli cli-start cli-stop completion configure-provider control-mcp deploy destroy doctor down exec expose files help host incident init inspect lock logs mcp-creds mcp-serve mcp-setup memory operations plan provision-agent pull push recipe recover-env restart restore rollback secrets set smoke status up upgrade verify version watch --version -v" ;;
+      "top") _clawwright_reply="accept apply apply-config backup backup-text bootstrap cli cli-start cli-stop completion configure-provider control-mcp deploy deploy-text destroy doctor down exec expose files help host incident init inspect lock logs mcp-creds mcp-serve mcp-setup memory operations plan provision-agent pull push recipe recover-env restart restore rollback secrets set smoke status up upgrade verify version watch --version -v" ;;
     "first bootstrap") _clawwright_reply="--break-foreign-lock --break-lock --check --help --json --no-pull" ;;
     "first up") _clawwright_reply="--break-foreign-lock --break-lock --help" ;;
     "first restart") _clawwright_reply="--break-foreign-lock --break-lock --help" ;;
@@ -875,6 +893,8 @@ _clawwright_lookup() {
     "first rollback") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --help --json --no-restart --operation --previous-set" ;;
     "first operations") _clawwright_reply="--break-foreign-lock --break-lock --confirmed --help --json --limit --takeover-lock" ;;
     "first apply-config") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --dump --force --help --json" ;;
+    "first backup-text") _clawwright_reply="--file --help --output --profile" ;;
+    "first deploy-text") _clawwright_reply="--file --help --profile --template" ;;
     "first expose") _clawwright_reply="--help ssh status tailscale" ;;
     "first watch") _clawwright_reply="--help check install status test uninstall" ;;
     "first incident") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --help --json --keep-exposure --tail" ;;
@@ -901,7 +921,7 @@ _clawwright_lookup() {
     "first version") _clawwright_reply="--help --json --verbose" ;;
     "first completion") _clawwright_reply="--help bash pwsh zsh" ;;
     "first control-mcp") _clawwright_reply="--help" ;;
-    "first help") _clawwright_reply="--help accept apply apply-config backup bootstrap cli cli-start cli-stop completion configure-provider control-mcp deploy destroy doctor down exec expose files help host incident init inspect lock logs mcp-creds mcp-serve mcp-setup memory operations plan provision-agent pull push recipe recover-env restart restore rollback secrets set smoke status up upgrade verify version watch" ;;
+    "first help") _clawwright_reply="--help accept apply apply-config backup backup-text bootstrap cli cli-start cli-stop completion configure-provider control-mcp deploy deploy-text destroy doctor down exec expose files help host incident init inspect lock logs mcp-creds mcp-serve mcp-setup memory operations plan provision-agent pull push recipe recover-env restart restore rollback secrets set smoke status up upgrade verify version watch" ;;
     "after bootstrap *") _clawwright_reply="--break-foreign-lock --break-lock --check --help --json --no-pull" ;;
     "after up *") _clawwright_reply="--break-foreign-lock --break-lock --help" ;;
     "after restart *") _clawwright_reply="--break-foreign-lock --break-lock --help" ;;
@@ -928,6 +948,8 @@ _clawwright_lookup() {
     "after rollback *") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --help --json --no-restart --operation --previous-set" ;;
     "after operations *") _clawwright_reply="--break-foreign-lock --break-lock --confirmed --help --json --limit --takeover-lock" ;;
     "after apply-config *") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --dump --force --help --json" ;;
+    "after backup-text *") _clawwright_reply="--file --help --output --profile" ;;
+    "after deploy-text *") _clawwright_reply="--file --help --profile --template" ;;
     "after expose ssh") _clawwright_reply="--help --local-port --run" ;;
     "after expose tailscale") _clawwright_reply="--apply --break-foreign-lock --break-lock --help" ;;
     "after expose status") _clawwright_reply="--help --json" ;;
@@ -1017,6 +1039,8 @@ _clawwright_lookup() {
     "valueOptions rollback") _clawwright_reply="--operation --break-foreign-lock" ;;
     "valueOptions operations") _clawwright_reply="--limit --break-foreign-lock" ;;
     "valueOptions apply-config") _clawwright_reply="--break-foreign-lock" ;;
+    "valueOptions backup-text") _clawwright_reply="--file --output --profile" ;;
+    "valueOptions deploy-text") _clawwright_reply="--file --template --profile" ;;
     "valueOptions expose") _clawwright_reply="--local-port --break-foreign-lock" ;;
     "valueOptions watch") _clawwright_reply="--interval --break-foreign-lock" ;;
     "valueOptions incident") _clawwright_reply="--tail --break-foreign-lock" ;;
@@ -1119,7 +1143,7 @@ autoload -Uz bashcompinit
 bashcompinit
 _clawwright_lookup() {
   case "$1" in
-      "top") _clawwright_reply="accept apply apply-config backup bootstrap cli cli-start cli-stop completion configure-provider control-mcp deploy destroy doctor down exec expose files help host incident init inspect lock logs mcp-creds mcp-serve mcp-setup memory operations plan provision-agent pull push recipe recover-env restart restore rollback secrets set smoke status up upgrade verify version watch --version -v" ;;
+      "top") _clawwright_reply="accept apply apply-config backup backup-text bootstrap cli cli-start cli-stop completion configure-provider control-mcp deploy deploy-text destroy doctor down exec expose files help host incident init inspect lock logs mcp-creds mcp-serve mcp-setup memory operations plan provision-agent pull push recipe recover-env restart restore rollback secrets set smoke status up upgrade verify version watch --version -v" ;;
     "first bootstrap") _clawwright_reply="--break-foreign-lock --break-lock --check --help --json --no-pull" ;;
     "first up") _clawwright_reply="--break-foreign-lock --break-lock --help" ;;
     "first restart") _clawwright_reply="--break-foreign-lock --break-lock --help" ;;
@@ -1141,6 +1165,8 @@ _clawwright_lookup() {
     "first rollback") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --help --json --no-restart --operation --previous-set" ;;
     "first operations") _clawwright_reply="--break-foreign-lock --break-lock --confirmed --help --json --limit --takeover-lock" ;;
     "first apply-config") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --dump --force --help --json" ;;
+    "first backup-text") _clawwright_reply="--file --help --output --profile" ;;
+    "first deploy-text") _clawwright_reply="--file --help --profile --template" ;;
     "first expose") _clawwright_reply="--help ssh status tailscale" ;;
     "first watch") _clawwright_reply="--help check install status test uninstall" ;;
     "first incident") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --help --json --keep-exposure --tail" ;;
@@ -1167,7 +1193,7 @@ _clawwright_lookup() {
     "first version") _clawwright_reply="--help --json --verbose" ;;
     "first completion") _clawwright_reply="--help bash pwsh zsh" ;;
     "first control-mcp") _clawwright_reply="--help" ;;
-    "first help") _clawwright_reply="--help accept apply apply-config backup bootstrap cli cli-start cli-stop completion configure-provider control-mcp deploy destroy doctor down exec expose files help host incident init inspect lock logs mcp-creds mcp-serve mcp-setup memory operations plan provision-agent pull push recipe recover-env restart restore rollback secrets set smoke status up upgrade verify version watch" ;;
+    "first help") _clawwright_reply="--help accept apply apply-config backup backup-text bootstrap cli cli-start cli-stop completion configure-provider control-mcp deploy deploy-text destroy doctor down exec expose files help host incident init inspect lock logs mcp-creds mcp-serve mcp-setup memory operations plan provision-agent pull push recipe recover-env restart restore rollback secrets set smoke status up upgrade verify version watch" ;;
     "after bootstrap *") _clawwright_reply="--break-foreign-lock --break-lock --check --help --json --no-pull" ;;
     "after up *") _clawwright_reply="--break-foreign-lock --break-lock --help" ;;
     "after restart *") _clawwright_reply="--break-foreign-lock --break-lock --help" ;;
@@ -1194,6 +1220,8 @@ _clawwright_lookup() {
     "after rollback *") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --help --json --no-restart --operation --previous-set" ;;
     "after operations *") _clawwright_reply="--break-foreign-lock --break-lock --confirmed --help --json --limit --takeover-lock" ;;
     "after apply-config *") _clawwright_reply="--break-foreign-lock --break-lock --dry-run --dump --force --help --json" ;;
+    "after backup-text *") _clawwright_reply="--file --help --output --profile" ;;
+    "after deploy-text *") _clawwright_reply="--file --help --profile --template" ;;
     "after expose ssh") _clawwright_reply="--help --local-port --run" ;;
     "after expose tailscale") _clawwright_reply="--apply --break-foreign-lock --break-lock --help" ;;
     "after expose status") _clawwright_reply="--help --json" ;;
@@ -1283,6 +1311,8 @@ _clawwright_lookup() {
     "valueOptions rollback") _clawwright_reply="--operation --break-foreign-lock" ;;
     "valueOptions operations") _clawwright_reply="--limit --break-foreign-lock" ;;
     "valueOptions apply-config") _clawwright_reply="--break-foreign-lock" ;;
+    "valueOptions backup-text") _clawwright_reply="--file --output --profile" ;;
+    "valueOptions deploy-text") _clawwright_reply="--file --template --profile" ;;
     "valueOptions expose") _clawwright_reply="--local-port --break-foreign-lock" ;;
     "valueOptions watch") _clawwright_reply="--interval --break-foreign-lock" ;;
     "valueOptions incident") _clawwright_reply="--tail --break-foreign-lock" ;;
@@ -1379,7 +1409,7 @@ complete -F _clawwright_complete ./clawwright
 # clawwright PowerShell completion — generated from the command declarations.
 # Install: clawwright completion pwsh | Out-String | Invoke-Expression
 $clawwrightApp = $false
-$clawwrightTop = @("accept", "apply", "apply-config", "backup", "bootstrap", "cli", "cli-start", "cli-stop", "completion", "configure-provider", "control-mcp", "deploy", "destroy", "doctor", "down", "exec", "expose", "files", "help", "host", "incident", "init", "inspect", "lock", "logs", "mcp-creds", "mcp-serve", "mcp-setup", "memory", "operations", "plan", "provision-agent", "pull", "push", "recipe", "recover-env", "restart", "restore", "rollback", "secrets", "set", "smoke", "status", "up", "upgrade", "verify", "version", "watch", "--version", "-v")
+$clawwrightTop = @("accept", "apply", "apply-config", "backup", "backup-text", "bootstrap", "cli", "cli-start", "cli-stop", "completion", "configure-provider", "control-mcp", "deploy", "deploy-text", "destroy", "doctor", "down", "exec", "expose", "files", "help", "host", "incident", "init", "inspect", "lock", "logs", "mcp-creds", "mcp-serve", "mcp-setup", "memory", "operations", "plan", "provision-agent", "pull", "push", "recipe", "recover-env", "restart", "restore", "rollback", "secrets", "set", "smoke", "status", "up", "upgrade", "verify", "version", "watch", "--version", "-v")
 $clawwrightFirst = [hashtable]::new(@{
   "bootstrap" = @("--break-foreign-lock", "--break-lock", "--check", "--help", "--json", "--no-pull")
   "up" = @("--break-foreign-lock", "--break-lock", "--help")
@@ -1402,6 +1432,8 @@ $clawwrightFirst = [hashtable]::new(@{
   "rollback" = @("--break-foreign-lock", "--break-lock", "--dry-run", "--help", "--json", "--no-restart", "--operation", "--previous-set")
   "operations" = @("--break-foreign-lock", "--break-lock", "--confirmed", "--help", "--json", "--limit", "--takeover-lock")
   "apply-config" = @("--break-foreign-lock", "--break-lock", "--dry-run", "--dump", "--force", "--help", "--json")
+  "backup-text" = @("--file", "--help", "--output", "--profile")
+  "deploy-text" = @("--file", "--help", "--profile", "--template")
   "expose" = @("--help", "ssh", "status", "tailscale")
   "watch" = @("--help", "check", "install", "status", "test", "uninstall")
   "incident" = @("--break-foreign-lock", "--break-lock", "--dry-run", "--help", "--json", "--keep-exposure", "--tail")
@@ -1428,7 +1460,7 @@ $clawwrightFirst = [hashtable]::new(@{
   "version" = @("--help", "--json", "--verbose")
   "completion" = @("--help", "bash", "pwsh", "zsh")
   "control-mcp" = @("--help")
-  "help" = @("--help", "accept", "apply", "apply-config", "backup", "bootstrap", "cli", "cli-start", "cli-stop", "completion", "configure-provider", "control-mcp", "deploy", "destroy", "doctor", "down", "exec", "expose", "files", "help", "host", "incident", "init", "inspect", "lock", "logs", "mcp-creds", "mcp-serve", "mcp-setup", "memory", "operations", "plan", "provision-agent", "pull", "push", "recipe", "recover-env", "restart", "restore", "rollback", "secrets", "set", "smoke", "status", "up", "upgrade", "verify", "version", "watch")
+  "help" = @("--help", "accept", "apply", "apply-config", "backup", "backup-text", "bootstrap", "cli", "cli-start", "cli-stop", "completion", "configure-provider", "control-mcp", "deploy", "deploy-text", "destroy", "doctor", "down", "exec", "expose", "files", "help", "host", "incident", "init", "inspect", "lock", "logs", "mcp-creds", "mcp-serve", "mcp-setup", "memory", "operations", "plan", "provision-agent", "pull", "push", "recipe", "recover-env", "restart", "restore", "rollback", "secrets", "set", "smoke", "status", "up", "upgrade", "verify", "version", "watch")
 }, [System.StringComparer]::Ordinal)
 $clawwrightAfter = [hashtable]::new(@{
   "bootstrap *" = @("--break-foreign-lock", "--break-lock", "--check", "--help", "--json", "--no-pull")
@@ -1457,6 +1489,8 @@ $clawwrightAfter = [hashtable]::new(@{
   "rollback *" = @("--break-foreign-lock", "--break-lock", "--dry-run", "--help", "--json", "--no-restart", "--operation", "--previous-set")
   "operations *" = @("--break-foreign-lock", "--break-lock", "--confirmed", "--help", "--json", "--limit", "--takeover-lock")
   "apply-config *" = @("--break-foreign-lock", "--break-lock", "--dry-run", "--dump", "--force", "--help", "--json")
+  "backup-text *" = @("--file", "--help", "--output", "--profile")
+  "deploy-text *" = @("--file", "--help", "--profile", "--template")
   "expose ssh" = @("--help", "--local-port", "--run")
   "expose tailscale" = @("--apply", "--break-foreign-lock", "--break-lock", "--help")
   "expose status" = @("--help", "--json")
@@ -1552,6 +1586,8 @@ $clawwrightValueOptions = [hashtable]::new(@{
   "rollback" = @("--operation", "--break-foreign-lock")
   "operations" = @("--limit", "--break-foreign-lock")
   "apply-config" = @("--break-foreign-lock")
+  "backup-text" = @("--file", "--output", "--profile")
+  "deploy-text" = @("--file", "--template", "--profile")
   "expose" = @("--local-port", "--break-foreign-lock")
   "watch" = @("--interval", "--break-foreign-lock")
   "incident" = @("--tail", "--break-foreign-lock")

@@ -110,7 +110,7 @@ check("WSL is refused from a non-Windows tool host", tryTargetProblem("wsl", "li
 check("unknown target modes are refused", tryTargetProblem("other", "win32")?.includes("expected local"), true);
 
 {
-  const extension = extname(new URL("../../../framework/commands/sets/set-try.ts", import.meta.url).pathname);
+  const extension = extname(new URL("../../../../packages/clawwright/commands/sets/set-try.ts", import.meta.url).pathname);
   const moduleUrl = setTryModuleUrl("app", extension);
   const expectedModulePath = resolve(frameworkRoot, `core/app${extension}`);
   check("the scaffolded app import is an absolute file URL", new URL(moduleUrl).protocol, "file:");
@@ -169,7 +169,7 @@ check("unknown target modes are refused", tryTargetProblem("other", "win32")?.in
 // What this guards against is a future edit silently dropping the restore call.
 {
   const setTrySource = await (await import("node:fs/promises")).readFile(
-    new URL("../../../framework/commands/sets/set-try.ts", import.meta.url),
+    new URL("../../../../packages/clawwright/commands/sets/set-try.ts", import.meta.url),
     "utf8",
   );
   const capturedAt = setTrySource.indexOf("const previousComposeProject = composeProjectOverride();");

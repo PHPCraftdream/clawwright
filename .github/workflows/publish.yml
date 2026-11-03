@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Check out the selected release ref
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
 
       - name: Require a version tag
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
@@ -35,7 +37,7 @@ jobs:
           node --input-type=module <<'NODE'
           import { readFileSync } from "node:fs";
 
-          const { version } = JSON.parse(readFileSync("tools/framework/package.json", "utf8"));
+          const { version } = JSON.parse(readFileSync("packages/clawwright/package.json", "utf8"));
           const expectedTag = `v${version}`;
           if (process.env.GITHUB_REF_NAME !== expectedTag) {
             console.error(`release tag ${process.env.GITHUB_REF_NAME} does not match package version ${version}`);
@@ -52,6 +54,19 @@ jobs:
       - name: Install development dependencies
         run: npm ci --include=dev
 
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.0'
+          cache: false
+          check-latest: false
+
+      - name: Fail-closed production license audit
+        env:
+          GOTOOLCHAIN: local
+          CGO_ENABLED: '0'
+        run: npm run license:audit
+
       - name: Test
         run: npm test
 
@@ -66,14 +81,26 @@ jobs:
       # travels between runners, so a rebuild there would fail. Packing once also means the
       # published bytes are exactly the ones this job built and checked.
       - name: Pack the release tarball
-        working-directory: tools/framework
+        working-directory: packages/clawwright
         run: npm pack
+
+      - name: Inspect packed license evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$(ls packages/clawwright/*.tgz)"
+          tar -tzf "$archive" > "$RUNNER_TEMP/packed-files.txt"
+          for file in LICENSE LICENSE-MIT LICENSE-APACHE NOTICE THIRD_PARTY_NOTICES.md; do
+            grep -qx "package/$file" "$RUNNER_TEMP/packed-files.txt"
+            tar -xOf "$archive" "package/$file" | cmp - "packages/clawwright/$file"
+          done
+          tar -xOf "$archive" package/package.json | cmp - packages/clawwright/package.json
 
       - name: Upload the release tarball
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-tarball
-          path: tools/framework/phpcraftdream-clawwright-*.tgz
+          path: packages/clawwright/phpcraftdream-clawwright-*.tgz
           if-no-files-found: error
 
   publish-token:

@@ -73,7 +73,7 @@ try {
     check("the local-types-only path runs its happy path", happyError === undefined && printed.join("").includes("editor types:"), true);
   }
 
-  const homepage = (JSON.parse(await readFile(resolve(monorepoRoot, "tools", "framework", "package.json"), "utf8")) as { homepage: string }).homepage;
+  const homepage = (JSON.parse(await readFile(resolve(monorepoRoot, "packages", "clawwright", "package.json"), "utf8")) as { homepage: string }).homepage;
   check("docsUrl points at the package's own repository, default branch", docsUrl("x.md"), `${homepage.replace(/#readme$/, "")}/blob/main/docs/x.md`);
 } finally {
   setInvocation({ program: "./clawwright", mode: "checkout", audience: "terminal" });

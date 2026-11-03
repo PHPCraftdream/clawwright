@@ -1,4 +1,4 @@
-// `./clawwright remove-app` — tools/framework/integration/deployment/remove.ts's removeApp().
+// `./clawwright remove-app` — packages/clawwright/integration/deployment/remove.ts's removeApp().
 //
 // A scratch apps/ this file builds and owns, never the real one (mirrors list.check.ts):
 // dry run lists and removes nothing, --yes removes for real, a bootstrapped instance

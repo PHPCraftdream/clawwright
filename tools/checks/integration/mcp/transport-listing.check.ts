@@ -541,7 +541,7 @@ check(
     "docker", "compose",
     "--env-file", "/srv/clawwright/data/compose-9f2a/compose.env",
     "--project-name", "clawwright-demo",
-    "--file", "/srv/clawwright/tools/framework/docker-compose.yml",
+    "--file", "/srv/clawwright/packages/clawwright/docker-compose.yml",
     "--project-directory", "/srv/clawwright/apps/demo",
     "stop", "gateway",
   ]),

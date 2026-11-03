@@ -27,7 +27,7 @@ async function inspect(dir: string): Promise<void> {
   }
 }
 
-await inspect(resolve(monorepoRoot, "tools", "framework"));
+await inspect(resolve(monorepoRoot, "packages", "clawwright"));
 await inspect(resolve(monorepoRoot, "tools", "checks"));
 
 // ci.yml's Windows job runs plain `npm run check` (capability probing — see
@@ -57,7 +57,7 @@ async function auditRecipeReaddirSites(dir: string): Promise<void> {
     );
   }
 }
-await auditRecipeReaddirSites(resolve(monorepoRoot, "tools", "framework"));
+await auditRecipeReaddirSites(resolve(monorepoRoot, "packages", "clawwright"));
 process.stderr.write("no second readdir of the recipes directory outside listRecipeDirectories\n");
 
 // shellQuote (core/io/shell.ts) and regexEscape (core/io/log.ts) each guard an invariant —
@@ -90,7 +90,7 @@ async function auditSingleDefinitionSites(dir: string, counts: Map<string, strin
   }
 }
 const definitionSites = new Map<string, string[]>(Object.keys(SINGLE_DEFINITION).map((name) => [name, []]));
-await auditSingleDefinitionSites(resolve(monorepoRoot, "tools", "framework"), definitionSites);
+await auditSingleDefinitionSites(resolve(monorepoRoot, "packages", "clawwright"), definitionSites);
 // Checks import the framework's own helpers (#framework/core/io/log.ts) too — a local copy
 // there drifts just the same.
 await auditSingleDefinitionSites(resolve(monorepoRoot, "tools", "checks"), definitionSites);
@@ -98,7 +98,7 @@ for (const [name, sites] of definitionSites) {
   assert.equal(
     sites.length,
     1,
-    `expected exactly one definition of ${name} in tools/framework and tools/checks, found ${sites.length}: ${sites.join(", ")}`,
+    `expected exactly one definition of ${name} in packages/clawwright and tools/checks, found ${sites.length}: ${sites.join(", ")}`,
   );
 }
 process.stderr.write("shellQuote, regexEscape and the WSL distro default each have exactly one definition\n");

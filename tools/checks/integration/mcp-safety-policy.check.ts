@@ -62,7 +62,7 @@ function runServer(script: string, input: string): Promise<{ code: number | null
 {
   const root = await mkdtemp(join(tmpdir(), "clawwright-mcp-policy-"));
   await writeFile(join(root, ".env"), `OC_DATA_DIR=${join(root, "data")}\nOC_TARGET_LOCATION=local\n`, "utf8");
-  const url = (name: string): string => new URL(`../../framework/${name}.ts`, import.meta.url).href;
+  const url = (name: string): string => new URL(`../../../packages/clawwright/${name}.ts`, import.meta.url).href;
   const script = `
     const { serveMcp } = await import(${JSON.stringify(url("integration/mcp/server"))});
     const { useDeployment } = await import(${JSON.stringify(url("runtime/deployment"))});

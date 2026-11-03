@@ -203,7 +203,7 @@ export interface GrammarSite {
   readonly text: string;
 }
 
-/** Every grammar-mint occurrence inside a `run` body under tools/framework/commands/** —
+/** Every grammar-mint occurrence inside a `run` body under packages/clawwright/commands/** —
  *  argument declarations and prepare phases are outside run bodies by construction — plus
  *  the number of run bodies the scan saw, so the enforcer can prove it scanned the tree. */
 export interface GrammarScan {
@@ -212,7 +212,7 @@ export interface GrammarScan {
 }
 
 export async function grammarInRunScan(): Promise<GrammarScan> {
-  const commandsRoot = join(monorepoRoot, "tools", "framework", "commands");
+  const commandsRoot = join(monorepoRoot, "packages", "clawwright", "commands");
   const sites: GrammarSite[] = [];
   let scanned = 0;
   async function walk(dir: string): Promise<void> {

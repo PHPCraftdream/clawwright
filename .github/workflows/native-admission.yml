@@ -1,0 +1,56 @@
+name: Native admission kernel checks
+
+on:
+  push:
+    paths:
+      - 'tools/native/task240-native-admission/**'
+      - 'tools/native/task240-launch-stub/**'
+      - '.github/workflows/native-admission.yml'
+  pull_request:
+    paths:
+      - 'tools/native/task240-native-admission/**'
+      - 'tools/native/task240-launch-stub/**'
+      - '.github/workflows/native-admission.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  kernel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Set up existing native toolchain
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.0'
+          cache: false
+      - name: Record required Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v rustc
+          rustc --version --verbose
+          cargo --version
+          rustup show active-toolchain || echo 'rustup is absent; Rust toolchain must be provided by the runner'
+          rustc --print target-list | grep -Fx x86_64-unknown-linux-gnu
+      - name: Test and compile gated launcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc --test --edition=2021 --target=x86_64-unknown-linux-gnu -C opt-level=2 -C target-feature=+crt-static tools/native/task240-launch-stub/main.rs -o "$RUNNER_TEMP/native-launch-stub-tests"
+          "$RUNNER_TEMP/native-launch-stub-tests"
+          rustc --edition=2021 --target=x86_64-unknown-linux-gnu -C opt-level=2 -C panic=abort -C target-feature=+crt-static -o "$RUNNER_TEMP/native-launch-stub" tools/native/task240-launch-stub/main.rs
+          sudo install -o root -g root -m 0555 "$RUNNER_TEMP/native-launch-stub" /usr/local/bin/native-launch-stub
+      - name: Run real kernel and protocol checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo env -i PATH="$PATH" HOME="$RUNNER_TEMP/native-check-home" \
+            GOTOOLCHAIN=local CGO_ENABLED=0 TASK240_STUB=/usr/local/bin/native-launch-stub \
+            go test -v -count=2 -timeout=90s tools/native/task240-native-admission/*.go
