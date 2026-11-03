@@ -307,9 +307,10 @@ try {
     if ("file" in built.args) built.args.file = "fixture.txt";
     if ("profile" in built.args) built.args.profile = "fixture.profile";
     resetEnvReads();
-    const result = built.reason === undefined ? await runNamed(unit.command, built.args) : undefined;
+    if (built.reason) impossible.push(`${unit.label}: ${built.reason}`);
+    const result = await runNamed(unit.command, built.args);
     checkTrue(`${unit.label}: needs nothing reaches run without reading .env or contacting target`,
-      result !== undefined && result.execution.stage === "run" && envReads() === 0 && result.contacts.length === 0);
+      result.execution.stage === "run" && envReads() === 0 && result.contacts.length === 0);
   }
 
   for (const unit of units.filter((candidate) => needsOf(candidate) !== "local" && needsOf(candidate) !== "nothing")) {

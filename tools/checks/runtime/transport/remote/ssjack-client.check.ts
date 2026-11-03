@@ -218,23 +218,21 @@ async function checkTextAdapter(): Promise<void> {
     open: async (_path, flags) => {
       opened++;
       const nonblock = constants.O_NONBLOCK ?? 0;
-      if (process.platform === 'win32') assert.equal(flags & nonblock, 0);
-      else assert.notEqual(flags & nonblock, 0);
+      assert.equal(flags & nonblock, nonblock);
       throw new Error("unexpected open");
     },
   };
   await assert.rejects(readSsjackTextInputFrom("fifo", fifo), /SSJACK_TEXT_INPUT_FAILED/);
   assert.equal(opened, 0);
 
-  const fakeFile = (openedStat: typeof stat, data: Buffer, expectedNonblock = process.platform !== 'win32') => {
+  const fakeFile = (openedStat: typeof stat, data: Buffer, expectedNonblock = constants.O_NONBLOCK ?? 0) => {
     let readcalls = 0;
     let closed = false;
     const files: SsjackTextInputFiles = {
       lstat: async () => stat,
       open: async (_path, flags) => {
         const nonblock = constants.O_NONBLOCK ?? 0;
-        if (expectedNonblock) assert.notEqual(flags & nonblock, 0);
-        else assert.equal(flags & nonblock, 0);
+        assert.equal(flags & nonblock, expectedNonblock);
         return {
           stat: async () => openedStat,
           read: async (buffer, offset, length) => {
@@ -255,7 +253,11 @@ async function checkTextAdapter(): Promise<void> {
   for (const openedStat of [
     { ...stat, isFile: () => false }, { ...stat, dev: 2 }, { ...stat, ino: 3 },
   ]) {
-    const fixture = fakeFile(openedStat, Buffer.from(valid), false);
+    const nativeFixture = fakeFile(openedStat, Buffer.from(valid));
+    await assert.rejects(readSsjackTextInputFrom("changed", nativeFixture.files), /SSJACK_TEXT_INPUT_FAILED/);
+    assert.equal(nativeFixture.readcalls(), 0);
+    assert.equal(nativeFixture.closed(), true);
+    const fixture = fakeFile(openedStat, Buffer.from(valid), 0);
     await assert.rejects(readSsjackTextInputFrom("changed", fixture.files, "win32"), /SSJACK_TEXT_INPUT_FAILED/);
     assert.equal(fixture.readcalls(), 0);
     assert.equal(fixture.closed(), true);
@@ -266,7 +268,7 @@ async function checkTextAdapter(): Promise<void> {
   assert.equal(sameIdentity.closed(), true);
   // Windows lacks POSIX O_NONBLOCK; regular-file opens remain supported while
   // the independent pre-stat and opened-handle identity checks stay mandatory.
-  const windowsFile = fakeFile(stat, Buffer.from(valid), false);
+  const windowsFile = fakeFile(stat, Buffer.from(valid), 0);
   const windowsInput = {
     ...windowsFile.files,
     open: async (_path: string, flags: number) => {
@@ -275,11 +277,16 @@ async function checkTextAdapter(): Promise<void> {
     },
   } satisfies SsjackTextInputFiles;
   assert.equal(await readSsjackTextInputFrom("same", windowsInput, "win32"), valid);
+  let windowsOpened = 0;
+  const windowsRejected = fakeFile(stat, Buffer.from(valid), 0);
   const windowsFifo: SsjackTextInputFiles = {
     lstat: async () => ({ ...stat, isFile: () => false }),
-    open: async () => { throw new Error("non-regular path must not be opened"); },
+    open: async (path, flags) => { windowsOpened++; return windowsRejected.files.open(path, flags); },
   };
   await assert.rejects(readSsjackTextInputFrom("pipe", windowsFifo, "win32"), /SSJACK_TEXT_INPUT_FAILED/);
+  assert.equal(windowsOpened, 0);
+  assert.equal(windowsRejected.readcalls(), 0);
+  assert.equal(windowsRejected.closed(), false);
 
   let consumed = 0;
   let closed = false;
@@ -287,8 +294,7 @@ async function checkTextAdapter(): Promise<void> {
     lstat: async () => stat,
     open: async (_path, flags) => {
       const nonblock = constants.O_NONBLOCK ?? 0;
-      if (process.platform === 'win32') assert.equal(flags & nonblock, 0);
-      else assert.notEqual(flags & nonblock, 0);
+      assert.equal(flags & nonblock, nonblock);
       return {
         stat: async () => stat,
         read: async (buffer, offset, length) => {
@@ -365,7 +371,10 @@ async function checkTextAdapter(): Promise<void> {
     let hydrateCount = 0;
     let captured: Record<string, unknown> | undefined;
     server.on("request", (request, response) => {
-      assert.equal(request.headers.authorization, `Bearer ${"a".repeat(64)}`);
+      assert.deepEqual(
+        Buffer.from(request.headers.authorization ?? "", "utf8"),
+        Buffer.concat([Buffer.from("Bearer", "ascii"), Buffer.from([0x20]), Buffer.from("a".repeat(64), "ascii")]),
+      );
       const chunks: Buffer[] = [];
       request.on("data", (chunk: Buffer) => chunks.push(chunk));
       request.on("end", () => {

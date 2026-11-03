@@ -543,6 +543,15 @@
     
     This command can replace or destroy state, depending on the flags given.
 
+=== deploy-text --help ===
+==> deploy-text — Deploy a reference-only text template through SSJack
+    Usage: ./clawwright deploy-text --file <PATH> --template <PATH> --profile <NAME>
+      --file <PATH>          Destination granted by the remote profile (required)
+      --template <PATH>      Local reference-only text template (required)
+      --profile <NAME>       Expected grant profile (required)
+    
+    Submits the local UTF-8 template literally through the explicitly selected text-hydrate profile. This does not support structured desired-state config or recipe placeholders.
+
 === expose --help ===
 ==> expose — Expose the gateway: SSH tunnel or tailscale
     Usage: ./clawwright expose <action> [--local-port <port>] [--run] [--apply] [--break-lock] [--break-foreign-lock <hostId>] [--json]
