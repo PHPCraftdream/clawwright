@@ -1,0 +1,41 @@
+name: Text stream client
+
+on:
+  push:
+    paths:
+      - 'packages/clawwright/runtime/transport/remote/text/stream/**'
+      - 'tools/checks/runtime/transport/scenarios/text-stream/**'
+      - '.github/workflows/text-stream-client.yml'
+  pull_request:
+    paths:
+      - 'packages/clawwright/runtime/transport/remote/text/stream/**'
+      - 'tools/checks/runtime/transport/scenarios/text-stream/**'
+      - '.github/workflows/text-stream-client.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: text-stream-client-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stream-client:
+    name: Actual TypeScript codec through Go acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.26.0'
+          cache: false
+          check-latest: false
+      - name: Exercise real bounded codec and malformed completion
+        env:
+          GOTOOLCHAIN: local
+          CGO_ENABLED: '0'
+        run: go -C tools/checks/runtime/transport/scenarios/text-stream test -count=1 -timeout=180s ./...
