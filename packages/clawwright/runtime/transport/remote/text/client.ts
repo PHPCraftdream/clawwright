@@ -359,7 +359,7 @@ export class SsjackTextClient {
           headers: {
             Authorization: `Bearer ${this.#token}`,
             "Content-Type": "application/json",
-            Accept: "application/json",
+            Accept: "application/json, text/event-stream",
             "MCP-Protocol-Version": MCP,
             "Content-Length": body.length,
           },

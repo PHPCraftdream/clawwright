@@ -381,6 +381,7 @@ async function checkTextAdapter(): Promise<void> {
     let cancelReverse: (() => void) | undefined;
     let captured: Record<string, unknown> | undefined;
     server.on("request", (request, response) => {
+      assert.deepEqual(request.headers.accept?.split(/\s*,\s*/), ["application/json", "text/event-stream"]);
       assert.deepEqual(
         Buffer.from(request.headers.authorization ?? "", "utf8"),
         Buffer.concat([Buffer.from("Bearer", "ascii"), Buffer.from([0x20]), Buffer.from("a".repeat(64), "ascii")]),
