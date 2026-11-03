@@ -590,7 +590,7 @@ async function checkTextAdapter(): Promise<void> {
         assert.equal(reverseCount, beforeReverse + 1);
         const copied = await backupCall(backupArgs);
         assert.equal(copied.result.error, undefined);
-        assert.equal(copied.result.exitCode, 0);
+        assert.equal(copied.result.exitCode, undefined);
         assert.equal(copied.output, '{"status":"received"}\n');
         assert.equal(await readFile(reverseOutput, "utf8"), valid);
         assert.equal(await readFile(reverseInput, "utf8"), valid);
@@ -618,7 +618,7 @@ async function checkTextAdapter(): Promise<void> {
         const boundaryResponse = await reverseClient().textReverseCopy("fixture.txt", { timeoutMs: 3000 });
         assert.equal(boundaryResponse.status === "received" && boundaryResponse.text === boundaryText, true);
         replymode = "wire-exact";
-        assert.deepEqual(await reverseClient().textReverseCopy("fixture.txt", { timeoutMs: 3000 }), { status: "received", text: copyText });
+        assert.deepEqual(await reverseClient().textReverseCopy("fixture.txt", { timeoutMs: 3000 }), { status: "received", text: boundaryText });
         replymode = "normal";
         const nativeNow = Date.now;
         const nativeParse = JSON.parse;

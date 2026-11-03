@@ -13,6 +13,7 @@
 // here is that the shebang is plain, and installed-consumer.check.ts proves the recovery
 // works by running the entry point with stripping explicitly disabled.
 
+import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, realpath, rm, mkdir, writeFile, symlink } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -131,21 +132,34 @@ async function verifyCurrentFeatureOutput(distDir: string): Promise<void> {
   const recipeIndex = await readFile(resolve(distDir, "recipe-kit/index.js"), "utf8");
   if (!recipeIndex.includes("deployText")) throw new Error("recipe-kit public index does not export deployText");
   if (!recipeIndex.includes("backupText")) throw new Error("recipe-kit public index does not export backupText");
+  const declarationTokens = (source: string): string[] => source.match(/\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z_$][\w$]*|[^\s]/g)
+    ?.filter((token) => !token.startsWith("//") && !token.startsWith("/*")) ?? [];
+  const declarationShape = (source: string, start: string[], end: string[]): string[] => {
+    const tokens = declarationTokens(source);
+    const from = tokens.findIndex((_token, index) => start.every((expected, offset) => tokens[index + offset] === expected));
+    if (from < 0) return [];
+    let braces = 0;
+    for (let index = from; index < tokens.length; index++) {
+      if (tokens[index] === "{") braces++;
+      else if (tokens[index] === "}") braces--;
+      if (braces === 0 && end.every((expected, offset) => tokens[index + offset] === expected)) {
+        return tokens.slice(from, index + end.length).filter((token, offset, shape) => token !== "|" || shape[offset - 1] !== "=");
+      }
+    }
+    return [];
+  };
   const consumerDeclaration = await readFile(resolve(distDir, "recipe-kit/consumer.d.ts"), "utf8");
-  if (!consumerDeclaration.includes("backupText(ctx: RecipeContext, input: BackupTextInput): Promise<BackupTextResult>")) {
-    throw new Error("recipe-kit backupText declaration does not expose BackupTextResult");
-  }
-  if (!consumerDeclaration.includes("export interface BackupTextInput")) {
-    throw new Error("recipe-kit backupText declaration does not expose BackupTextInput");
-  }
+  assert.deepEqual(declarationShape(consumerDeclaration,
+    ["export", "declare", "function", "backupText", "("], [")", ":", "Promise", "<", "BackupTextResult", ">", ";"]),
+  ["export", "declare", "function", "backupText", "(", "ctx", ":", "RecipeContext", ",", "input", ":", "BackupTextInput", ")", ":", "Promise", "<", "BackupTextResult", ">", ";"]);
+  assert.deepEqual(declarationShape(consumerDeclaration, ["export", "interface", "BackupTextInput", "{"], ["}"]),
+    ["export", "interface", "BackupTextInput", "{", "file", ":", "string", ";", "profile", ":", "string", ";", "}"]);
   const indexDeclaration = await readFile(resolve(distDir, "recipe-kit/index.d.ts"), "utf8");
-  if (!indexDeclaration.includes('export type { BackupTextResult } from "./types.js"')) {
-    throw new Error("recipe-kit public index declaration does not export BackupTextResult");
-  }
+  assert.deepEqual(declarationShape(indexDeclaration, ["export", "type", "{", "BackupTextResult", "}"], ["from", '"./types.js"', ";"]),
+    ["export", "type", "{", "BackupTextResult", "}", "from", '"./types.js"', ";"]);
   const typesDeclaration = await readFile(resolve(distDir, "recipe-kit/types.d.ts"), "utf8");
-  for (const discriminant of ['status: "received"', 'status: "withheld" | "unknown"', "text: string"]) {
-    if (!typesDeclaration.includes(discriminant)) throw new Error(`BackupTextResult declaration is missing ${discriminant}`);
-  }
+  assert.deepEqual(declarationShape(typesDeclaration, ["export", "type", "BackupTextResult", "="], [";"]),
+    ["export", "type", "BackupTextResult", "=", "{", "readonly", "status", ":", '"received"', ";", "readonly", "text", ":", "string", ";", "}", "|", "{", "readonly", "status", ":", '"withheld"', "|", '"unknown"', ";", "}", ";"]);
 }
 
 async function verifyRelocationParity(distDir: string): Promise<void> {
