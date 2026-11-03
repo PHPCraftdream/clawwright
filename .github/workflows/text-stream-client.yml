@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   stream-client:
-    name: Actual TypeScript codec through Go acceptance
+    name: Actual TypeScript codec and file acceptance
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -34,7 +34,7 @@ jobs:
           go-version: '1.26.0'
           cache: false
           check-latest: false
-      - name: Exercise real bounded codec and malformed completion
+      - name: Exercise bounded framing and exclusive file publication
         env:
           GOTOOLCHAIN: local
           CGO_ENABLED: '0'
