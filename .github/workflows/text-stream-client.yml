@@ -34,7 +34,9 @@ jobs:
           go-version: '1.26.0'
           cache: false
           check-latest: false
-      - name: Exercise bounded framing and exclusive file publication
+      - name: Install existing package dependencies
+        run: npm ci --include=dev
+      - name: Exercise bounded framing, file publication and pinned HTTP
         env:
           GOTOOLCHAIN: local
           CGO_ENABLED: '0'
