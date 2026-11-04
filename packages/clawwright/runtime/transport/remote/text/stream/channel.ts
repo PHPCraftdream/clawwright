@@ -3,7 +3,7 @@ import type { Agent } from "node:https";
 import type { ClientRequest, IncomingMessage } from "node:http";
 import { TextDecoder } from "node:util";
 import { registerSecret } from "#src/core/io/log.ts";
-import type { SsjackTextBootstrap } from "../client.ts";
+import type { SsjackTextBootstrap } from "#src/runtime/transport/remote/text/client.ts";
 import { textStreamAgent } from "./tls.ts";
 
 export type TextStreamCapability = "text_hydrate_stream_v2" | "text_reverse_copy_stream_v2";
