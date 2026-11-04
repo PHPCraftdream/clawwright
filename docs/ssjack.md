@@ -99,17 +99,16 @@ claimed as accepted here.
 The verified v1 commands and limits above remain unchanged, with no automatic
 fallback between protocols.
 
-CLI streaming is explicit: use `--stream` together with
-`--references grant-refs.json`. The metadata file is a UTF-8 JSON array of exact
+CLI streaming is explicit: use `--stream-references grant-refs.json`. The metadata file is a UTF-8 JSON array of exact
 canonical placeholder strings, not placeholder objects or secret values. It is
-bounded to 16 KiB and 1–16 distinct refs. Supplying only one of these options
-refuses before transport; a large file never silently selects another protocol.
+bounded to 16 KiB and 1–16 distinct refs. This single valued option both selects
+v2 and supplies its metadata; a large file never silently selects another protocol.
 Each invocation needs its own independently approved directional v2 context.
 
 ```sh
-./clawwright --app deployment deploy-text --stream --references grant-refs.json --file /approved/config --template template.ref.txt --profile approved
-./clawwright --app deployment backup-text --stream --references grant-refs.json --file /approved/config --output new-backup.ref.txt --profile approved
-./clawwright --app deployment deploy-text --stream --references grant-refs.json --file /approved/config --template new-backup.ref.txt --profile approved
+./clawwright --app deployment deploy-text --stream-references grant-refs.json --file /approved/config --template template.ref.txt --profile approved
+./clawwright --app deployment backup-text --stream-references grant-refs.json --file /approved/config --output new-backup.ref.txt --profile approved
+./clawwright --app deployment deploy-text --stream-references grant-refs.json --file /approved/config --template new-backup.ref.txt --profile approved
 ```
 
 `deployTextStream(ctx, input)` accepts `file`, `profile`, `references` and a local

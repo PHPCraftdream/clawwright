@@ -6,10 +6,6 @@ import { TextStreamTemplate } from "./files.ts";
 
 const fail = (): UserError => new UserError("SSJACK_TEXT_OPERATION_FAILED");
 
-export function validateTextStreamArguments(stream: boolean, references: string | undefined): void {
-  if (stream !== (references !== undefined)) throw fail();
-}
-
 async function readReferences(path: string): Promise<readonly string[]> {
   const source = await TextStreamTemplate.open(path);
   try {

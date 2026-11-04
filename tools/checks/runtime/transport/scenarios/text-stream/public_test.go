@@ -147,7 +147,7 @@ func TestRegisteredStreamingCommandsTransferLargeFiles(t *testing.T) {
 				t.Fatal(err)
 			}
 			fixture := newOperationFixture(t, test.action, test.mode, template, input)
-			argv := []string{"--file", "/approved/config", "--profile", "selected", "--stream", "--references", refs}
+			argv := []string{"--file", "/approved/config", "--profile", "selected", "--stream-references", refs}
 			if test.action == "deploy" {
 				argv = append(argv, "--template", template)
 			} else {
@@ -182,7 +182,7 @@ func TestRegisteredStreamingCommandsTransferLargeFiles(t *testing.T) {
 	}
 }
 
-func TestRegisteredStreamingFlagsAreExplicitlyPaired(t *testing.T) {
+func TestRegisteredStreamingSelectionHasNoSplitFlagFallback(t *testing.T) {
 	for _, commandName := range []string{"deploy-text", "backup-text"} {
 		fixture := newOperationFixture(t, "deploy", "success", "", nil)
 		base := []string{"--file", "/approved/config", "--profile", "selected"}
@@ -194,8 +194,8 @@ func TestRegisteredStreamingFlagsAreExplicitlyPaired(t *testing.T) {
 		for _, extra := range [][]string{{"--stream"}, {"--references", "unused"}} {
 			argv := append(append([]string(nil), base...), extra...)
 			result := runRegisteredCommand(t, fixture, commandName, argv)
-			if result.ReachedRun || result.Stage != "prepare" || !strings.Contains(result.Error, "SSJACK_TEXT_OPERATION_FAILED") || fixture.requests.Load() != 0 {
-				t.Fatal("unpaired stream selection contacted transport or silently used v1")
+			if result.ReachedRun || result.Stage != "parse" || result.Error == "" || fixture.requests.Load() != 0 {
+				t.Fatal("obsolete split stream selection contacted transport or silently used v1")
 			}
 		}
 	}
@@ -218,7 +218,7 @@ func TestRegisteredStreamingMetadataRefusesBeforeHTTP(t *testing.T) {
 				t.Fatal(err)
 			}
 			fixture := newOperationFixture(t, action, "success", template, input)
-			argv := []string{"--file", "/approved/config", "--profile", "selected", "--stream", "--references", refs}
+			argv := []string{"--file", "/approved/config", "--profile", "selected", "--stream-references", refs}
 			if action == "deploy" {
 				argv = append(argv, "--template", template)
 			} else {
