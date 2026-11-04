@@ -169,7 +169,21 @@ async function verifyCurrentFeatureOutput(distDir: string): Promise<void> {
   const indexDeclaration = await readFile(resolve(distDir, "recipe-kit/index.d.ts"), "utf8");
   assert.deepEqual(declarationShape(indexDeclaration, ["export", "type", "{", "BackupTextResult", "}"], ["from", '"./types.js"', ";"]),
     ["export", "type", "{", "BackupTextResult", "}", "from", '"./types.js"', ";"]);
+  for (const [helper, input] of [["deployTextStream", "DeployTextStreamInput"], ["backupTextStream", "BackupTextStreamInput"]] as const) {
+    if (!recipeIndex.includes(helper)) throw new Error(`recipe-kit public index does not export ${helper}`);
+    assert.deepEqual(declarationShape(consumerDeclaration,
+      ["export", "declare", "function", helper, "("], [")", ":", "Promise", "<", "TextStreamStatus", ">", ";"]),
+    ["export", "declare", "function", helper, "(", "ctx", ":", "RecipeContext", ",", "input", ":", input, ")", ":", "Promise", "<", "TextStreamStatus", ">", ";"]);
+  }
+  assert.deepEqual(declarationShape(indexDeclaration, ["export", "type", "{", "DeployTextStreamInput", ",", "BackupTextStreamInput", ",", "TextStreamStatus", "}"], ["from", '"./types.js"', ";"]),
+    ["export", "type", "{", "DeployTextStreamInput", ",", "BackupTextStreamInput", ",", "TextStreamStatus", "}", "from", '"./types.js"', ";"]);
   const typesDeclaration = await readFile(resolve(distDir, "recipe-kit/types.d.ts"), "utf8");
+  assert.deepEqual(declarationShape(typesDeclaration, ["export", "type", "TextStreamStatus", "="], [";"]),
+    ["export", "type", "TextStreamStatus", "=", '"withheld"', "|", '"received"', "|", '"unknown"', ";"]);
+  for (const [input, fileField] of [["DeployTextStreamInput", "templatePath"], ["BackupTextStreamInput", "outputPath"]] as const) {
+    assert.deepEqual(declarationShape(typesDeclaration, ["export", "interface", input, "{"], ["}"]),
+      ["export", "interface", input, "{", "readonly", "file", ":", "string", ";", "readonly", "profile", ":", "string", ";", "readonly", "references", ":", "readonly", "string", "[", "]", ";", "readonly", fileField, ":", "string", ";", "}"]);
+  }
   assert.deepEqual(declarationShape(typesDeclaration, ["export", "type", "BackupTextResult", "="], [";"]),
     ["export", "type", "BackupTextResult", "=", "{", "readonly", "status", ":", '"received"', ";", "readonly", "text", ":", "string", ";", "}", "|", "{", "readonly", "status", ":", '"withheld"', "|", '"unknown"', ";", "}", ";"]);
 }

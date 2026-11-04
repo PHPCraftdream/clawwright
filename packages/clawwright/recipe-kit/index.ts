@@ -1,8 +1,9 @@
 /** Domain-agnostic recipe helpers with bounded consumer operations. */
 export { appCli, appConfigPatch } from "./app.ts";
-export { consumerFetch, deployText, backupText } from "./consumer.ts";
+export { consumerFetch, deployText, backupText, deployTextStream, backupTextStream } from "./consumer.ts";
 export type { DeployTextInput, BackupTextInput } from "./consumer.ts";
 export type { BackupTextResult } from "./types.ts";
+export type { DeployTextStreamInput, BackupTextStreamInput, TextStreamStatus } from "./types.ts";
 export {
   reconcilePlanView, reconcileApply, appConfigAccessor, reconcilePendingIntents,
   checkProtectedPath, checkProtectedPlan,

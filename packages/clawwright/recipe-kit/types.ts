@@ -82,3 +82,20 @@ export interface ConsumerResponse { status: number; headers: Record<string, stri
 export type BackupTextResult =
   | { readonly status: "received"; readonly text: string }
   | { readonly status: "withheld" | "unknown" };
+
+/** Stream operations return delivery/publication metadata, never source text. */
+export type TextStreamStatus = "withheld" | "received" | "unknown";
+/** Template path is local; references are the exact canonical root-granted set. */
+export interface DeployTextStreamInput {
+  readonly file: string;
+  readonly profile: string;
+  readonly references: readonly string[];
+  readonly templatePath: string;
+}
+/** Only a completely received reference-only copy may be published at outputPath. */
+export interface BackupTextStreamInput {
+  readonly file: string;
+  readonly profile: string;
+  readonly references: readonly string[];
+  readonly outputPath: string;
+}

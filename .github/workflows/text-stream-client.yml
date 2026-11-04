@@ -4,11 +4,17 @@ on:
   push:
     paths:
       - 'packages/clawwright/runtime/transport/remote/text/stream/**'
+      - 'packages/clawwright/recipe-kit/consumer.ts'
+      - 'packages/clawwright/recipe-kit/index.ts'
+      - 'packages/clawwright/recipe-kit/types.ts'
       - 'tools/checks/runtime/transport/scenarios/text-stream/**'
       - '.github/workflows/text-stream-client.yml'
   pull_request:
     paths:
       - 'packages/clawwright/runtime/transport/remote/text/stream/**'
+      - 'packages/clawwright/recipe-kit/consumer.ts'
+      - 'packages/clawwright/recipe-kit/index.ts'
+      - 'packages/clawwright/recipe-kit/types.ts'
       - 'tools/checks/runtime/transport/scenarios/text-stream/**'
       - '.github/workflows/text-stream-client.yml'
   workflow_dispatch:
@@ -22,7 +28,7 @@ concurrency:
 
 jobs:
   stream-client:
-    name: Actual TypeScript codec and file acceptance
+    name: Actual Node file and public stream operations
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262

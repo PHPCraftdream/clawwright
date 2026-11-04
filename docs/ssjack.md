@@ -90,6 +90,57 @@ The public recipe helpers are `deployText(ctx, { file, template, profile })` and
 
 Acceptance uses synthetic credentials and a controlled target, with test-only accelerated installation derivation. It does not verify interactive human approval/unlock prompts, production enrollment/hardening, universal sandboxing or OpenClaw authentication/adoption. The consumer may keep plaintext in its explicitly approved final configuration. Root, same-UID processes and the trusted runtime remain trust boundaries.
 
+## Streaming recipe API (v2 candidate)
+
+The v2 recipe API is a separately gated candidate. Its internal framing, file and
+pinned HTTP components have dedicated CI acceptance; this section does not claim
+that the v2 CLI or the actual Clawwright/keeper/SSH composition has been accepted.
+The verified v1 commands and limits above remain unchanged, with no automatic
+fallback between protocols.
+
+`deployTextStream(ctx, input)` accepts `file`, `profile`, `references` and a local
+`templatePath`. `backupTextStream(ctx, input)` accepts `file`, `profile`,
+`references` and a new local `outputPath`. Both return only
+`"withheld" | "received" | "unknown"`, not hydrated or copied text. Their public
+input and result declarations are self-contained and do not import Node types.
+Dry-run refuses with `invalid-request` before opening a transport.
+
+`references` is the operator's exact set of canonical placeholder strings from
+the separately approved v2 root grant: 1–16 distinct refs from one immutable store
+and snapshot. Parsed refs are correlation metadata, not human approval. The client
+does not discover values or expand this set. Forward and reverse need separate
+`hydrate-stream-v2` and `reverse-copy-stream-v2` contexts respectively.
+
+```ts
+import { deployTextStream, backupTextStream } from "@phpcraftdream/clawwright/recipe-kit";
+
+await deployTextStream(ctx, {
+  file: "/approved/config", profile: "approved", references,
+  templatePath: "template.ref.txt",
+});
+await backupTextStream(ctx, {
+  file: "/approved/config", profile: "approved", references,
+  outputPath: "new-backup.ref.txt",
+});
+```
+
+The client reads one verified regular template handle twice, without retaining
+the whole template. The keeper privately binds Prepare to Execute. Decoded input
+and transformed output have separate 64 MiB bounds; data frames are at most
+32 KiB and the keeper retains the 1 MiB aggregate selected-value bound. Reverse
+publication requires valid UTF-8/no NUL, exact framed counters/correlation, terminal
+completion and full HTTP EOF before exclusive publication. Existing output is
+never replaced; the source file is not rewritten. Incomplete tentative copies
+are removed, not published.
+
+Each helper has one attempt and a whole-operation budget of at most 60 seconds.
+Unknown may follow possible effects and never authorizes retry or resume.
+Received is delivery/publication evidence, not crash durability or application
+adoption. Restore submits the captured reference-only file through a separately
+approved forward v2 context; refs never become `latest` and a new snapshot does
+not renew an old grant. Mapping completeness, encoding, source selection and
+consumer storage remain the operator's responsibility.
+
 ## Reference-only secret placeholders
 
 Deployment declarations may carry an explicit metadata object with one `$ssjack` field. Its body has exactly `format: "ssjack-secret-ref-v1"`, `store_id`, `object_id`, `version_id` and `snapshot_id`. Each ID is 32 lowercase hexadecimal characters encoding a nonzero 16-byte ID. There are no `latest`, wildcard, endpoint, credential or value fields. The format is shared with ssjack's `docs/application-store/PLACEHOLDERS.md`; it is not a native OpenClaw SecretRef or proof of authorization.

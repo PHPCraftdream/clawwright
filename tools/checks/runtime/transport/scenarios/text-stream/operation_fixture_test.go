@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -24,8 +25,21 @@ import {pathToFileURL} from "node:url";
 const module = await import(pathToFileURL(process.argv[1]).href);
 const pieces = []; for await (const piece of process.stdin) pieces.push(piece);
 const input = JSON.parse(Buffer.concat(pieces).toString("utf8"));
-const client = new module.SsjackTextStreamClient(input.bootstrap, input.capability);
-const status = await client[input.action](input.selection, {timeoutMs: 30000});
+let status;
+if (input.publicAPI) {
+  const kit = await import(new URL("../../../../../recipe-kit/index.ts", pathToFileURL(process.argv[1])).href);
+  delete process.env.SSJACK_TEXT_LAUNCH;
+  process.env.SSJACK_TEXT_ENDPOINT = input.bootstrap.endpoint;
+  process.env.SSJACK_TEXT_TOKEN = input.bootstrap.token;
+  process.env.SSJACK_TEXT_CERTIFICATE_SHA256 = input.bootstrap.pin;
+  process.env.SSJACK_TEXT_PROFILE = input.bootstrap.profile;
+  const ctx = {dryRun: input.selection.dryRun, runtime: {async runOneOff() { throw new Error("unexpected runtime fallback"); }}};
+  const selection = {...input.selection, templatePath: input.selection.template, outputPath: input.selection.output};
+  status = await kit[input.action === "deploy" ? "deployTextStream" : "backupTextStream"](ctx, selection);
+} else {
+  const client = new module.SsjackTextStreamClient(input.bootstrap, input.capability);
+  status = await client[input.action](input.selection, {timeoutMs: 30000});
+}
 process.stdout.write(JSON.stringify({status}));
 `
 
@@ -215,14 +229,14 @@ func newOperationFixture(t *testing.T, action, mode, template string, original [
 	return fixture
 }
 
-func runOperationClient(t *testing.T, fixture *operationFixture, action string, selection map[string]any) (string, error) {
+func runOperationClient(t *testing.T, fixture *operationFixture, action string, selection map[string]any, publicAPI ...bool) (string, error) {
 	t.Helper()
 	digest := sha256.Sum256(fixture.server.Certificate().Raw)
 	capability := "text_hydrate_stream_v2"
 	if action == "backup" {
 		capability = "text_reverse_copy_stream_v2"
 	}
-	input, err := json.Marshal(map[string]any{"bootstrap": map[string]string{"endpoint": fixture.server.URL + "/mcp", "token": strings.Repeat("a", 64), "pin": hex.EncodeToString(digest[:]), "profile": "selected"}, "capability": capability, "selection": selection, "action": action})
+	input, err := json.Marshal(map[string]any{"bootstrap": map[string]string{"endpoint": fixture.server.URL + "/mcp", "token": strings.Repeat("a", 64), "pin": hex.EncodeToString(digest[:]), "profile": "selected"}, "capability": capability, "selection": selection, "action": action, "publicAPI": len(publicAPI) > 0 && publicAPI[0]})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,11 +254,11 @@ func runOperationClient(t *testing.T, fixture *operationFixture, action string, 
 	if ctx.Err() != nil {
 		t.Fatal("operation client did not join before deadline")
 	}
-	if err != nil && !bytes.Contains(diagnostics.Bytes(), []byte("SSJACK_TEXT_STREAM_OPERATION_FAILED")) {
+	if err != nil && !bytes.Contains(diagnostics.Bytes(), []byte("SSJACK_TEXT_STREAM_OPERATION_FAILED")) && !bytes.Contains(diagnostics.Bytes(), []byte("recipe-kit refused:")) {
 		t.Fatalf("client failed outside expected boundary: %s", diagnostics.Bytes())
 	}
 	if err != nil {
-		return "", err
+		return "", errors.New(diagnostics.String())
 	}
 	var result struct {
 		Status string `json:"status"`

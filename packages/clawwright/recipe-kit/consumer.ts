@@ -3,8 +3,9 @@ import { bytes, cap, deadline, limit, requestValue, sanitize } from "./safety.ts
 import { parseCanonicalTextReferences } from "#src/runtime/transport/remote/text/canonical.ts";
 import { ssjackTextEnvironment } from "#src/runtime/transport/remote/ssjack-contract.ts";
 import { ssjackTextBootstrap, SsjackTextClient } from "#src/runtime/transport/remote/text/client.ts";
+import { SsjackTextStreamClient } from "#src/runtime/transport/remote/text/stream/client.ts";
 import { DEFAULT_OUTPUT_BYTES_MAX, DEFAULT_TIMEOUT_MS, RecipeKitRefusal, REQUEST_BYTES_MAX } from "./types.ts";
-import type { BackupTextResult, ConsumerRequest, ConsumerResponse, RecipeContext } from "./types.ts";
+import type { BackupTextResult, ConsumerRequest, ConsumerResponse, RecipeContext, DeployTextStreamInput, BackupTextStreamInput, TextStreamStatus } from "./types.ts";
 
 /** Fetches through gateway curl; bounds wait/retention, not transport allocation or cancellation.
  * max-filesize cannot guarantee a pre-capture bound for chunked transfers on every curl version.
@@ -118,4 +119,28 @@ export async function deployText(
   } catch {
     throw new RecipeKitRefusal("transport");
   }
+}
+
+/** Stream a local template twice through the explicitly granted v2 capability. */
+export async function deployTextStream(ctx: RecipeContext, input: DeployTextStreamInput): Promise<TextStreamStatus> {
+  if (ctx.dryRun === true) throw new RecipeKitRefusal("invalid-request");
+  try {
+    const bootstrap = ssjackTextBootstrap(ssjackTextEnvironment(process.env));
+    if (bootstrap === undefined || bootstrap.profile !== input.profile) throw new Error();
+    return await new SsjackTextStreamClient(bootstrap, "text_hydrate_stream_v2").deploy({
+      file: input.file, profile: input.profile, references: input.references, template: input.templatePath,
+    });
+  } catch { throw new RecipeKitRefusal("transport"); }
+}
+
+/** Publish only the completely received reference-only selected copy, never raw text. */
+export async function backupTextStream(ctx: RecipeContext, input: BackupTextStreamInput): Promise<TextStreamStatus> {
+  if (ctx.dryRun === true) throw new RecipeKitRefusal("invalid-request");
+  try {
+    const bootstrap = ssjackTextBootstrap(ssjackTextEnvironment(process.env));
+    if (bootstrap === undefined || bootstrap.profile !== input.profile) throw new Error();
+    return await new SsjackTextStreamClient(bootstrap, "text_reverse_copy_stream_v2").backup({
+      file: input.file, profile: input.profile, references: input.references, output: input.outputPath,
+    });
+  } catch { throw new RecipeKitRefusal("transport"); }
 }
