@@ -90,14 +90,26 @@ The public recipe helpers are `deployText(ctx, { file, template, profile })` and
 
 Acceptance uses synthetic credentials and a controlled target, with test-only accelerated installation derivation. It does not verify interactive human approval/unlock prompts, production enrollment/hardening, universal sandboxing or OpenClaw authentication/adoption. The consumer may keep plaintext in its explicitly approved final configuration. Root, same-UID processes and the trusted runtime remain trust boundaries.
 
-## Streaming text v2 (candidate)
+## Streaming text v2
 
-The v2 path is a separately gated candidate. Its public recipe helpers and
-internal framing, file and pinned HTTP components have dedicated CI acceptance;
-registered CLI wiring and the actual Clawwright/keeper/SSH composition are not
-claimed as accepted here.
-The verified v1 commands and limits above remain unchanged, with no automatic
-fallback between protocols.
+The verified functional source pair is Clawwright
+`b0babb132d74532746501b3aeda92e088d343d17` and ssjack
+`9ce209e45c8a8d6c2345f960c3708a3f58ebcea5`:
+
+- [Actual pair acceptance 41755082293](https://github.com/PHPCraftdream/ssjack/actions/runs/41755082293)
+  reported PASS without SKIP for both legacy and streaming CLI pairs. The v2 case
+  uses the actual Clawwright CLI entry, isolated root grants, UID 65534, pinned
+  HTTPS and authenticated/pinned SSH for greater-than-1-MiB deploy, reference-only
+  backup and exact-version restore. It checks source preservation, existing output,
+  missing exact versions, pre-dispatch refusals and no automatic v1 fallback.
+- [Clawwright scoped gate 41753116743](https://github.com/PHPCraftdream/clawwright/actions/runs/41753116743)
+  passed Linux, macOS, Windows and WSL2 on that source. Dedicated real Node/TLS/file
+  acceptance `41753116773` and tooling policy `41753116962` also passed.
+
+These are functional/scoped receipts, not a release or a substitute for the final
+full-sprint gate. Public recipe helpers have separate component and Node-free ABI
+checks. The verified v1 defaults and limits remain unchanged; no package version
+bump, main-branch merge, real-user migration or OpenClaw adoption is implied.
 
 CLI streaming is explicit: use `--stream-references grant-refs.json`. The metadata file is a UTF-8 JSON array of exact
 canonical placeholder strings, not placeholder objects or secret values. It is
