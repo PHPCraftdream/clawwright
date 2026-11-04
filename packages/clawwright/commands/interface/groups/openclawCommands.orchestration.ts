@@ -251,12 +251,12 @@ export const orchestrationCommands: Record<string, AppCommand> = materializeComm
     summary: "Back up selected text through the keeper",
     group: "change",
     ...SSJACK_TEXT_BACKUP,
-    details: "The keeper privately reads the explicitly approved source and returns only its keeper-transformed selected copy; no raw fallback is available. The backup is limited to 1 MiB. Restore is supported only by feeding a user-supplied complete canonical reference template (1–16 references, all from the same store and snapshot, total template at most 32 KiB) through the existing deploy-text path. It never resolves latest references. Other content refuses restore; the user owns mapping completeness and escaping.",
+    details: "Without --stream, backup is limited to 1 MiB and restore uses the existing 32 KiB canonical-template v1 path (1–16 refs from one store and snapshot). With --stream --references PATH, a separately granted v2 context streams at most 64 MiB; PATH is a JSON array of exact canonical grant placeholder strings. Restore uses deploy-text with the same flags and a separately approved forward grant, never latest. Both modes copy only keeper-transformed selected text, never overwrite existing output or rewrite the live source, and never use raw fallback or automatic retry. The operator owns mapping completeness and escaping.",
   },
   "deploy-text": {
     summary: "Deploy a reference-only text template through SSJack",
     group: "change",
     ...SSJACK_TEXT,
-    details: "Submits the local UTF-8 template literally through the explicitly selected text-hydrate profile. This does not support structured desired-state config or recipe placeholders.",
+    details: "Submits the local UTF-8 template literally through the explicitly selected text-hydrate profile. Default v1 templates are limited to 32 KiB. --stream --references PATH selects a separately granted v2 context, reads one regular template file twice and supports at most 64 MiB. PATH is a JSON array of exact canonical grant placeholder strings, not secret values or permission. No protocol fallback or automatic retry is available. This does not support structured desired-state config or ordinary recipe placeholders.",
   },
 });

@@ -7,6 +7,8 @@ on:
       - 'packages/clawwright/recipe-kit/consumer.ts'
       - 'packages/clawwright/recipe-kit/index.ts'
       - 'packages/clawwright/recipe-kit/types.ts'
+      - 'packages/clawwright/commands/orchestration/config.ts'
+      - 'packages/clawwright/commands/interface/groups/openclawCommands.orchestration.ts'
       - 'tools/checks/runtime/transport/scenarios/text-stream/**'
       - '.github/workflows/text-stream-client.yml'
   pull_request:
@@ -15,6 +17,8 @@ on:
       - 'packages/clawwright/recipe-kit/consumer.ts'
       - 'packages/clawwright/recipe-kit/index.ts'
       - 'packages/clawwright/recipe-kit/types.ts'
+      - 'packages/clawwright/commands/orchestration/config.ts'
+      - 'packages/clawwright/commands/interface/groups/openclawCommands.orchestration.ts'
       - 'tools/checks/runtime/transport/scenarios/text-stream/**'
       - '.github/workflows/text-stream-client.yml'
   workflow_dispatch:

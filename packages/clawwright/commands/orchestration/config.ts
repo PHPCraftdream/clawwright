@@ -27,6 +27,7 @@ import { parseCanonicalTextReferences } from "#src/runtime/transport/remote/text
 import { ssjackTextEnvironment } from "#src/runtime/transport/remote/ssjack-contract.ts";
 import { ssjackTextBootstrap, SsjackTextClient, type SsjackTextStatus, type SsjackTextCopyResult } from "#src/runtime/transport/remote/text/client.ts";
 import { publishSsjackText } from "#src/runtime/transport/remote/text/output.ts";
+import { backupSsjackTextStream, deploySsjackTextStream, validateTextStreamArguments } from "#src/runtime/transport/remote/text/stream/cli.ts";
 
 export const APPLY_CONFIG_ARGUMENTS = [
   { name: "dry-run", summary: "Validate without writing", description: "Validate the apply without writing; refused together with --dump", kind: "flag", effect: "read" },
@@ -357,9 +358,21 @@ export const SSJACK_TEXT_BACKUP = commandBody({
     { name: "file", description: "Granted source path", kind: "option", valueName: "PATH", required: true, value: text("a granted source path", { leadingDash: "allow" }) },
     { name: "output", description: "New local output path", kind: "option", valueName: "PATH", required: true, value: text("a local output path", { leadingDash: "allow" }) },
     { name: "profile", description: "Expected grant profile", kind: "option", valueName: "NAME", required: true, value: text("an expected text profile", { leadingDash: "allow" }) },
+    { name: "stream", description: "Use the separately granted v2 streaming protocol", kind: "flag" },
+    { name: "references", description: "JSON file of exact canonical grant refs; required with --stream", kind: "option", valueName: "PATH", value: text("a reference metadata path", { leadingDash: "allow" }) },
   ],
-  prepare: async (call) => ({ file: call.values.file, output: call.values.output, profile: call.values.profile }),
+  prepare: async (call) => {
+    const stream = call.values.stream === true;
+    validateTextStreamArguments(stream, call.values.references);
+    return { file: call.values.file, output: call.values.output, profile: call.values.profile, stream, references: call.values.references };
+  },
   run: async (_scope, plan) => {
+    if (plan.stream) {
+      if (plan.references === undefined) throw ssjackTextFailure();
+      const status = await backupSsjackTextStream({ file: plan.file, output: plan.output, profile: plan.profile, references: plan.references });
+      emit(`${JSON.stringify({ status })}\n`);
+      return status === "received" ? 0 : 1;
+    }
     const result = await backupSsjackText({ file: plan.file, profile: plan.profile });
     if (result.status === "received") {
       try { await publishSsjackText(plan.output, result.text); }
@@ -377,10 +390,22 @@ export const SSJACK_TEXT = commandBody({
     { name: "file", description: "Destination granted by the remote profile", kind: "option", valueName: "PATH", required: true, value: text("a granted destination path", { leadingDash: "allow" }) },
     { name: "template", description: "Local reference-only text template", kind: "option", valueName: "PATH", required: true, value: text("a reference-only template path", { leadingDash: "allow" }) },
     { name: "profile", description: "Expected grant profile", kind: "option", valueName: "NAME", required: true, value: text("an expected text profile", { leadingDash: "allow" }) },
+    { name: "stream", description: "Use the separately granted v2 streaming protocol", kind: "flag" },
+    { name: "references", description: "JSON file of exact canonical grant refs; required with --stream", kind: "option", valueName: "PATH", value: text("a reference metadata path", { leadingDash: "allow" }) },
   ],
-  prepare: async (call) => ({ file: call.values.file, template: call.values.template, profile: call.values.profile }),
+  prepare: async (call) => {
+    const stream = call.values.stream === true;
+    validateTextStreamArguments(stream, call.values.references);
+    return { file: call.values.file, template: call.values.template, profile: call.values.profile, stream, references: call.values.references };
+  },
   run: async (_scope, plan) => {
-    const status = await selectedSsjackText(plan.file, plan.template, plan.profile);
+    let status: SsjackTextStatus;
+    if (plan.stream) {
+      if (plan.references === undefined) throw ssjackTextFailure();
+      status = await deploySsjackTextStream({ file: plan.file, template: plan.template, profile: plan.profile, references: plan.references });
+    } else {
+      status = await selectedSsjackText(plan.file, plan.template, plan.profile);
+    }
     emit(`${JSON.stringify({ status })}\n`);
     return status === "received" ? 0 : 1;
   },

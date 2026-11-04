@@ -956,6 +956,14 @@
           "profile": {
             "type": "string",
             "description": "Expected grant profile"
+          },
+          "stream": {
+            "type": "boolean",
+            "description": "Use the separately granted v2 streaming protocol"
+          },
+          "references": {
+            "type": "string",
+            "description": "JSON file of exact canonical grant refs; required with --stream"
           }
         },
         "required": [
@@ -982,6 +990,14 @@
           "profile": {
             "type": "string",
             "description": "Expected grant profile"
+          },
+          "stream": {
+            "type": "boolean",
+            "description": "Use the separately granted v2 streaming protocol"
+          },
+          "references": {
+            "type": "string",
+            "description": "JSON file of exact canonical grant refs; required with --stream"
           }
         },
         "required": [

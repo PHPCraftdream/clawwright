@@ -118,7 +118,7 @@ func task258BaselineReceipts() map[string]string {
 
 func task258CurrentReceipts() map[string]string {
 	return map[string]string{
-		"tools/checks/foundation/packaging/build-output.check.ts":     "0e2ffa35dc3f2591c0d032d1d843fd2fab270850",
+		"tools/checks/foundation/packaging/build-output.check.ts":     "d2c139dc16d10e68f17ac671f275c922cc61c28f",
 		"tools/checks/runtime/transport/remote/ssjack-client.check.ts": "5a40b9366289c81222e2deea652ab86ccbd4c48e",
 		"tools/checks/foundation/core/command/needs.check.ts":         "4bf762935e8e8fcbfe6e911bfb6770dd92773876",
 		"tools/checks/completeness/flags-matrix.check.ts":             "9679640e21f664647bced89dec3223044dd8485f",
