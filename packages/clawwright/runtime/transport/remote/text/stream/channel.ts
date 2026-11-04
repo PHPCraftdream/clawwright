@@ -24,7 +24,10 @@ export async function textStreamJSON(response: IncomingMessage, notification = f
     if (!response.complete) throw fail();
     if (notification && response.statusCode === 202 && length === 0) return undefined;
     if (response.statusCode !== 200 || response.headers["content-type"] !== "application/json") throw fail();
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks, length))) as unknown;
+    const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks, length)).trim();
+    const value: unknown = JSON.parse(text);
+    if (JSON.stringify(value) !== text) throw fail();
+    return value;
   } catch {
     response.destroy();
     throw fail();
