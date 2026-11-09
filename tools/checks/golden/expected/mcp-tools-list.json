@@ -956,6 +956,10 @@
           "profile": {
             "type": "string",
             "description": "Expected grant profile"
+          },
+          "stream-references": {
+            "type": "string",
+            "description": "Canonical grant refs JSON file; use v2 streaming"
           }
         },
         "required": [
@@ -982,6 +986,10 @@
           "profile": {
             "type": "string",
             "description": "Expected grant profile"
+          },
+          "stream-references": {
+            "type": "string",
+            "description": "Canonical grant refs JSON file; use v2 streaming"
           }
         },
         "required": [
