@@ -82,6 +82,12 @@ async function verifyHistoricalRelocation(currentDist: string): Promise<void> {
       "service/archive/pack",
       "security/privacy/private-paths-ledger",
       "commands/lifecycle/restore/index",
+      "commands/interface/groups/openclawCommands.management",
+      "commands/management/configuration/ssjack-app/classification",
+      "commands/management/configuration/ssjack-app/descriptor",
+      "commands/management/configuration/ssjack-app/index",
+      "commands/management/configuration/ssjack-app/launch",
+      "integration/mcp/server",
     ].flatMap((path) => [`${path}.js`, `${path}.d.ts`]));
     const allFiles = [...new Set([...frozenFiles, ...currentFiles])].sort();
     for (const path of allFiles) {
@@ -131,7 +137,7 @@ async function verifyCurrentFeatureOutput(distDir: string): Promise<void> {
     if (actual !== expected) throw new Error(`built feature output differs from current source: ${path}`);
     await readFile(resolve(distDir, path.replace(/\.ts$/, ".d.ts")));
   }
-  for (const path of ["runtime/transport/remote/ssjack-contract", "runtime/transport/transport", "recipe-kit/index", "commands/interface/groups/openclawCommands.orchestration"]) {
+  for (const path of ["runtime/transport/remote/ssjack-contract", "runtime/transport/transport", "recipe-kit/index", "commands/interface/groups/openclawCommands.orchestration", "commands/interface/groups/openclawCommands.management", "commands/management/configuration/ssjack-app/classification", "commands/management/configuration/ssjack-app/descriptor", "commands/management/configuration/ssjack-app/index", "commands/management/configuration/ssjack-app/launch"]) {
     const sourcePath = `${path}.ts`;
     const source = await readFile(resolve(monorepoRoot, "packages/clawwright", sourcePath), "utf8");
     const expected = stripTypeScriptTypes(source, { mode: "strip" }).replace(

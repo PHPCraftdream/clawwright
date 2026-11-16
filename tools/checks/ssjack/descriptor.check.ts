@@ -42,7 +42,7 @@ check(
   typical,
   '{"format":"ssjack-app-v1","name":"clawwright","launch":{"executable":"/usr/local/bin/node","args":["--experimental-strip-types","/usr/local/lib/node_modules/@phpcraftdream/clawwright/dist/entry/bin.js"]},"workdir":".","commands":{"observational":["inspect","status"],"refused":["control-mcp","mcp-serve"]}}',
 );
-checkTrue("the document is one line without whitespace outside values", !/[\r\n\t]/.test(typical) && !typical.endsWith(" "));
+checkTrue("the document is one line and ends with its closing brace", !/[\r\n\t]/.test(typical) && typical.endsWith("}"));
 check("serializing twice gives the same bytes", serializeDescriptor(buildDescriptor(base), "posix"), typical);
 check("the field order is the contract's", Object.keys(JSON.parse(typical) as object), ["format", "name", "launch", "workdir", "commands"]);
 
