@@ -1,0 +1,151 @@
+name: ssjack conformance
+
+on:
+  push:
+    paths:
+      - 'packages/clawwright/runtime/transport/remote/text/**'
+      - 'packages/clawwright/runtime/transport/remote/ssjack-client.ts'
+      - 'packages/clawwright/runtime/transport/remote/ssjack-contract.ts'
+      - 'packages/clawwright/recipe-kit/consumer.ts'
+      - 'packages/clawwright/recipe-kit/index.ts'
+      - 'packages/clawwright/recipe-kit/types.ts'
+      - 'packages/clawwright/commands/orchestration/config.ts'
+      - 'packages/clawwright/commands/interface/groups/openclawCommands.orchestration.ts'
+      - 'tools/clawwright.ts'
+      - 'package-lock.json'
+      - '.github/workflows/ssjack-conformance.yml'
+  pull_request:
+    paths:
+      - 'packages/clawwright/runtime/transport/remote/text/**'
+      - 'packages/clawwright/runtime/transport/remote/ssjack-client.ts'
+      - 'packages/clawwright/runtime/transport/remote/ssjack-contract.ts'
+      - 'packages/clawwright/recipe-kit/consumer.ts'
+      - 'packages/clawwright/recipe-kit/index.ts'
+      - 'packages/clawwright/recipe-kit/types.ts'
+      - 'packages/clawwright/commands/orchestration/config.ts'
+      - 'packages/clawwright/commands/interface/groups/openclawCommands.orchestration.ts'
+      - 'tools/clawwright.ts'
+      - 'package-lock.json'
+      - '.github/workflows/ssjack-conformance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ssjack-conformance-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The single place to bump the ssjack kit: a full lowercase 40-character commit of
+  # PHPCraftdream/ssjack. A contract change shows up as a diff of its
+  # docs/CONSUMER-CONFORMANCE.md and of the kit; review it, then change only this value.
+  SSJACK_COMMIT: f21800fd04a29a2bf63abb1b7ab39adcfca83f4a
+  # Everything the unprivileged consumer (UID 65534) needs lives here, readable by it.
+  CONSUMER_ROOT: /opt/clawwright-consumer
+
+jobs:
+  conformance:
+    name: Clawwright deploy-text and backup-text against the pinned ssjack kit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out Clawwright
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Check out the pinned ssjack kit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: PHPCraftdream/ssjack
+          ref: ${{ env.SSJACK_COMMIT }}
+          path: ssjack-kit
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.0'
+          cache: false
+          check-latest: false
+
+      - name: Install package dependencies
+        run: npm ci --include=dev
+
+      - name: Verify the kit pin and stage the consumer
+        shell: bash
+        # The kit runs the consumer as UID 65534 with a minimal environment, so the consumer
+        # cannot rely on the runner's home or tool cache: stage a copy of this checkout, its
+        # Node binary, a deployment declaration and a launcher that run the source CLI.
+        run: |
+          set -euo pipefail
+          [[ "$SSJACK_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::SSJACK_COMMIT must be a full lowercase 40-character SHA"; exit 1; }
+          [ "$(git -C ssjack-kit rev-parse HEAD)" = "$SSJACK_COMMIT" ] || { echo "::error::ssjack-kit is not at SSJACK_COMMIT"; exit 1; }
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE/ssjack-kit"
+
+          sudo install -d -m 0755 "$CONSUMER_ROOT" "$CONSUMER_ROOT/bin" "$CONSUMER_ROOT/checkout"
+          tar -C "$GITHUB_WORKSPACE" --exclude=./.git --exclude=./ssjack-kit -cf - . | sudo tar --no-same-owner -C "$CONSUMER_ROOT/checkout" -xf -
+          sudo install -m 0755 "$(command -v node)" "$CONSUMER_ROOT/bin/node"
+
+          sudo install -d -m 0755 "$CONSUMER_ROOT/checkout/apps/conformance"
+          sudo tee "$CONSUMER_ROOT/checkout/apps/conformance/package.json" >/dev/null <<'EOF'
+          {"type":"module"}
+          EOF
+          sudo tee "$CONSUMER_ROOT/checkout/apps/conformance/app.ts" >/dev/null <<EOF
+          import { defineApp } from "file://$CONSUMER_ROOT/checkout/packages/clawwright/core/app.ts";
+          import { openclawCommands } from "file://$CONSUMER_ROOT/checkout/packages/clawwright/commands/interface/index.ts";
+          export default defineApp({ name: "conformance", description: "ssjack consumer conformance", commands: openclawCommands });
+          EOF
+          sudo tee "$CONSUMER_ROOT/bin/clawwright-consumer" >/dev/null <<EOF
+          #!/bin/sh
+          exec "$CONSUMER_ROOT/bin/node" --experimental-strip-types "$CONSUMER_ROOT/checkout/tools/clawwright.ts" "\$@"
+          EOF
+          sudo chmod 0755 "$CONSUMER_ROOT/bin/clawwright-consumer"
+          sudo chown -R 65534:65534 "$CONSUMER_ROOT"
+
+      - name: Run the ssjack consumer conformance kit
+        shell: bash
+        env:
+          SSJACK_CONSUMER_COMMAND: ${{ env.CONSUMER_ROOT }}/bin/clawwright-consumer
+          SSJACK_CONSUMER_ARGS: '["--app","conformance"]'
+          SSJACK_CONSUMER_DEPLOY_NAME: deploy-text
+          SSJACK_CONSUMER_BACKUP_NAME: backup-text
+          SSJACK_CONSUMER_WORKDIR: ${{ env.CONSUMER_ROOT }}/checkout
+          SSJACK_CONSUMER_ENV: '{"NODE_NO_WARNINGS":"1"}'
+          SSJACK_CONSUMER_REVISION: ${{ github.sha }}
+          GOTOOLCHAIN: local
+        # The kit needs Linux and root: it registers root-owned grants and runs the consumer
+        # as UID 65534. TestConsumerConformance covers v1 and TestConsumerStreamConformance
+        # covers v2 (--stream-references, passed by the kit).
+        run: |
+          set -euo pipefail
+          sudo env \
+            "HOME=/root" "PATH=$PATH" "GOTOOLCHAIN=$GOTOOLCHAIN" \
+            "SSJACK_CONSUMER_COMMAND=$SSJACK_CONSUMER_COMMAND" \
+            "SSJACK_CONSUMER_ARGS=$SSJACK_CONSUMER_ARGS" \
+            "SSJACK_CONSUMER_DEPLOY_NAME=$SSJACK_CONSUMER_DEPLOY_NAME" \
+            "SSJACK_CONSUMER_BACKUP_NAME=$SSJACK_CONSUMER_BACKUP_NAME" \
+            "SSJACK_CONSUMER_WORKDIR=$SSJACK_CONSUMER_WORKDIR" \
+            "SSJACK_CONSUMER_ENV=$SSJACK_CONSUMER_ENV" \
+            "SSJACK_CONSUMER_REVISION=$SSJACK_CONSUMER_REVISION" \
+            python3 ssjack-kit/scripts/ci/consumer_conformance.py 2>&1 | tee "$RUNNER_TEMP/ssjack-conformance.log"
+
+      - name: Require the PASS markers and no SKIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/ssjack-conformance.log"
+          if grep -Eq '^[[:space:]]*--- SKIP:' "$log"; then
+            echo "::error::a conformance test was skipped"
+            exit 1
+          fi
+          for name in TestConsumerConformance TestConsumerStreamConformance; do
+            grep -Eq "^--- PASS: ${name}( |\$)" "$log" || { echo "::error::${name} did not report PASS"; exit 1; }
+          done
+          grep -Fq "Conformance source: ssjack=${SSJACK_COMMIT} consumer=${CONSUMER_ROOT}/bin/clawwright-consumer revision=${GITHUB_SHA}" "$log" || { echo "::error::the run did not use the pinned kit and this revision"; exit 1; }

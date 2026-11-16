@@ -90,9 +90,9 @@ The deploy-text source group is `packages/clawwright/runtime/transport/remote/te
 
 `deploy-text` usage is `deploy-text --file <registered-target> --template <local-reference-only-file> --profile <expected-profile>`. The producer must launch with `SSJACK_TEXT_LAUNCH=1` and `SSJACK_TEXT_PROFILE=<expected-profile>` plus the exact `SSJACK_APP_ENDPOINT`, `SSJACK_APP_TOKEN` and `SSJACK_APP_CERTIFICATE_SHA256` values provided by `serve` (or the `SSJACK_APP_*` mapping where explicitly configured). Any ordinary generic command under this marker refuses; there is no fallback. `apply-config` refuses unsupported flags while structured markers remain unchanged. For the selected input, the client uses `lstat` to reject symlinks and non-regular files before opening. On POSIX it opens nonblocking, then checks that the opened handle is regular and has the same device/inode as the pre-open entry, preventing a substituted path from being accepted. Windows follows the normal disk-file path with pre/post identity checks; `O_NONBLOCK` is not a portable Windows guarantee. Reads are bounded to 32768 bytes plus one byte to detect growth beyond the limit; UTF-8 decoding is fatal and preserves a leading BOM. There is no universal filesystem deadline guarantee. The runtime directory is also subject to an immediate-entry ceiling of 7. CLI outcomes other than `received` exit 1; the recipe returns a status that callers must not equate with unknown success.
 
-Text templates are literal compact canonical JSON placeholders, with exact fields and order: `{"$ssjack":{"format":"ssjack-secret-ref-v1","object_id":"…","snapshot_id":"…","store_id":"…","version_id":"…"}}`. Clawwright does not re-serialize, escape, interpolate or resolve values; it passes the literal reference-only text to ssjack for the approved replacement. Templates are limited to 32 KiB and 1–16 unique references, all from the same store and snapshot. Text mode uses its separate endpoint and accepts only the `text_hydrate` capability. Direct temporary bootstrap uses `SSJACK_TEXT_*`; an explicitly configured `SSJACK_TEXT_LAUNCH` mapping may instead map `SSJACK_APP_*`. Neither mapping makes these temporary credentials durable configuration. Canonical field order remains the published Go order; the verified source pair and its bounded acceptance are listed below. No values are resolved, persisted, or exposed to ordinary deployment paths.
+Text templates are literal compact canonical JSON placeholders, with exact fields and order: `{"$ssjack":{"format":"ssjack-secret-ref-v1","object_id":"…","snapshot_id":"…","store_id":"…","version_id":"…"}}`. Clawwright does not re-serialize, escape, interpolate or resolve values; it passes the literal reference-only text to ssjack for the approved replacement. Templates are limited to 32 KiB and 1–16 unique references, all from the same store and snapshot. Text mode uses its separate endpoint and accepts only the `text_hydrate` capability. Direct temporary bootstrap uses `SSJACK_TEXT_*`; an explicitly configured `SSJACK_TEXT_LAUNCH` mapping may instead map `SSJACK_APP_*`. Neither mapping makes these temporary credentials durable configuration. Canonical field order remains the published Go order; the conformance verification and its bounds are described below. No values are resolved, persisted, or exposed to ordinary deployment paths.
 
-The text operation is one-attempt, bounded to at most 60 seconds, and reports `withheld`, `received` or `unknown`. An uncertain post-dispatch outcome is `unknown` and is never retried; unknown does not imply restart or replay. `received` is delivery evidence, not application authentication or adoption. The selected-text CLI composition has passed the pinned public-CI acceptance below; it does not automatically enable structured `apply-config`, provider requirements or arbitrary recipe execution.
+The text operation is one-attempt, bounded to at most 60 seconds, and reports `withheld`, `received` or `unknown`. An uncertain post-dispatch outcome is `unknown` and is never retried; unknown does not imply restart or replay. `received` is delivery evidence, not application authentication or adoption. The selected-text CLI composition is verified by the pinned conformance kit below; it does not automatically enable structured `apply-config`, provider requirements or arbitrary recipe execution.
 
 ## Backup text mode
 
@@ -102,13 +102,11 @@ Exact literal completeness is required; no secret certification is implied. Empt
 
 ## Verified selected-text composition
 
-The verified runtime source pair is Clawwright `506ff2a2802bbfa5cf931f735f1b06aaee7f5244` and ssjack `eb89b10000d1cbdd2a46b8e39f3a7bca5df757ce`:
+Clawwright verifies itself against a pinned ssjack commit with ssjack's consumer conformance kit (`docs/CONSUMER-CONFORMANCE.md` in the ssjack repository). The workflow `.github/workflows/ssjack-conformance.yml` checks out ssjack at that commit, stages this checkout's source CLI as the consumer (`deploy-text` and `backup-text`, v1 and `--stream-references` v2) and runs the kit as root on Linux through the real keeper grants, pinned HTTPS listener and authenticated SSH loopback. It requires `--- PASS: TestConsumerConformance` and `--- PASS: TestConsumerStreamConformance` with no SKIP. It runs on pushes and pull requests that touch the text transport, the recipe-kit consumer, the command declarations or the workflow itself, and on manual dispatch.
 
-- [Paired feature acceptance 41569701166](https://github.com/PHPCraftdream/ssjack/actions/runs/41569701166): actual registered CLI, real keeper authority and encrypted fixtures, pinned HTTPS, authenticated SSH loopback, deploy, safe backup and exact-version restore; PASS without SKIP.
-- [ssjack full gate 41570783616](https://github.com/PHPCraftdream/ssjack/actions/runs/41570783616): all nine jobs passed, including the paired gate, three operating systems, race detector and unchanged production KDF profile.
-- [Clawwright full gate 41569699232](https://github.com/PHPCraftdream/clawwright/actions/runs/41569699232): all seven platform/negative-control jobs passed. Scoped run `41568975739` and policy run `41568975725` also passed on the same Clawwright commit.
+The pin is the `SSJACK_COMMIT` value in that workflow's `env`: one full lowercase 40-character commit, checked against the checkout before the kit runs. To bump it, read the diff of ssjack's `docs/CONSUMER-CONFORMANCE.md` and of the kit between the old and new commit, change only that value, and let the workflow run; a contract change that the consumer does not meet fails there. A branch or tag is never used.
 
-Use a checkout/package built from these verified sources; an older published package is not evidence that it contains these commands. No package version bump, release or main-branch merge is implied.
+Use a checkout/package built from a verified source; an older published package is not evidence that it contains these commands. The kit proves the composition of the keeper grants, adapters, listener, SSH runner and this CLI. It does not prove production enrollment, interactive approval/unlock prompts, crash durability, application adoption or detection of unknown secrets. No package version bump, release or main-branch merge is implied.
 
 Run each operation as the approved child of its separately authorized ssjack text context. The following arguments contain only metadata and reference-file paths; bootstrap credentials are supplied by the keeper, not copied into declarations:
 
@@ -120,30 +118,20 @@ Run each operation as the approved child of its separately authorized ssjack tex
 
 The backup context needs a prior `reverse-copy-v1` grant; deploy/restore need `hydrate-v1` grants. Each grant binds the actual source/destination, SSH credential identity, command, exact references/snapshot and expiry. Select a new output path: an existing backup is never overwritten. Do not automatically retry or recreate a capability after an unknown result.
 
-The public recipe helpers are `deployText(ctx, { file, template, profile })` and `backupText(ctx, { file, profile })`. These explicitly selected operations do not grant the rest of a recipe generic exec/read capabilities or create its execution context. The actual paired gate covers CLI composition; helper contracts have separate component checks.
+The public recipe helpers are `deployText(ctx, { file, template, profile })` and `backupText(ctx, { file, profile })`. These explicitly selected operations do not grant the rest of a recipe generic exec/read capabilities or create its execution context. The conformance run covers CLI composition; helper contracts have separate component checks.
 
-Acceptance uses synthetic credentials and a controlled target, with test-only accelerated installation derivation. It does not verify interactive human approval/unlock prompts, production enrollment/hardening, universal sandboxing or OpenClaw authentication/adoption. The consumer may keep plaintext in its explicitly approved final configuration. Root, same-UID processes and the trusted runtime remain trust boundaries.
+Conformance uses synthetic credentials and a controlled target, with test-only accelerated installation derivation. It does not verify interactive human approval/unlock prompts, production enrollment/hardening, universal sandboxing or OpenClaw authentication/adoption. The consumer may keep plaintext in its explicitly approved final configuration. Root, same-UID processes and the trusted runtime remain trust boundaries.
 
 ## Streaming text v2
 
-The verified functional source pair is Clawwright
-`b0babb132d74532746501b3aeda92e088d343d17` and ssjack
-`9ce209e45c8a8d6c2345f960c3708a3f58ebcea5`:
-
-- [Actual pair acceptance 41755082293](https://github.com/PHPCraftdream/ssjack/actions/runs/41755082293)
-  reported PASS without SKIP for both legacy and streaming CLI pairs. The v2 case
-  uses the actual Clawwright CLI entry, isolated root grants, UID 65534, pinned
-  HTTPS and authenticated/pinned SSH for greater-than-1-MiB deploy, reference-only
-  backup and exact-version restore. It checks source preservation, existing output,
-  missing exact versions, pre-dispatch refusals and no automatic v1 fallback.
-- [Clawwright scoped gate 41753116743](https://github.com/PHPCraftdream/clawwright/actions/runs/41753116743)
-  passed Linux, macOS, Windows and WSL2 on that source. Dedicated real Node/TLS/file
-  acceptance `41753116773` and tooling policy `41753116962` also passed.
-
-These are functional/scoped receipts, not a release or a substitute for the final
-full-sprint gate. Public recipe helpers have separate component and Node-free ABI
-checks. The verified v1 defaults and limits remain unchanged; no package version
-bump, main-branch merge, real-user migration or OpenClaw adoption is implied.
+The v2 case of the [conformance kit](#verified-selected-text-composition)
+(`TestConsumerStreamConformance`) runs the actual CLI with `--stream-references`
+for greater-than-1-MiB deploy, reference-only backup and exact-version restore,
+and checks source preservation, existing output, missing exact versions,
+pre-dispatch refusals and no automatic v1 fallback. Public recipe helpers have
+separate component and Node-free ABI checks. The v1 defaults and limits remain
+unchanged; no package version bump, main-branch merge, real-user migration or
+OpenClaw adoption is implied.
 
 CLI streaming is explicit: use `--stream-references grant-refs.json`. The metadata file is a UTF-8 JSON array of exact
 canonical placeholder strings, not placeholder objects or secret values. It is
