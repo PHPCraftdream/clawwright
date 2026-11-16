@@ -13,6 +13,7 @@ import { HOST } from "#src/commands/interface/host/index.ts";
 import { CLI_START, CLI_STOP } from "#src/commands/interface/cli-helper.ts";
 import { CONFIGURE_PROVIDER } from "#src/commands/management/configuration/credentials/provider.ts";
 import { MCP_SERVE, MCP_SETUP, MCP_CREDS } from "#src/commands/management/configuration/credentials/mcp.ts";
+import { SSJACK_DESCRIPTOR } from "#src/commands/management/configuration/ssjack-app/index.ts";
 import { DEPLOY } from "#src/commands/management/deploy/index.ts";
 import { LOCK } from "#src/commands/management/lock.ts";
 import { SECRETS } from "#src/commands/management/configuration/secrets.ts";
@@ -370,5 +371,19 @@ export const managementCommands: Record<string, AppCommand> = materializeCommand
     details:
       "The same information `{clawwright mcp-setup}` writes to a file, printed instead —\n" +
       "useful for pasting into a client by hand or checking what {--json}/{--token} would produce.",
+  },
+  "ssjack-descriptor": {
+    summary: "Write ssjack-app.json so ssjack can run this deployment",
+    group: "integrations",
+    ...SSJACK_DESCRIPTOR,
+    details:
+      "Writes ssjack-app.json (format ssjack-app-v1) into the deployment directory: the descriptor ssjack reads to register this deployment, so ssjack needs no knowledge of Clawwright.\n" +
+      "The launch is this Node executable plus this copy's own entry point, run from the deployment directory: the package's entry (dist/entry/bin.js when installed) or, for an apps/<name> deployment of a checkout, the checkout gate with its own --app <name>.\n" +
+      "Both are absolute paths on the machine that ran this command, so run it where the application runs, inside the container for a routed application. The file is added to the deployment's .gitignore.\n" +
+      "commands.observational lists the read-only commands ssjack runs without confirm; commands.refused (mcp-serve, control-mcp, mcp-creds, cli, exec, host) are never run, even with confirm; every other command needs confirm. The lists are reviewed in the source, not guessed.\n" +
+      "Then start ssjack with --app <directory> (repeatable) and, for an application inside an Incus container, --app-route incus:CONTAINER:USER.\n" +
+      "An identical descriptor is left as it is; a different one is refused unless {--force} is given. The write is atomic.",
+    // An operator step on the machine that runs the application: it decides what ssjack launches.
+    consoleOnly: true,
   },
 });

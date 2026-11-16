@@ -4,6 +4,15 @@ All notable changes to `@phpcraftdream/clawwright` will be documented here.
 
 ## Unreleased
 
+### Added
+* `ssjack-descriptor` writes `ssjack-app.json` (format `ssjack-app-v1`) into the deployment directory, so ssjack
+  registers Clawwright from the descriptor the application ships (`ssjack --app DIR`, and `--app-route
+  incus:CONTAINER:USER` for an application inside an Incus container) instead of enrolling it by hand. The launch
+  is this Node executable plus the entry of the running copy; `commands.observational` and `commands.refused`
+  come from a reviewed table (`mcp-serve`, `control-mcp`, `mcp-creds`, `cli`, `exec` and `host` are refused).
+  The document is validated against the contract limits before it is written, published atomically, and never
+  replaced without `--force`; `/ssjack-app.json` is added to the deployment's `.gitignore`.
+
 ## 0.1.2
 
 Operator experience: logs that are in time order, data handed to a container command without

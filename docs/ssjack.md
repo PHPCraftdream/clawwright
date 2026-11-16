@@ -44,9 +44,43 @@ A supply record contains no endpoint, bearer token, TLS session pin, password, p
 
 Secrets handled by the wider application have separate lifecycle and backup boundaries: target-environment changes require a gateway restart to be read; repository `.env` values are fixed in the container environment at creation, so applying changed values requires container recreation (a plain restart retains the old environment). The `secrets.ts` comparison checks environment values but prints names only; it does not prove that a provider or gateway adopted or can use them. Full backups include secrets by default; `--with-secrets` explicitly selects the full profile. Migrate snapshots may have plaintext secret sidecars, separate from the archive. Treat these files and backups as sensitive.
 
+## Application registration
+
+ssjack knows nothing about Clawwright. It registers any application from a descriptor the application ships: a file named `ssjack-app.json` (format `ssjack-app-v1`) in the application directory. Clawwright produces its own with `ssjack-descriptor`; nothing about Clawwright is enrolled by hand in ssjack.
+
+1. In the deployment directory, on the machine where Clawwright runs (inside the container for an application routed into an Incus container), write the descriptor. From a checkout, use `--app <name>` before the command as for any other command:
+
+   ```bash
+   clawwright ssjack-descriptor
+   ```
+
+   It is a console command, not an MCP tool: what ssjack launches is an operator decision, so a tool session cannot rewrite it.
+
+2. Start ssjack with the deployment directory as an application. `--app` is repeatable; for an application that runs inside an Incus container add the fixed route:
+
+   ```bash
+   ssjack --app DIR
+   ssjack --app DIR --app-route incus:CONTAINER:USER
+   ```
+
+   `DIR` is the deployment directory holding `ssjack-app.json`; the other ssjack arguments are unchanged.
+
+For an installation on POSIX the descriptor is a single compact JSON object like this one (paths differ per machine):
+
+```json
+{"format":"ssjack-app-v1","name":"clawwright","launch":{"executable":"/usr/local/bin/node","args":["--experimental-strip-types","/usr/local/lib/node_modules/@phpcraftdream/clawwright/dist/entry/bin.js"]},"workdir":".","commands":{"observational":["completion","doctor","help","inspect","list","logs","plan","status","verify","version"],"refused":["cli","control-mcp","exec","host","mcp-creds","mcp-serve"]}}
+```
+
+* `launch` is the Node executable that ran the command, as an absolute path (on Windows a native `node.exe`; ssjack refuses `.cmd` and `.bat` shims, and so does the command, before writing), plus this copy's own entry point: `dist/entry/bin.js` of the installed package. For an `apps/<name>` deployment of a checkout it is the checkout gate `tools/clawwright.ts` followed by `--app <name>`. ssjack runs it with the deployment directory as `workdir` (`.`), where `app.ts` is found, and appends the command name and its arguments.
+* `commands.observational` lists the read-only commands ssjack runs without confirmation. Every other command needs `confirm=true`. `commands.refused` is never run, even with `confirm=true`: the two stdio servers `mcp-serve` and `control-mcp`, `mcp-creds` (it prints the gateway token) and the pass-through commands `cli`, `exec` and `host`. ssjack also always refuses interactive stdin (`--stdin`).
+* Both lists are an explicit, reviewed table in `commands/management/configuration/ssjack-app/classification.ts`, not a guess from command names. A check requires every command of the registry to be classified exactly once, and every observational command to be declared read-only in every action and flag. A command a deployment adds on its own is unlisted and therefore needs `confirm=true`.
+* Before writing, the command validates the document against the `ssjack-app-v1` limits (at most 16 KiB, name `^[a-z][a-z0-9-]{0,31}$`, command names `^[a-z][a-z0-9-]{0,63}$`, unique, at most 64 per list and never in both lists, at most 16 launch arguments of at most 1024 bytes and 4096 in total, no control characters, a relative `workdir` inside `DIR`). The file is written atomically through a temporary file and a rename.
+* An existing descriptor is never replaced silently: an identical one is left as it is, a different one is refused unless `--force` is given. The file holds this machine's absolute paths, so the command adds `/ssjack-app.json` to the deployment's `.gitignore`; run it again after the Node executable or the package moves.
+* Each operation starts the child with a fresh `SSJACK_APP_ENDPOINT`, `SSJACK_APP_TOKEN` and `SSJACK_APP_CERTIFICATE_SHA256`, which the runtime client described above consumes.
+
 ## Launcher boundary
 
-At keeper startup, an operator enrolls a trusted deployment directory and native Node entry, plus an optional fixed Incus container/user route. The current full `app_exec` is not a restricted declarative sandbox: its admitted exec/host operations and credential reporting can act generally, including exposing secrets, with the configured principal's privileges. `confirm=true` is caller acknowledgment, not proof of human approval. Each operation receives a fresh child capability; finish, timeout, cancellation or parent disconnect revokes it. This bounds the capability lifetime, not the authority of code using it. Registration trusts the application code and is not a filesystem sandbox: trusted application or recipe code, Docker/Incus admin sockets, `sudo` or an alternate shell can bypass restrictions in future narrower APIs. Non-admin operation is an operator-enrolled server policy, not something guaranteed by a role name or SSH key.
+The descriptor is a command policy, not a sandbox. Each operation receives a fresh child capability; finish, timeout, cancellation or parent disconnect revokes it. This bounds the capability lifetime, not the authority of code using it. `confirm=true` is caller acknowledgment, not proof of human approval. Registration trusts the application code and is not a filesystem sandbox: trusted application or recipe code, Docker/Incus admin sockets, `sudo` or an alternate shell can bypass restrictions in future narrower APIs. Non-admin operation is an operator-enrolled server policy, not something guaranteed by a role name or SSH key.
 
 A future declarative MCP interface and universal encrypted secret store are plans, not current guarantees. The current transport slice stages the operator-side Compose definition rather than assume shared package paths. Unsupported second-hop deployment, recipe build inputs, persistent scheduling and stdio relays must refuse before mutation. Invalid supplied context must never trigger fallback to ordinary SSH.
 

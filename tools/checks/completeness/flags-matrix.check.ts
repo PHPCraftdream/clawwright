@@ -79,6 +79,7 @@ const TABLE: Record<string, FlagPosition> = {
   watch: position({ json: true, dryRun: false, dryRunReason: "install/uninstall already preview by default; --apply is the only mutating path" }),
   incident: position({ json: true, dryRun: true }),
   "mcp-creds": position({ json: true, dryRun: false, dryRunReason: "prints a credential, already read-only" }),
+  "ssjack-descriptor": position({ json: false, jsonReason: "writes one small file and reports its path; there is no report worth structuring", dryRun: false, dryRunReason: "one atomic file write; a different existing descriptor is refused without --force" }),
 
   // --- orchestration ---
   inspect: position({ json: true, dryRun: false, dryRunReason: "already read-only" }),

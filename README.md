@@ -185,6 +185,7 @@ Integrations & recovery:
   mcp-serve            stdio MCP bridge to the service's own channels
   mcp-setup            Configure project MCP servers (Claude Code, Codex)
   mcp-creds            Print service URL, token and MCP client config
+  ssjack-descriptor    Write ssjack-app.json so ssjack can run this deployment *
 
 Low-level:
   cli                  Run the OpenClaw CLI in a throwaway container !

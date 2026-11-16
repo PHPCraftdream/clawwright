@@ -70,7 +70,7 @@ const needsOf = (unit: Unit): string => {
 const localUnits = units.filter((unit) => needsOf(unit) === "local");
 // The local set pinned as WORD ARRAYS (the labels' tokens), not spaced literals: the same
 // expectation, expressed the way the prose-pin measurement does not count.
-const LOCAL_UNIT_TOKENS: ReadonlyArray<readonly string[]> = [["memory", "plan"], ["memory", "configure"], ["recipe", "import"], ["recipe", "new"], ["recipe", "check"], ["mcp-setup"]];
+const LOCAL_UNIT_TOKENS: ReadonlyArray<readonly string[]> = [["memory", "plan"], ["memory", "configure"], ["recipe", "import"], ["recipe", "new"], ["recipe", "check"], ["mcp-setup"], ["ssjack-descriptor"]];
 check("the units declaring needs local are exactly the repository-side ones",
   localUnits.map((unit) => unit.label.split(" ")), LOCAL_UNIT_TOKENS);
 
@@ -85,6 +85,7 @@ const localInputs: Readonly<Record<string, (root: string) => readonly string[]>>
   "recipe new": () => ["new", "needs-local-recipe"],
   "recipe check": () => ["check", "local", "--dry-run"],
   "mcp-setup": () => [],
+  "ssjack-descriptor": () => [],
 };
 
 // Valid named inputs for a target unit, from its declaration alone: required positionals,

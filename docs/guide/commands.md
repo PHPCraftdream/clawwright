@@ -131,6 +131,7 @@ over automatically, without the flag.
 | `mcp-serve` | `[--wait <seconds>]` | stdio MCP bridge to the service's own channels |
 | `mcp-setup` | `[--client <client>] [--json] [--rewrite-launcher]` | Configure project MCP servers (Claude Code, Codex) |
 | `mcp-creds` | `[--json] [--token]` | Print service URL, token and MCP client config |
+| `ssjack-descriptor` | `[--force]` | Write ssjack-app.json so ssjack can run this deployment (destructive for some actions) |
 
 ### Low-level
 
@@ -174,6 +175,8 @@ its arguments and its one-line summary; the full text of any of them is
   [Incident response: `incident`](monitoring-and-access.md#incident-response-incident)
 * `init` — installing in a separate repository over npm:
   [Installing in a separate repository](deploy-and-mcp.md#installing-in-a-separate-repository-npm)
+* `ssjack-descriptor` — the `ssjack-app.json` ssjack registers a deployment from, its two command
+  lists and the `--app` / `--app-route` launch: [Application registration](../ssjack.md#application-registration)
 
 ## Shell completion
 

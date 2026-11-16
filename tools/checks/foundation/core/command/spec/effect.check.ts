@@ -89,6 +89,7 @@ const TABLE: Readonly<Record<string, readonly Row[]>> = {
   "mcp-serve": [[[], "change"]],
   "mcp-setup": [[[], "change"]],
   "mcp-creds": [[[], "read"], [["--token"], "read"]],
+  "ssjack-descriptor": [[[], "change"], [["--force"], "destroy"]],
   set: [
     [["validate"], "read", false], [["receipts"], "read", false],
     [["build"], "change", true], [["try", "--set", "x"], "destroy", true], [["forget"], "destroy", true], [[], "change", false],
