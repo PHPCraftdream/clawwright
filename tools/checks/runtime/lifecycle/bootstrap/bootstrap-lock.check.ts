@@ -18,6 +18,7 @@ import { useDeployment } from "#framework/runtime/deployment.ts";
 import { withOutputSink } from "#framework/core/io/output.ts";
 import type { Context } from "#framework/core/context.ts";
 import { check, finish } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 import { openclawCommands } from "#framework/commands/interface/index.ts";
 
 const DATA_DIR = "/srv/openclaw/data";
@@ -77,7 +78,8 @@ try {
         return [...files.keys()].filter((entry) => entry.startsWith(prefix)).map((entry) => entry.slice(prefix.length));
       },
       async mkdirp(): Promise<void> {},
-      async exec(command: string, args: string[], options: { allowFailure?: boolean } = {}): Promise<{ code: number; stdout: string; stderr: string }> {
+      async exec(rawCommand: string, rawArgs: string[], options: { allowFailure?: boolean } = {}): Promise<{ code: number; stdout: string; stderr: string }> {
+        const { command, args } = asDirectTest(rawCommand, rawArgs);
         execCalls.push([command, ...args]);
         if (command === "ln") {
           const [source, destination] = args;
@@ -194,7 +196,8 @@ try {
         async writeFile(): Promise<void> {},
         async remove(): Promise<void> {},
         async mkdirp(): Promise<void> {},
-        async exec(command: string, args: string[], options: { allowFailure?: boolean } = {}): Promise<{ code: number; stdout: string; stderr: string }> {
+        async exec(rawCommand: string, rawArgs: string[], options: { allowFailure?: boolean } = {}): Promise<{ code: number; stdout: string; stderr: string }> {
+          const { command, args } = asDirectTest(rawCommand, rawArgs);
           freshExecCalls.push([command, ...args]);
 
           if (command === "mkdir" && args[0] === "-p" && args[1] === home) {

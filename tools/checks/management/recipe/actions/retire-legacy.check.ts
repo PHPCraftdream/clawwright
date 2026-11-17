@@ -15,6 +15,7 @@ import type { Stack } from "#framework/runtime/runtime.ts";
 import type { Transport } from "#framework/runtime/transport/transport.ts";
 import { createDeploymentFixture, TRANSPORT_SENTINEL } from "#checks/kit/deployment-fixture.ts";
 import { check, checkTrue, finish } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 import { useLinuxHost } from "#checks/foundation/hygiene/linux-host.ts";
 
 useLinuxHost();
@@ -63,7 +64,8 @@ try {
   });
   const transport: Transport = {
     description: "retire-fixture",
-    async exec(command, args, options) {
+    async exec(rawCommand, rawArgs, options) {
+      const { command, args } = asDirectTest(rawCommand, rawArgs);
       if (command === "sh" && args[2] === "recipe-docker") {
         const docker = args.slice(3);
         if (docker[0] === "stop" && options?.timeoutMs !== undefined) stopTimeouts.push(options.timeoutMs);

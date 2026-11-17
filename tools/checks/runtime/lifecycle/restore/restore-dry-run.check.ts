@@ -14,6 +14,7 @@ import type { Context } from "#framework/core/context.ts";
 import type { ExecResult } from "#framework/runtime/transport/transport.ts";
 import { resolve } from "node:path";
 import { check, finish } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 import { openclawCommands } from "#framework/commands/interface/index.ts";
 
 useDeployment(resolve(monorepoRoot, "apps", "example app"));
@@ -44,7 +45,8 @@ function makeCtx(entries: string[], beforeRestore?: Context["applicationBeforeRe
       async writeFile(): Promise<void> {},
       async mkdirp(): Promise<void> {},
       async remove(): Promise<void> {},
-      async exec(command: string, args: string[]): Promise<ExecResult> {
+      async exec(rawCommand: string, rawArgs: string[]): Promise<ExecResult> {
+        const { command, args } = asDirectTest(rawCommand, rawArgs);
         calls.push({ command, args });
         if (command === "tar" && args.includes("-tzf")) return { code: 0, stdout: `${entries.join("\n")}\n`, stderr: "" };
         if (command === "tar" && args.includes("-tvzf")) return { code: 0, stdout: "", stderr: "" };

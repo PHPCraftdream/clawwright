@@ -4,7 +4,8 @@
 // 0.12) do not ask the kernel: they compare the file's mode bits with the caller's euid/egid. root owns nothing
 // and shares no group with a 1000:1000 mode 700 directory, so `sudo -n test -r DIR` answers 1
 // while the kernel would let root in. The shell's own `test` (dash: faccessat with
-// AT_EACCESS) and GNU test give the kernel's answer, so these probes run through `sh`.
+// AT_EACCESS) and GNU test give the kernel's answer, so these probes run through `sh`, with
+// or without a privilege prefix: Clawwright itself may be running as root.
 // The path is a positional parameter, never part of the script.
 
 import type { Context } from "../../core/context.ts";
@@ -13,6 +14,7 @@ import type { ExecResult } from "../transport/transport.ts";
 export const FILE_TEST_SCRIPTS = {
   "-d": 'test -d "$1"',
   "-r": 'test -r "$1"',
+  "-w": 'test -w "$1"',
   "-x": 'test -x "$1"',
 } as const;
 

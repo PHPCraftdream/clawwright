@@ -19,6 +19,7 @@ import {
 import { DATA_DIR_MARKER } from "#framework/runtime/files/datadir.ts";
 import type { Context } from "#framework/core/context.ts";
 import { check, finish } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 
 function fatalCount(entries: string[], links: Map<string, ArchiveLink>): number {
   return inspectArchive(entries, links).filter((problem) => problem.fatal).length;
@@ -345,7 +346,8 @@ check("a plain file produces no link entry", hardlink.has("data/a hardlink"), fa
     settings: {},
     transport: {
       async exists(): Promise<boolean> { return true; },
-      async exec(command: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+      async exec(rawCommand: string, rawArgs: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+        const { command, args } = asDirectTest(rawCommand, rawArgs);
         calls.push({ command, args });
         const actual = command === "sudo" ? (args[0] === "-n" ? args[1] : args[0]) ?? "" : command;
         const actualArgs = command === "sudo" ? args.slice(args[0] === "-n" ? 2 : 1) : args;
@@ -503,7 +505,8 @@ for (const profile of ["migrate", "share"] as const) {
         async exists(path: string): Promise<boolean> {
           return present.has(path);
         },
-        async exec(command: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+        async exec(rawCommand: string, rawArgs: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+          const { command, args } = asDirectTest(rawCommand, rawArgs);
           if (command === "test" && args[0] === "-L") return { code: 1, stdout: "", stderr: "" };
           if (command === "test" && args[0] === "-w") return { code: allowed.has(args[1] ?? "") ? 0 : 1, stdout: "", stderr: "" };
           if (command === "test" && args[0] === "-r") return { code: allowed.has(args[1] ?? "") ? 0 : 1, stdout: "", stderr: "" };

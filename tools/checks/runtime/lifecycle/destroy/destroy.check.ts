@@ -17,6 +17,7 @@ import { stubContext, refused } from "#checks/runtime/convergence/instance-lock/
 import type { Context } from "#framework/core/context.ts";
 import type { ExecOptions, ExecResult } from "#framework/runtime/transport/transport.ts";
 import { check, checkTrue, finish, requires } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 import { SAFE_DESTROY_SCRIPT, NEVER_BOOTSTRAPPED, WOULD_REMOVE, DRY_RUN_NOTHING_TO_REMOVE, DRY_RUN_REAL_RUN_HINT, DESTROY_ARGUMENTS } from "#framework/commands/lifecycle/instance/destroy.ts";
 import { SUDO_PASSWORD_REFUSAL } from "#framework/runtime/files/datadir.ts";
 import { commandLine } from "#framework/core/io/invocation/render.ts";
@@ -43,6 +44,9 @@ interface DestroyOptions {
   readonly unwritable?: Set<string>;
   readonly unsearchable?: Set<string>;
   readonly noSudo?: boolean;
+  /** An external `test` that answers -w/-x "no" for everything, as uutils does for root on a
+   *  directory owned by another uid; only the shell builtin (`sh -c`) follows the setup. */
+  readonly externalTestDenies?: boolean;
   readonly afterStop?: () => void;
   readonly neverBootstrapped?: boolean;
 }
@@ -61,7 +65,11 @@ function destroyContext(
   const transport: Context["transport"] = {
     ...fixtureCtx.transport,
     async exists(path: string): Promise<boolean> { return dirs.has(path); },
-    async exec(command: string, args: string[], execOptions?: ExecOptions): Promise<ExecResult> {
+    async exec(rawCommand: string, rawArgs: string[], execOptions?: ExecOptions): Promise<ExecResult> {
+      if (setup.externalTestDenies === true && rawCommand === "test" && (rawArgs[0] === "-w" || rawArgs[0] === "-x")) {
+        return { code: 1, stdout: "", stderr: "" };
+      }
+      const { command, args } = asDirectTest(rawCommand, rawArgs);
       if (command === "id") return { code: 0, stdout: `${setup.uid ?? 1000}\n`, stderr: "" };
       if (command === "test" && args[0] === "-w") {
         return { code: setup.unwritable?.has(args[1] ?? "") ? 1 : 0, stdout: "", stderr: "" };
@@ -261,6 +269,15 @@ for (const [name, setup, expected] of [
   await output(() => openclawCommands.destroy.run(ctx, ["--backups", "--snapshots", "--yes", "--confirm-name", DEPLOYMENT_NAME]));
   check("a different uid can inspect and remove writable directories without sudo", order.filter((entry) => entry.includes(`:${BACKUP_DIR}`) || entry.includes(`:${SNAPSHOT_DIR}`)),
     [`plain:verify:${BACKUP_DIR}`, `plain:verify:${SNAPSHOT_DIR}`, `plain:verify:${BACKUP_DIR}`, `plain:verify:${SNAPSHOT_DIR}`, `plain:remove:${BACKUP_DIR}`, `rm:${BACKUP_DIR}`, `plain:remove:${SNAPSHOT_DIR}`, `rm:${SNAPSHOT_DIR}`]);
+}
+
+{
+  // Root on a uutils host: the external test denies what the kernel allows. The access probes
+  // ask the shell builtin, so nothing escalates (and with sudo refused, escalating would fail).
+  const { ctx, order } = destroyContext([DATA_DIR], new Set(), new Map(), { uid: 0, externalTestDenies: true, noSudo: true });
+  await output(() => openclawCommands.destroy.run(ctx, ["--data", "--yes", "--confirm-name", DEPLOYMENT_NAME]));
+  check("an external test that denies root does not send destroy to sudo", order.filter((entry) => entry.includes(`:${DATA_DIR}`)),
+    [`plain:verify:${DATA_DIR}`, `plain:remove:${DATA_DIR}`, `rm:${DATA_DIR}`]);
 }
 
 {

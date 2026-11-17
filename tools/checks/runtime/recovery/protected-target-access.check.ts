@@ -16,6 +16,7 @@ import type { ExecResult, Transport } from "#framework/runtime/transport/transpo
 import { publishPrivateTargetFile } from "#framework/security/privacy/private-target-file.ts";
 import { statusForRequirements, type SecretRequirement } from "#framework/service/secrets.ts";
 import { check, finish } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 
 interface Scenario {
   readonly name: string;
@@ -34,7 +35,8 @@ async function run(scenario: Scenario): Promise<{ error?: string; files: Map<str
   const denied = (what: string): ExecResult => ({ code: 1, stdout: "", stderr: `${what}: Permission denied` });
   const canWriteDirectory = (user: string): boolean => user === "0" || scenario.directoryWritable;
 
-  const execAs = (user: string, command: string, args: string[], input: string | undefined): ExecResult => {
+  const execAs = (user: string, rawCommand: string, rawArgs: string[], input: string | undefined): ExecResult => {
+    const { command, args } = asDirectTest(rawCommand, rawArgs);
     if (command === "sudo" && args[0] === "-n") return args[1] === "true" ? ok() : execAs("0", args[1] as string, args.slice(2), input);
     if (command === "id") return ok(`${scenario.operator}\n`);
     if (command === "test" && args[0] === "-w") {
@@ -127,7 +129,8 @@ async function readStatus(scenario: ReadScenario): Promise<{ present?: boolean; 
       if (!scenario.readable) throw new Error(`cat: ${target}: Permission denied`);
       return "GATEWAY_TOKEN=fixture\n";
     },
-    async exec(command: string, args: string[]) {
+    async exec(rawCommand: string, rawArgs: string[]) {
+      const { command, args } = asDirectTest(rawCommand, rawArgs);
       if (command === "test" && args[0] === "-r") return { code: scenario.readable ? 0 : 1, stdout: "", stderr: "" };
       if (command === "sh") return { code: scenario.sudo === "absent" ? 1 : 0, stdout: "", stderr: "" };
       if (command === "sudo" && args[1] === "true") return { code: scenario.sudo === "passwordless" ? 0 : 1, stdout: "", stderr: "" };

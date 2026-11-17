@@ -18,6 +18,7 @@ import { shellQuote } from "#framework/core/io/shell.ts";
 import { DATA_DIR_MARKER, ensureDataDirs } from "#framework/runtime/files/datadir.ts";
 import { parseWslDistroListing } from "#framework/commands/interface/host/contexts.ts";
 import { check, finish, requires } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 useDeployment(resolve(monorepoRoot, "apps", "example app"));
 useComposeProjectOverride("example-app");
 // --- a symlinked data root, end to end on a real filesystem. -----------------------------------
@@ -300,7 +301,8 @@ async function chownEscalationScenario(): Promise<void> {
     description: "stub",
     async exists(): Promise<boolean> { return false; },
     async writeFile(): Promise<void> {},
-    async exec(command: string, args: string[]): Promise<ExecResult> {
+    async exec(rawCommand: string, rawArgs: string[]): Promise<ExecResult> {
+      const { command, args } = asDirectTest(rawCommand, rawArgs);
       calls.push({ command, args });
       if (command === "test" && args[0] === "-w") return { code: 0, stdout: "", stderr: "" };
       // Not a symlink — ensureDataDirs' root guard checks this before anything

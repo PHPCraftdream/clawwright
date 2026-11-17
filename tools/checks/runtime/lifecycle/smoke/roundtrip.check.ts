@@ -15,6 +15,7 @@ import { recordPrivateWrite } from "#framework/security/privacy/private-paths-le
 import { installedRecipePrivatePaths } from "#framework/service/recipe.ts";
 import { createHash } from "node:crypto";
 import { check, finish } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 
 // --- full backup restored into an isolated root, preserving live state -----------------------
 // The modeled tar snapshots files at archive time and replays those bytes at extraction.
@@ -129,7 +130,8 @@ import { check, finish } from "#checks/kit/harness.ts";
         return [...files.keys()].filter((entry) => entry.startsWith(prefix)).map((entry) => entry.slice(prefix.length));
       },
       async mkdirp(): Promise<void> {},
-      async exec(command: string, args: string[]): Promise<ExecResult> {
+      async exec(rawCommand: string, rawArgs: string[]): Promise<ExecResult> {
+        const { command, args } = asDirectTest(rawCommand, rawArgs);
         events.push(`${command}:${args.join(" ")}`);
         if (command === "mkdir" && args[0] === MUTATION_GUARD) {
           if (mutationGuardExists) return { code: 1, stdout: "", stderr: "File exists" };

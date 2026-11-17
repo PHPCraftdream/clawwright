@@ -11,6 +11,7 @@ import type { Context } from "#framework/core/context.ts";
 import type { ExecResult } from "#framework/runtime/transport/transport.ts";
 import { modelMutationGuard } from "./mutation-guard.ts";
 import { check, finish } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 
 useDeployment(resolve(monorepoRoot, "apps", "example app"));
 
@@ -54,7 +55,8 @@ function secretsScenario(options: { privateFile?: boolean; fail?: SecretFailure;
 
   // Hoisted, not a method on the transport literal below: the sudo unwrap inside re-dispatches
   // into these very branches, and an object-literal method has no name to call itself by.
-  async function execStub(command: string, args: string[], execOptions?: { input?: string | Uint8Array; allowFailure?: boolean }): Promise<ExecResult> {
+  async function execStub(rawCommand: string, rawArgs: string[], execOptions?: { input?: string | Uint8Array; allowFailure?: boolean }): Promise<ExecResult> {
+    const { command, args } = asDirectTest(rawCommand, rawArgs);
     const finish = (result: ExecResult): ExecResult => {
       if (result.code !== 0 && execOptions?.allowFailure !== true) throw new Error(`${command} exited ${result.code}: ${result.stderr.trim()}`);
       return result;

@@ -55,6 +55,7 @@ import {
   recordPrivateWrite,
 } from "#framework/security/privacy/private-paths-ledger.ts";
 import { check, checkTrue, finish, requires } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 
 function skip(name: string): void {
   process.stderr.write(`  skip ${name}\n`);
@@ -263,7 +264,8 @@ try {
         async writeFile(): Promise<void> {},
         async mkdirp(): Promise<void> {},
         async remove(): Promise<void> {},
-        async exec(command: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+        async exec(rawCommand: string, rawArgs: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+          const { command, args } = asDirectTest(rawCommand, rawArgs);
           if (command === "tar" && args.includes("-tzf")) {
             return {
               code: 0,

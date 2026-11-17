@@ -6,7 +6,7 @@ import { NotBootstrapped } from "#src/runtime/runtime.ts";
 import type { Context } from "#src/core/context.ts";
 import { guardedWith } from "#src/runtime/lock/instance-lock.ts";
 import { deploymentName, composeProjectName } from "#src/runtime/deployment.ts";
-import { answeredProbe, sudoFor, sudoForRead } from "#src/runtime/files/datadir.ts";
+import { answeredFileTest, sudoFor, sudoForRead } from "#src/runtime/files/datadir.ts";
 import { commandBody, type ArgumentSpec, type Values } from "#src/core/command/spec.ts";
 import { LOCK_TAKEOVER_ARGUMENTS, takeoverOf } from "#src/commands/interface/groups/shared-arguments.ts";
 import * as kinds from "#src/core/values/kinds.ts";
@@ -121,11 +121,11 @@ interface PreparedDestroyTarget {
 
 async function prepareDestroyTarget(ctx: Context, target: DestroyTarget): Promise<PreparedDestroyTarget> {
   const parent = target.path.slice(0, target.path.lastIndexOf("/")) || "/";
-  const parentExecutable = (await answeredProbe(ctx, "test", ["-x", parent], [0, 1])).code === 0;
+  const parentExecutable = (await answeredFileTest(ctx, "-x", parent)).code === 0;
   const present = await ctx.transport.exists(target.path);
   const targetAccessible = !present ||
-    (await answeredProbe(ctx, "test", ["-w", target.path], [0, 1])).code === 0 &&
-    (await answeredProbe(ctx, "test", ["-x", target.path], [0, 1])).code === 0;
+    (await answeredFileTest(ctx, "-w", target.path)).code === 0 &&
+    (await answeredFileTest(ctx, "-x", target.path)).code === 0;
   return { target, prefix: await sudoFor(ctx, parent, { force: !parentExecutable || !targetAccessible }) };
 }
 

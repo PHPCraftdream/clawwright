@@ -235,7 +235,7 @@ async function ledgerFileExists(file: string): Promise<boolean> {
  *  if one exists but can't be read/parsed (fail closed, never "nothing to protect"). */
 async function readTargetHistoryCopy(ctx: Context, file: string): Promise<{ raw: string; paths: string[] } | undefined> {
   if (!(await ctx.transport.exists(file))) return undefined;
-  const readable = await ctx.transport.exec("test", ["-r", file], { allowFailure: true });
+  const readable = await fileTest(ctx, [], "-r", file);
   let prefix: string[] = [];
   if (readable.code !== 0) {
     if (readable.code !== 1) throw new Error(`could not check read access to ${file}: ${readable.stderr.trim()}`);

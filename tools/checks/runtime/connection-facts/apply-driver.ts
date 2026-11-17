@@ -10,6 +10,7 @@ import { formatBatchStub } from "#framework/service/openclaw-cli.ts";
 import { fromContainerPath } from "#framework/core/paths.ts";
 import { mountPoints } from "#framework/runtime/mounts.ts";
 import type { ExecOptions, ExecResult, Transport } from "#framework/runtime/transport/transport.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 
 /** The live config as the fixture's stub presents it, so the plan is quiet except for the
  *  finding each scenario is about. */
@@ -122,7 +123,8 @@ export function refreshCheckTransport(spec: RefreshSpec, state: RefreshState, dr
     }
     return ok();
   };
-  const dispatch = async (command: string, args: string[], options?: ExecOptions): Promise<ExecResult> => {
+  const dispatch = async (rawCommand: string, rawArgs: string[], options?: ExecOptions): Promise<ExecResult> => {
+    const { command, args } = asDirectTest(rawCommand, rawArgs);
     if (command === "sudo" && args[0] === "-n") return dispatch(args[1]!, args.slice(2), options);
     if (command === "docker") return docker(args);
     if (command === "mkdir" || command === "chown" || command === "rmdir") return ok();

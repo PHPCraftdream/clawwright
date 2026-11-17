@@ -38,6 +38,7 @@ import type { Settings } from "#framework/core/env.ts";
 import type { PathBridge } from "#framework/core/paths.ts";
 import type { Stage } from "#framework/core/command/execute.ts";
 import { check, checkTrue, finish, requires } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 
 useDeployment(resolve(monorepoRoot, "apps", "example app"));
 
@@ -160,7 +161,8 @@ function publishTransport(log: TargetLog, withPrivateWrite = true): Transport {
     description: "stub",
     exists: async (path: string): Promise<boolean> =>
       !path.includes(PRIVATE_STAGING_MARKER) && !path.includes("clawwright-cli-input-"),
-    exec: async (command: string, args: string[], options?: { input?: string | Uint8Array }): Promise<ExecResult> => {
+    exec: async (rawCommand: string, rawArgs: string[], options?: { input?: string | Uint8Array }): Promise<ExecResult> => {
+      const { command, args } = asDirectTest(rawCommand, rawArgs);
       if (!allowed.has(command)) throw new Error(`publishTransport: unexpected command ${command} ${args.join(" ")}`);
       log.execs.push({ command, args, ...(options?.input === undefined ? {} : { input: options.input }) });
       if (command === "test") return { code: 0, stdout: "", stderr: "" };

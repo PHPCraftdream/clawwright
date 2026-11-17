@@ -19,6 +19,7 @@ import { withOutputSink } from "#framework/core/io/output.ts";
 import { spawnLocal, TransportUnreachableError } from "#framework/runtime/transport/transport.ts";
 import type { Context } from "#framework/core/context.ts";
 import { check, finish, requires } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 import { openclawCommands } from "#framework/commands/interface/index.ts";
 
 // --- pure parsers: fed a canned ExecResult, nothing else -------------------------------------
@@ -105,7 +106,8 @@ function stubCtx(options: StubOptions = {}): { ctx: Context; execCalls: string[]
       async exists(path: string): Promise<boolean> {
         return options.exists?.(path) ?? false;
       },
-      async exec(command: string, args: string[], execOptions: { allowFailure?: boolean } = {}): Promise<{ code: number; stdout: string; stderr: string }> {
+      async exec(rawCommand: string, rawArgs: string[], execOptions: { allowFailure?: boolean } = {}): Promise<{ code: number; stdout: string; stderr: string }> {
+        const { command, args } = asDirectTest(rawCommand, rawArgs);
         execCalls.push([command, ...args]);
         const handled = options.exec?.(command, args);
         if (handled !== undefined) return handled;

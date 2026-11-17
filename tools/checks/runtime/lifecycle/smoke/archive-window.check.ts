@@ -16,6 +16,7 @@ import { useDeployment, deploymentDir } from "#framework/runtime/deployment.ts";
 import { withOutputSink } from "#framework/core/io/output.ts";
 import { dataDirName } from "#framework/service/archive/index.ts";
 import { check, finish } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 
 const REJECTS_SECRETS_CHECK = "verifier rejects an archive with secrets";
 const ACCEPTS_SHARE_CHECK = "verifier accepts a share snapshot";
@@ -104,7 +105,8 @@ check("found all three archive-based checks smoke consolidates", archiveChecks.m
         return [...files.keys()].filter((entry) => entry.startsWith(prefix)).map((entry) => entry.slice(prefix.length));
       },
       async mkdirp(): Promise<void> {},
-      async exec(command: string, args: string[]): Promise<ExecResult> {
+      async exec(rawCommand: string, rawArgs: string[]): Promise<ExecResult> {
+        const { command, args } = asDirectTest(rawCommand, rawArgs);
         events.push(`${command}:${args.join(" ")}`);
         if (command === "mkdir" && args[0] === MUTATION_GUARD) {
           if (mutationGuardExists) return { code: 1, stdout: "", stderr: "File exists" };

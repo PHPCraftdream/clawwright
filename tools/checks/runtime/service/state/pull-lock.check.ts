@@ -12,6 +12,7 @@ import type { ExecResult } from "#framework/runtime/transport/transport.ts";
 import { pullScenario, type PullFailure } from "./pull-harness.ts";
 import { modelMutationGuard } from "./mutation-guard.ts";
 import { check, finish } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 import { selectSnapshotPaths } from "#framework/commands/lifecycle/state.ts";
 import { openclawCommands } from "#framework/commands/interface/index.ts";
 
@@ -62,7 +63,8 @@ useDeployment(resolve(monorepoRoot, "apps", "example app"));
         files.delete(path);
       },
       async mkdirp(): Promise<void> {},
-      async exec(command: string, args: string[]): Promise<ExecResult> {
+      async exec(rawCommand: string, rawArgs: string[]): Promise<ExecResult> {
+        const { command, args } = asDirectTest(rawCommand, rawArgs);
         events.push(`${command}:${args.join(" ")}`);
         if (command === "mkdir" && !args[0]?.startsWith("-")) {
           if (lockExists) return { code: 1, stdout: "", stderr: "File exists" };
@@ -165,7 +167,8 @@ useDeployment(resolve(monorepoRoot, "apps", "example app"));
       async writeFile(path: string, content: string): Promise<void> { files.set(path, content); },
       async remove(path: string): Promise<void> { if (path.endsWith("operation.lock")) lockExists = false; files.delete(path); },
       async mkdirp(): Promise<void> {},
-      async exec(command: string, args: string[]): Promise<ExecResult> {
+      async exec(rawCommand: string, rawArgs: string[]): Promise<ExecResult> {
+        const { command, args } = asDirectTest(rawCommand, rawArgs);
         if (command === "mkdir" && !args[0]?.startsWith("-")) {
           if (lockExists) return { code: 1, stdout: "", stderr: "File exists" };
           lockExists = true;

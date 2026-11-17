@@ -274,43 +274,43 @@ const ALLOW: readonly AllowEntry[] = [
   },
   {
     file: "packages/clawwright/commands/lifecycle/bootstrap/prereqs.ts",
-    line: 37,
+    line: 38,
     reason:
       "a port-probe tool that cannot even launch falls through to the next probe tool (ss, then netstat) and the function finally answers 'unavailable' - a visible gap, never a silent port claim",
   },
   {
     file: "packages/clawwright/commands/lifecycle/bootstrap/prereqs.ts",
-    line: 127,
+    line: 128,
     reason:
       "nearestExistingAncestor: an unknown exists() answer is treated as absent - the walk stops and the candidate is returned as if it were the nearest existing ancestor; the operator then sees only the downstream probe's line (the writable line may be 'ok'), with no sign existence was never established. Lost here: the unknown-vs-absent distinction"
   },
   {
     file: "packages/clawwright/commands/lifecycle/bootstrap/prereqs.ts",
-    line: 152,
+    line: 153,
     reason:
       "targetUserIdentity: a non-unreachable failure becomes undefined, so readyLine prints the path-only 'sudo install -d <path>' hint instead of the owner/group form - a correct but generic hint; the operator is never told the identity probe failed. Lost here: the cause and the ownership facts"
   },
   {
     file: "packages/clawwright/commands/lifecycle/bootstrap/prereqs.ts",
-    line: 195,
+    line: 196,
     reason:
       "dockerProbe: a non-unreachable exec failure becomes fail('docker is not on PATH on the target', advice); the operator sees the named failure and fix guidance. Lost here: the underlying transport error - the message asserts 'not on PATH' without the cause"
   },
   {
     file: "packages/clawwright/commands/lifecycle/bootstrap/prereqs.ts",
-    line: 218,
+    line: 219,
     reason:
       "composeProbe: a non-unreachable exec failure becomes fail('could not run docker compose version on the target', advice); the operator sees the failure and install guidance. Lost here: the underlying transport error cause"
   },
   {
     file: "packages/clawwright/commands/lifecycle/bootstrap/prereqs.ts",
-    line: 269,
+    line: 270,
     reason:
       "diskProbe: a non-unreachable df failure becomes warn('could not run df -Pk <path> on the target', advice); the operator sees the degraded warning with advice, and bootstrap continues. Lost here: the error cause, and free space stays unknown"
   },
   {
     file: "packages/clawwright/commands/lifecycle/bootstrap/prereqs.ts",
-    line: 374,
+    line: 375,
     reason:
       "gnuUserlandProbe: a non-unreachable sh failure becomes fail('no POSIX sh on the target', advice); the operator sees the failure and install guidance. Lost here: the underlying transport error cause",
   },

@@ -13,6 +13,7 @@ import { toContainerPath, fromContainerPath } from "#framework/core/paths.ts";
 import { excludesFor } from "#framework/service/archive/index.ts";
 import type { ExecResult } from "#framework/runtime/transport/transport.ts";
 import { check, finish } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 
 useDeployment(resolve(monorepoRoot, "apps", "example app"));
 
@@ -60,7 +61,8 @@ function stubNativeCtx(
       async exists(path: string): Promise<boolean> {
         return files.has(path);
       },
-      async exec(command: string, args: string[]): Promise<ExecResult> {
+      async exec(rawCommand: string, rawArgs: string[]): Promise<ExecResult> {
+        const { command, args } = asDirectTest(rawCommand, rawArgs);
         calls.push(`exec ${command} ${args.join(" ")}`);
         if (command === "test" && args[0] === "-L") return { code: 1, stdout: "", stderr: "" };
         if (command === "test" && (args[0] === "-w" || args[0] === "-r" || args[0] === "-x")) return { code: 0, stdout: "", stderr: "" };

@@ -32,6 +32,7 @@ import { openclawCommands } from "#framework/commands/interface/index.ts";
 import { withOutputSink } from "#framework/core/io/output.ts";
 import { TRANSPORT_SENTINEL, createDeploymentFixture, stageTally } from "#checks/kit/deployment-fixture.ts";
 import { check, checkTrue, finish, isolatedAppsRoot } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 
 interface Unit {
   readonly label: string;
@@ -259,7 +260,8 @@ try {
         writeFile: async (path: string, content: string) => { lockFiles.set(path, content); },
         remove: async (path: string) => { lockFiles.delete(path); },
         listFiles: async (path: string) => [...lockFiles.keys()].filter((entry) => entry.startsWith(`${path}/`)).map((entry) => entry.slice(path.length + 1)),
-        exec: async (command: string, args: string[]) => {
+        exec: async (rawCommand: string, rawArgs: string[]) => {
+          const { command, args } = asDirectTest(rawCommand, rawArgs);
           if (command === "ln") {
             const [source, destination] = args;
             if (source === undefined || destination === undefined || !lockFiles.has(source) || lockFiles.has(destination)) return { code: 1, stdout: "", stderr: "exists" };

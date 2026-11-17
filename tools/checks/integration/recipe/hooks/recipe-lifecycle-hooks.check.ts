@@ -21,6 +21,7 @@ import { useDeployment, useComposeProjectOverride } from "#framework/runtime/dep
 import { clearRecipesDir, useRecipesDir } from "#framework/service/recipe.ts";
 import type { Context } from "#framework/core/context.ts";
 import { check, finish } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 
 useDeployment(resolve(monorepoRoot, "apps", "example app"));
 useComposeProjectOverride("example-app");
@@ -55,7 +56,8 @@ function stub(failProbe = false): Stub {
       async exists(path: string): Promise<boolean> {
         return files.has(path);
       },
-      async exec(command: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+      async exec(rawCommand: string, rawArgs: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+        const { command, args } = asDirectTest(rawCommand, rawArgs);
         if (command === "test" && args[0] === "-L") return { code: 1, stdout: "", stderr: "" };
         if (command === "test" && args[0] === "-w") return { code: 0, stdout: "", stderr: "" };
         if (command === "test" && args[0] === "-e") return { code: files.has(args[1] ?? "") ? 0 : 1, stdout: "", stderr: "" };

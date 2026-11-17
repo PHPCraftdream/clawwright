@@ -8,6 +8,7 @@ import { TransportUnreachableError } from "../../../runtime/transport/transport.
 import type { ExecResult } from "../../../runtime/transport/transport.ts";
 import { die, warn as logWarn, regexEscape } from "../../../core/io/log.ts";
 import { commandLine } from "../../../core/io/invocation/render.ts";
+import { fileTest } from "../../../runtime/files/file-test.ts";
 import { parseDfAvailableKb } from "../../operate/watch/health.ts";
 import type { Context } from "../../../core/context.ts";
 
@@ -168,7 +169,7 @@ async function readyLine(ctx: Context, path: string): Promise<string> {
  *  gets its own line instead of the report stopping at the first one that needs work. */
 async function dirReadinessProbe(ctx: Context, role: string, path: string): Promise<PrereqResult> {
   const nearest = await nearestExistingAncestor(ctx, path);
-  const writable = await ctx.transport.exec("test", ["-w", nearest], { allowFailure: true });
+  const writable = await fileTest(ctx, [], "-w", nearest);
   if (writable.code === 0) {
     return ok(nearest === path ? `${role} ${path} is writable` : `${role} ${path} can be created (${nearest} is writable)`);
   }

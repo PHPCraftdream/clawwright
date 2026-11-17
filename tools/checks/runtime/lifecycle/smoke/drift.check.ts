@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { useDeployment, deploymentDir } from "#framework/runtime/deployment.ts";
 import { withOutputSink } from "#framework/core/io/output.ts";
 import { check, finish } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 
 // --- drift cleanup is a restore after the verdict --------------------------------------------
 
@@ -34,7 +35,8 @@ import { check, finish } from "#checks/kit/harness.ts";
     const ctx = {
       settings: { dataDir },
       transport: {
-        async exec(command: string, args: string[]) {
+        async exec(rawCommand: string, rawArgs: string[]) {
+          const { command, args } = asDirectTest(rawCommand, rawArgs);
           if (command === "mkdir") {
             const target = args[args.length - 1];
             if (dirs.has(target)) return { code: 1, stdout: "", stderr: "File exists" };

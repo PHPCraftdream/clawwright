@@ -36,12 +36,12 @@ export async function privilegePrefixFor(ctx: Context, readPaths: readonly strin
     try { present = await ctx.transport.exists(path); }
     catch { present = true; }
     if (!present) continue;
-    const readable = await ctx.transport.exec("test", ["-r", path], { allowFailure: true });
+    const readable = await fileTest(ctx, [], "-r", path);
     if (readable.code === 0) {
       const directory = await ctx.transport.exec("test", ["-d", path], { allowFailure: true });
       if (directory.code === 1) continue;
       if (directory.code !== 0) throw new Error(`could not determine whether ${path} is a directory`);
-      const searchable = await ctx.transport.exec("test", ["-x", path], { allowFailure: true });
+      const searchable = await fileTest(ctx, [], "-x", path);
       if (searchable.code === 0) continue;
       if (searchable.code !== 1) throw new Error(`could not check traversal access to ${path}`);
     }

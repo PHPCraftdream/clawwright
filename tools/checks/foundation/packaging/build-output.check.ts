@@ -79,9 +79,12 @@ async function verifyHistoricalRelocation(currentDist: string): Promise<void> {
       "recipe-kit/index",
       "commands/interface/groups/openclawCommands.orchestration",
       "runtime/files/file-test",
+      "runtime/files/datadir",
       "service/archive/pack",
       "security/privacy/private-paths-ledger",
       "commands/lifecycle/restore/index",
+      "commands/lifecycle/instance/destroy",
+      "commands/lifecycle/bootstrap/prereqs",
       "commands/interface/groups/openclawCommands.management",
       "commands/management/configuration/ssjack-app/classification",
       "commands/management/configuration/ssjack-app/descriptor",
@@ -137,7 +140,7 @@ async function verifyCurrentFeatureOutput(distDir: string): Promise<void> {
     if (actual !== expected) throw new Error(`built feature output differs from current source: ${path}`);
     await readFile(resolve(distDir, path.replace(/\.ts$/, ".d.ts")));
   }
-  for (const path of ["runtime/transport/remote/ssjack-contract", "runtime/transport/transport", "recipe-kit/index", "commands/interface/groups/openclawCommands.orchestration", "commands/interface/groups/openclawCommands.management", "commands/management/configuration/ssjack-app/classification", "commands/management/configuration/ssjack-app/descriptor", "commands/management/configuration/ssjack-app/index", "commands/management/configuration/ssjack-app/launch"]) {
+  for (const path of ["runtime/transport/remote/ssjack-contract", "runtime/transport/transport", "recipe-kit/index", "commands/interface/groups/openclawCommands.orchestration", "commands/interface/groups/openclawCommands.management", "commands/management/configuration/ssjack-app/classification", "commands/management/configuration/ssjack-app/descriptor", "commands/management/configuration/ssjack-app/index", "commands/management/configuration/ssjack-app/launch", "runtime/files/file-test", "runtime/files/datadir", "service/archive/pack", "security/privacy/private-paths-ledger", "commands/lifecycle/instance/destroy", "commands/lifecycle/bootstrap/prereqs"]) {
     const sourcePath = `${path}.ts`;
     const source = await readFile(resolve(monorepoRoot, "packages/clawwright", sourcePath), "utf8");
     const expected = stripTypeScriptTypes(source, { mode: "strip" }).replace(

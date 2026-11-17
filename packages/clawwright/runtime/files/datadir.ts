@@ -9,6 +9,7 @@ import { log, info, die } from "../../core/io/log.ts";
 import { renderArguments } from "../../core/io/invocation/render.ts";
 import type { Context } from "../../core/context.ts";
 import { lockHome } from "../lock/instance-lock.ts";
+import { fileTest, fileTestArgv, type FileTestFlag } from "./file-test.ts";
 
 /** The fixed uid:gid the image runs as. Exported for callers that need to force escalation
  *  against it directly — a writable-probe on a tree's root says nothing about a
@@ -51,7 +52,7 @@ async function sudoAvailability(ctx: Context): Promise<SudoAvailability> {
 /** "sudo" when the path is not writable by the current user, "" otherwise. `force: true`
  *  skips the writability shortcut: writable never implies a chown to some OTHER owner will
  *  succeed, so a caller that knows the target owner differs forces the sudo-availability
- *  path instead of trusting `test -w`. */
+ *  path instead of trusting the writability probe. */
 export async function sudoFor(ctx: Context, path: string, options: { force?: boolean } = {}): Promise<string[]> {
   let probe = path;
   while (probe !== "/" && probe !== "") {
@@ -71,7 +72,7 @@ export async function sudoFor(ctx: Context, path: string, options: { force?: boo
   }
 
   if (options.force !== true) {
-    const writable = await answeredProbe(ctx, "test", ["-w", probe], [0, 1]);
+    const writable = await answeredFileTest(ctx, "-w", probe);
     if (writable.code === 0) return [];
   }
 
@@ -92,7 +93,7 @@ export async function sudoFor(ctx: Context, path: string, options: { force?: boo
 /** `sudo -n` for reading a file this user may not read, [] when it may. Refuses in terms of the
  *  read: sudoFor's advice is about preparing directories to write. */
 export async function sudoForRead(ctx: Context, path: string): Promise<string[]> {
-  const readable = await answeredProbe(ctx, "test", ["-r", path], [0, 1]);
+  const readable = await answeredFileTest(ctx, "-r", path);
   if (readable.code === 0) return [];
   const availability = await sudoAvailability(ctx);
   if (availability !== "usable") {
@@ -190,6 +191,13 @@ export async function answeredProbe(ctx: Context, command: string, args: string[
     if (answers.includes(last.code)) return last;
   }
   throw new Error(`could not run \`${command} ${renderArguments(args)}\` on the target (exit ${last.code}${last.stderr.trim() ? `: ${last.stderr.trim()}` : ""}) — the transport failed, not the check`);
+}
+
+/** answeredProbe for `test <flag> <path>` as the identity running the tooling, asked through the
+ *  shell builtin (runtime/files/file-test.ts): 0 yes, 1 no, anything else is retried then thrown. */
+export function answeredFileTest(ctx: Context, flag: FileTestFlag, path: string): Promise<{ code: number; stdout: string }> {
+  const [head, ...rest] = fileTestArgv([], flag, path);
+  return answeredProbe(ctx, head, rest, [0, 1]);
 }
 
 /** Resolves `path` through every symlink on the target, optionally through a privileged
@@ -415,7 +423,7 @@ export async function ensureLockHome(ctx: Context): Promise<void> {
 }
 
 async function isWritable(ctx: Context, path: string): Promise<boolean> {
-  const result = await ctx.transport.exec("test", ["-w", path], { allowFailure: true });
+  const result = await fileTest(ctx, [], "-w", path);
   return result.code === 0;
 }
 

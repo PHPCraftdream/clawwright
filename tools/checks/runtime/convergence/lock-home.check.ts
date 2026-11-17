@@ -15,6 +15,7 @@ import { withOutputSink } from "#framework/core/io/output.ts";
 import type { Context } from "#framework/core/context.ts";
 import type { ExecResult } from "#framework/runtime/transport/transport.ts";
 import { check, finish } from "#checks/kit/harness.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 
 interface TargetSpec {
   /** Directories that already exist on the target. */
@@ -36,7 +37,8 @@ function recordingContext(spec: TargetSpec) {
       async exists(path: string): Promise<boolean> {
         return existing.has(path);
       },
-      async exec(command: string, args: string[]): Promise<ExecResult> {
+      async exec(rawCommand: string, rawArgs: string[]): Promise<ExecResult> {
+        const { command, args } = asDirectTest(rawCommand, rawArgs);
         calls.push({ command, args });
 
         if (command === "id") return { code: 0, stdout: args[0] === "-u" ? "1000\n" : "1001\n", stderr: "" };
@@ -148,7 +150,8 @@ async function run(ctx: Context): Promise<string> {
         existsCalls += 1;
         throw new Error(`could not check whether ${path} exists: /srv/clawwright cannot be searched by the target user`);
       },
-      async exec(command: string, args: string[]): Promise<ExecResult> {
+      async exec(rawCommand: string, rawArgs: string[]): Promise<ExecResult> {
+        const { command, args } = asDirectTest(rawCommand, rawArgs);
         calls.push({ command, args });
         if (command === "test" && args[0] === "-w") return { code: 1, stdout: "", stderr: "" };
         return { code: 0, stdout: "", stderr: "" };
@@ -188,7 +191,8 @@ async function run(ctx: Context): Promise<string> {
         if (asked === 1) throw new Error(`could not check whether ${path} exists (exit 255): connection reset`);
         return path === "/srv/clawwright";
       },
-      async exec(command: string, args: string[]): Promise<ExecResult> {
+      async exec(rawCommand: string, rawArgs: string[]): Promise<ExecResult> {
+        const { command, args } = asDirectTest(rawCommand, rawArgs);
         calls.push({ command, args });
         // Only the directory that exists is writable; test -w on an absent path answers 1.
         if (command === "test" && args[0] === "-w") return { code: args[1] === "/srv/clawwright" ? 0 : 1, stdout: "", stderr: "" };
@@ -225,7 +229,8 @@ function familyContext(owner: string, root = "/srv/openclaw"): Context {
       async exists(): Promise<boolean> {
         return false;
       },
-      async exec(command: string, args: string[]): Promise<ExecResult> {
+      async exec(rawCommand: string, rawArgs: string[]): Promise<ExecResult> {
+        const { command, args } = asDirectTest(rawCommand, rawArgs);
         if (command === "id") return { code: 0, stdout: args[0] === "-u" ? `${uid}\n` : `${gid}\n`, stderr: "" };
         if (command === "test" && args[0] === "-w") return { code: 1, stdout: "", stderr: "" };
         // sudo IS on the target ("sh -c command -v sudo" below succeeds)...
@@ -303,7 +308,8 @@ async function familyRefusal(owner: string, root = "/srv/openclaw"): Promise<str
       transport: {
         description: "stub",
         async exists(): Promise<boolean> { return true; },
-        async exec(command: string, args: string[]): Promise<ExecResult> {
+        async exec(rawCommand: string, rawArgs: string[]): Promise<ExecResult> {
+          const { command, args } = asDirectTest(rawCommand, rawArgs);
           const queue = results[`${command} ${args[0]}`] ?? [0];
           const code = queue.length > 1 ? queue.shift() as number : queue[0];
           return { code, stdout: command === "id" ? "1000\n" : "", stderr: code === 255 ? "wsl: transport hiccup" : "" };
