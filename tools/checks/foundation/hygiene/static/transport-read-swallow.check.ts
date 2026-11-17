@@ -262,7 +262,7 @@ const ALLOW: readonly AllowEntry[] = [
   },
   {
     file: "packages/clawwright/service/archive/pack.ts",
-    line: 36,
+    line: 37,
     reason:
       "conservative default documented on site: an exists() the target could not answer is treated as PRESENT so privilege escalation is still demanded - never the other way round",
   },
@@ -322,7 +322,7 @@ const ALLOW: readonly AllowEntry[] = [
   },
   {
     file: "packages/clawwright/commands/lifecycle/restore/index.ts",
-    line: 476,
+    line: 477,
     reason:
       "the caught error drives rollbackRestore, which reports it and unwinds the restore - the failure is the rollback's input, never read as clean",
   },

@@ -6,6 +6,7 @@ import type { Context } from "#framework/core/context.ts";
 import type { ExecResult } from "#framework/runtime/transport/transport.ts";
 import { mountPoints } from "#framework/runtime/mounts.ts";
 import { toContainerPath, fromContainerPath } from "#framework/core/paths.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 
 export const DATA_DIR = "/srv/clawwright/data";
 export const SHARED_TAG = "ghcr.io/openclaw/openclaw:extended-stable";
@@ -51,8 +52,10 @@ export function makeUpgradeCtx(scenario: Scenario, options: { image?: string; ru
       async writeFile(): Promise<void> {},
       async mkdirp(): Promise<void> {},
       async remove(): Promise<void> {},
-      async exec(command: string, args: string[]): Promise<ExecResult> {
-        calls.push(`exec ${command} ${args.join(" ")}`);
+      async exec(rawCommand: string, rawArgs: string[]): Promise<ExecResult> {
+        // File-test probes arrive as the shell builtin; the rules below key on `test`.
+        const { command, args } = asDirectTest(rawCommand, rawArgs);
+        calls.push(`exec ${rawCommand} ${rawArgs.join(" ")}`);
         if (command === "test" && args[0] === "-L") return { code: 1, stdout: "", stderr: "" };
         if (command === "readlink" && args[0] === "-f") return { code: 0, stdout: args[1] ?? "", stderr: "" };
         if (command === "stat") return { code: 0, stdout: "1000:1000", stderr: "" };

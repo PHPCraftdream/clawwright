@@ -21,6 +21,7 @@ import { check, finish } from "#checks/kit/harness.ts";
 import { DockerRuntime } from "#framework/runtime/docker/runtime-docker.ts";
 import { toSettings, parseEnv } from "#framework/core/env.ts";
 import type { Transport, ExecOptions } from "#framework/runtime/transport/transport.ts";
+import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 import { DATA_DIR, SHARED_TAG, TARGET_DIGEST, PREVIOUS_DIGEST, PINNED_WITH_TAG, PINNED_NO_TAG, makeUpgradeCtx } from "./stub.ts";
 import { pinAdviceLine } from "#framework/commands/lifecycle/instance/upgrade.ts";
 import { withToolRunner, type ToolRunner } from "#framework/security/privacy/private-file.ts";
@@ -414,7 +415,9 @@ await withToolRunner(stubToolRunner, async () => {
       async remove(path) { for (const entry of files.keys()) if (entry === path || entry.startsWith(`${path}/`)) files.delete(entry); },
       async listFiles() { return []; },
       clientInvocation(entryPath, args) { return { command: "node", args: [entryPath, ...args] }; },
-      async exec(command, args) {
+      async exec(rawCommand, rawArgs) {
+        // File-test probes arrive as the shell builtin; the rules below key on `test`.
+        const { command, args } = asDirectTest(rawCommand, rawArgs);
         if (command === "curl") return ok(stopped ? "000" : "200");
         if (command === "docker") {
           if (args[0] === "buildx" && args[1] === "imagetools" && args[2] === "inspect") {
