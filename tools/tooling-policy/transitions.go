@@ -8,89 +8,89 @@ import (
 // approvedTask251 is a fixed allowlist of reviewed exact non-Go blob transitions. A
 // transition is enabled only when the immutable baseline inventory has the stated
 // baseline blob at that exact path; evaluation later requires the exact current blob.
-type task251Transition struct { baseline, current string }
+type task251Transition struct{ baseline, current string }
 
 func task251Transitions() map[string]task251Transition {
 	transitions := map[string]task251Transition{
-		"tools/checks/foundation/core/command/spec/binder.check.ts": {"785e309581aefb7163480b606808d174bb887a25", "b9192ede233b31d0b4f4fa7653defab92dfb2101"},
-		"tools/checks/foundation/core/command/spec/call.check.ts": {"4078662e8904ad0e5814beda900a6dca2525736c", "27eb2dc1ed5dce5d8aedeca0f197b8d644f4839f"},
-		"tools/checks/foundation/packaging/stale-dist.check.ts": {"889a687a2461e661533fa01cd9d888de6d60722f", "3cc53408b1866ab9250424fa9fb04d9acba134be"},
-		"tools/checks/integration/apps/app-hooks.check.ts": {"9961f5c4227f599789a53e8b99fb4cde9c7ed45c", "961908f1c39f20f82fae58b23fac8cb89fce303b"},
-		"tools/checks/integration/apps/app-recipes-dir.check.ts": {"3399a563a6525b78501aa428117f5bbf5b2a7528", "cf89055323f629e77f76e8bbbe25041e150822d2"},
-		"tools/checks/integration/mcp/dispatch/gate-confirm.check.ts": {"ff1e3825389ecba0eb1a212c4bd4ea2ef80000e0", "aac3930f2f1efd104562934562a082e796507d22"},
-		"tools/checks/integration/mcp/dispatch/mcp-server.check.ts": {"bd12b208ef21ed6ad8152df5b8107f7c18cd40d2", "93c8a0bde71e630401e0757a652d5325ebaff10b"},
-		"tools/checks/integration/mcp/dispatch/trial-run.check.ts": {"45b30519496b38cf99f79d914008244be50b9ddc", "4bccf3d2b155a23c0b021c2128c04a29b2292e12"},
-		"tools/checks/integration/mcp/progress/mcp-apply-report.check.ts": {"381d8bb5450951f591d28a7dc6187adf3ed96c47", "18270eb2e8e92a93aa81cca50ca22cc7934d8fbe"},
+		"tools/checks/foundation/core/command/spec/binder.check.ts":              {"785e309581aefb7163480b606808d174bb887a25", "b9192ede233b31d0b4f4fa7653defab92dfb2101"},
+		"tools/checks/foundation/core/command/spec/call.check.ts":                {"4078662e8904ad0e5814beda900a6dca2525736c", "27eb2dc1ed5dce5d8aedeca0f197b8d644f4839f"},
+		"tools/checks/foundation/packaging/stale-dist.check.ts":                  {"889a687a2461e661533fa01cd9d888de6d60722f", "3cc53408b1866ab9250424fa9fb04d9acba134be"},
+		"tools/checks/integration/apps/app-hooks.check.ts":                       {"9961f5c4227f599789a53e8b99fb4cde9c7ed45c", "961908f1c39f20f82fae58b23fac8cb89fce303b"},
+		"tools/checks/integration/apps/app-recipes-dir.check.ts":                 {"3399a563a6525b78501aa428117f5bbf5b2a7528", "cf89055323f629e77f76e8bbbe25041e150822d2"},
+		"tools/checks/integration/mcp/dispatch/gate-confirm.check.ts":            {"ff1e3825389ecba0eb1a212c4bd4ea2ef80000e0", "aac3930f2f1efd104562934562a082e796507d22"},
+		"tools/checks/integration/mcp/dispatch/mcp-server.check.ts":              {"bd12b208ef21ed6ad8152df5b8107f7c18cd40d2", "93c8a0bde71e630401e0757a652d5325ebaff10b"},
+		"tools/checks/integration/mcp/dispatch/trial-run.check.ts":               {"45b30519496b38cf99f79d914008244be50b9ddc", "4bccf3d2b155a23c0b021c2128c04a29b2292e12"},
+		"tools/checks/integration/mcp/progress/mcp-apply-report.check.ts":        {"381d8bb5450951f591d28a7dc6187adf3ed96c47", "18270eb2e8e92a93aa81cca50ca22cc7934d8fbe"},
 		"tools/checks/integration/mcp/progress/mcp-structured-progress.check.ts": {"6d4ef6d0be43f3c0a5e529feada5f3cbf63bbdd2", "6dd6232e506d407ceb683a05e10532ef36f3aefc"},
-		"tools/checks/integration/mcp-safety-policy.check.ts": {"0f617b3656352dfe63c09c3a4867433e746e7e26", "95d888438532bcaf9c3b4f2cd9eaabbc616f9697"},
-		"tools/checks/integration/recipe/hooks/recipe-kit/surface.check.ts": {"8ed02a9394da8774bca1369325d49c4c9bf65109", "b0349cae21549fea6b766a2245b30a128247bb06"},
-		"tools/checks/runtime/connection-facts/recover-env-dispatch.check.ts": {"8903869fa6ba085adf56e3316a3ba8f84caa42a3", "347eb6eba7e95f03c428b97e1ff7ee45d4b6c37e"},
-		"tools/checks/runtime/convergence/apply-config.check.ts": {"04120078ee938d6add7718d846a7523ec68e0714", "d9a1b1c725ed17ec5d939ebbcc5afd42723e31e6"},
-		"tools/checks/sets/lifecycle/set-try.check.ts": {"ea5ac7d4101e4ad165020c8be5e5d7cd85a6fc0b", "eb0d55543ba9688e1b58b4066ac6ec4b6771bd86"},
-		"tools/clawwright.ts": {"56830b8d4168ada3126c8978984282dd8a605d9f", "742adfaa806a8d165d62cf9689d49feb9e7c185e"},
-		"tools/build-framework-package.ts": {"5164363d0dbd927b5a26f99fc42dec953011a15e", "cc748708c71c92356f6331d00fd293fcb2700bb1"},
-		"tools/checks/architecture/architecture.check.ts": {"bb156e30699e613fc717d20179fe7eecadcf4572", "dbb46261b73b37cf49bae08ce12932aa42759cbc"},
-		"tools/checks/architecture/command-layer/grammar-in-run.ts": {"e420fe35d228f49e05ae32ef86a6db39e774993a", "ca8a5086ff9ef31c23a5f401e228647501ced513"},
-		"tools/checks/architecture/command-layer/kind-casts.ts": {"2af4c675f46b5bf6a80dfcc1e75eeefd70086fe2", "b71b1facf6825ce17b42bb759581174f17ec692c"},
-		"tools/checks/architecture/frame-ratchets.ts": {"b04326fdbdd54002d8613b2e721f2c2fa3cb22af", "fd8e7c812ffd2e81e1f6d0a46409751f7bf4e507"},
-		"tools/checks/controls/controls.ts": {"1364f51cb87e1ee36999790cbff3267009ff64f6", "cb6c655e1b1ca5380e9f079cdd6e5a0b12def79a"},
-		"tools/checks/controls/stage7-accept.ts": {"576245cbaf34c6373bd3dccf047ec0fd753a079e", "b58322c46c4105d4bc7f8902919dd6c488dffa3c"},
-		"tools/checks/controls/stage7.ts": {"da4dbe943bb257c56e117f26f3d5273a84b123ff", "5fe6bb42526ef8f4c744a0b86f3f13432ec6d1f5"},
-		"tools/checks/entry/linked-launch.check.ts": {"16d20f8d65923245eb3578e985c2f2dc8469cb88", "0a5c0a84a262ca50d0fa2ee0492a8af4ad5716e5"},
-		"tools/checks/foundation/cli/cli-help.check.ts": {"6a073f7a467c604817f15cf2af77c78e0a67cd4a", "31b14a46383bafe3527e233e0fe77b39364d7dc8"},
-		"tools/checks/foundation/core/command/needs.check.ts": {"58bb72512f77f0162b44b71fa72fb4898ad1d05b", "97e53bf6f30c9c10687382f22c97b461549d962b"},
-		"tools/checks/foundation/core/deployment-names.check.ts": {"e34976b0e6656bfd62aecb82f78cca8716f3a541", "97a653ef758e95bcbea4ee8fa65710cf52ca8d30"},
-		"tools/checks/foundation/core/env.check.ts": {"7284faf24e2c70914aaef6e3a945e0f7350a6b3b", "e5d40f6d9a428af97d333bf257a7ccad63ec008e"},
-		"tools/checks/foundation/hygiene/check-linux.check.ts": {"5b2c41fa94aa3e2ed51fe35dca7f6ec08dcbbfee", "a65723de69cd492b54360a9fabf11c1768c8b87f"},
-		"tools/checks/foundation/hygiene/static/import-style.check.ts": {"1d4cc6713dd8b1558a5703768c42fafc0a2f92fc", "43985cf6b980bf9d981ee3b448fa5cee63210f5d"},
-		"tools/checks/foundation/hygiene/static/local-tar-owner.check.ts": {"f7a7d1e4b922376c0ec2ea798624656c283f3271", "a1275b2911ec29bee89b7b9a6e7e80e1c9665233"},
-		"tools/checks/foundation/hygiene/static/local-tar-rules.ts": {"fe31266ce179f7166ae8090e3dd4f8b21e82d0fb", "854793243606312fd7f53efa87ead3f397a3d1f5"},
-		"tools/checks/foundation/hygiene/static/transport-read-swallow.check.ts": {"066d61738ebdee63ab28f65c43ac5f1f5377d0be", "e3bdfbe8c1da0c8aa31856a3e1a30113dc904405"},
-		"tools/checks/foundation/invocation/frame.check.ts": {"74d7e27366dc8897e99c4f2ac7da2ef6c9a5a80d", "94f57ce5968ef107573685de63742a66f8fe2b0c"},
-		"tools/checks/foundation/layout.check.ts": {"4985b5e67d11b1e5ae02da49d3385f130bd39cbf", "c01e2982e4e353f08b1bf52a9d1bc324dc8324c7"},
-		"tools/checks/foundation/packaging/build-output.check.ts": {"1c5015bc4c6afac4744138357cffbf72376faafc", "b02b44dd086bedc632692317d6319c7605f3db0b"},
-		"tools/checks/golden/durable-frame.check.ts": {"7d46c763bd7df4df7e633320eee291fa29f47185", "70d8abadac3c46947e908f464ad3678cab478a79"},
-		"tools/checks/golden/frames.ts": {"b3b170b7ea1275af429c9043521206cdedd09ba8", "07bd3a9586f196c78af9d2663f86b52c59025167"},
-		"tools/checks/golden/matrix.ts": {"f44d94e47f3bcc4fbe564cd379e22bcfc970354f", "4da3658a9401ee5669d066f200d9b416110f2964"},
-		"tools/checks/golden/render.ts": {"38e26cc1b1e8bd15fce99cc1b54e55be8e3a1076", "563ab412a17939bef11c174910b99612907c07c8"},
+		"tools/checks/integration/mcp-safety-policy.check.ts":                    {"0f617b3656352dfe63c09c3a4867433e746e7e26", "95d888438532bcaf9c3b4f2cd9eaabbc616f9697"},
+		"tools/checks/integration/recipe/hooks/recipe-kit/surface.check.ts":      {"8ed02a9394da8774bca1369325d49c4c9bf65109", "b0349cae21549fea6b766a2245b30a128247bb06"},
+		"tools/checks/runtime/connection-facts/recover-env-dispatch.check.ts":    {"8903869fa6ba085adf56e3316a3ba8f84caa42a3", "347eb6eba7e95f03c428b97e1ff7ee45d4b6c37e"},
+		"tools/checks/runtime/convergence/apply-config.check.ts":                 {"04120078ee938d6add7718d846a7523ec68e0714", "d9a1b1c725ed17ec5d939ebbcc5afd42723e31e6"},
+		"tools/checks/sets/lifecycle/set-try.check.ts":                           {"ea5ac7d4101e4ad165020c8be5e5d7cd85a6fc0b", "eb0d55543ba9688e1b58b4066ac6ec4b6771bd86"},
+		"tools/clawwright.ts":                                                                 {"56830b8d4168ada3126c8978984282dd8a605d9f", "742adfaa806a8d165d62cf9689d49feb9e7c185e"},
+		"tools/build-framework-package.ts":                                                    {"5164363d0dbd927b5a26f99fc42dec953011a15e", "cc748708c71c92356f6331d00fd293fcb2700bb1"},
+		"tools/checks/architecture/architecture.check.ts":                                     {"bb156e30699e613fc717d20179fe7eecadcf4572", "dbb46261b73b37cf49bae08ce12932aa42759cbc"},
+		"tools/checks/architecture/command-layer/grammar-in-run.ts":                           {"e420fe35d228f49e05ae32ef86a6db39e774993a", "ca8a5086ff9ef31c23a5f401e228647501ced513"},
+		"tools/checks/architecture/command-layer/kind-casts.ts":                               {"2af4c675f46b5bf6a80dfcc1e75eeefd70086fe2", "b71b1facf6825ce17b42bb759581174f17ec692c"},
+		"tools/checks/architecture/frame-ratchets.ts":                                         {"b04326fdbdd54002d8613b2e721f2c2fa3cb22af", "fd8e7c812ffd2e81e1f6d0a46409751f7bf4e507"},
+		"tools/checks/controls/controls.ts":                                                   {"1364f51cb87e1ee36999790cbff3267009ff64f6", "cb6c655e1b1ca5380e9f079cdd6e5a0b12def79a"},
+		"tools/checks/controls/stage7-accept.ts":                                              {"576245cbaf34c6373bd3dccf047ec0fd753a079e", "b58322c46c4105d4bc7f8902919dd6c488dffa3c"},
+		"tools/checks/controls/stage7.ts":                                                     {"da4dbe943bb257c56e117f26f3d5273a84b123ff", "5fe6bb42526ef8f4c744a0b86f3f13432ec6d1f5"},
+		"tools/checks/entry/linked-launch.check.ts":                                           {"16d20f8d65923245eb3578e985c2f2dc8469cb88", "0a5c0a84a262ca50d0fa2ee0492a8af4ad5716e5"},
+		"tools/checks/foundation/cli/cli-help.check.ts":                                       {"6a073f7a467c604817f15cf2af77c78e0a67cd4a", "31b14a46383bafe3527e233e0fe77b39364d7dc8"},
+		"tools/checks/foundation/core/command/needs.check.ts":                                 {"58bb72512f77f0162b44b71fa72fb4898ad1d05b", "97e53bf6f30c9c10687382f22c97b461549d962b"},
+		"tools/checks/foundation/core/deployment-names.check.ts":                              {"e34976b0e6656bfd62aecb82f78cca8716f3a541", "97a653ef758e95bcbea4ee8fa65710cf52ca8d30"},
+		"tools/checks/foundation/core/env.check.ts":                                           {"7284faf24e2c70914aaef6e3a945e0f7350a6b3b", "e5d40f6d9a428af97d333bf257a7ccad63ec008e"},
+		"tools/checks/foundation/hygiene/check-linux.check.ts":                                {"5b2c41fa94aa3e2ed51fe35dca7f6ec08dcbbfee", "a65723de69cd492b54360a9fabf11c1768c8b87f"},
+		"tools/checks/foundation/hygiene/static/import-style.check.ts":                        {"1d4cc6713dd8b1558a5703768c42fafc0a2f92fc", "43985cf6b980bf9d981ee3b448fa5cee63210f5d"},
+		"tools/checks/foundation/hygiene/static/local-tar-owner.check.ts":                     {"f7a7d1e4b922376c0ec2ea798624656c283f3271", "a1275b2911ec29bee89b7b9a6e7e80e1c9665233"},
+		"tools/checks/foundation/hygiene/static/local-tar-rules.ts":                           {"fe31266ce179f7166ae8090e3dd4f8b21e82d0fb", "854793243606312fd7f53efa87ead3f397a3d1f5"},
+		"tools/checks/foundation/hygiene/static/transport-read-swallow.check.ts":              {"066d61738ebdee63ab28f65c43ac5f1f5377d0be", "2a26bf42828e005479ddb7b66373333ba8e64474"},
+		"tools/checks/foundation/invocation/frame.check.ts":                                   {"74d7e27366dc8897e99c4f2ac7da2ef6c9a5a80d", "94f57ce5968ef107573685de63742a66f8fe2b0c"},
+		"tools/checks/foundation/layout.check.ts":                                             {"4985b5e67d11b1e5ae02da49d3385f130bd39cbf", "c01e2982e4e353f08b1bf52a9d1bc324dc8324c7"},
+		"tools/checks/foundation/packaging/build-output.check.ts":                             {"1c5015bc4c6afac4744138357cffbf72376faafc", "b02b44dd086bedc632692317d6319c7605f3db0b"},
+		"tools/checks/golden/durable-frame.check.ts":                                          {"7d46c763bd7df4df7e633320eee291fa29f47185", "70d8abadac3c46947e908f464ad3678cab478a79"},
+		"tools/checks/golden/frames.ts":                                                       {"b3b170b7ea1275af429c9043521206cdedd09ba8", "07bd3a9586f196c78af9d2663f86b52c59025167"},
+		"tools/checks/golden/matrix.ts":                                                       {"f44d94e47f3bcc4fbe564cd379e22bcfc970354f", "4da3658a9401ee5669d066f200d9b416110f2964"},
+		"tools/checks/golden/render.ts":                                                       {"38e26cc1b1e8bd15fce99cc1b54e55be8e3a1076", "563ab412a17939bef11c174910b99612907c07c8"},
 		"tools/checks/integration/agent/recipe-hook-freshness/hook-framework-import.check.ts": {"9234b22578b82252ac0fc643308e1db60ef3ed42", "d491a677a42682b6654d17bc56316c27117e527a"},
-		"tools/checks/integration/apps/init-messages.check.ts": {"921c9a1d9e84e2f84dd051498de31fb0854a21cb", "c3523e9b28e4b2e6b570b9d5ef9cd7ebff74f962"},
-		"tools/checks/integration/apps/invocation-hints-rooted.check.ts": {"fcd2c82f432225671365e95b9d98d6691a035642", "110a09d0d8e64e8242d4f58f4f02ac3b7f31b21f"},
-		"tools/checks/integration/apps/invocation-hints.check.ts": {"08876b36a1d87323fa3dad07366703962a15a036", "9dcba0c8ac2e8267629012b57150746c6d6fd0f2"},
-		"tools/checks/integration/apps/remove-app.check.ts": {"c977a27999a531c51d75f4bc8dfcff47ac385e18", "823c79544b2d243f6dbda410f9c95dbec758b93f"},
-		"tools/checks/integration/init.check.ts": {"42ab892bfdb95c33b16fd6e245cfd16f06e716f2", "58716407887eba2a592d944e742092d512850f18"},
-		"tools/checks/integration/list.check.ts": {"f1a22f428ac2767630fd2523cbce1dce73a3e5e7", "bba55a21514cf3035a7debd150b2ebb644123f49"},
-		"tools/checks/integration/mcp/dispatch/changed-inventory.ts": {"6b90126615214f4827076ff25f66946a8e42b5dd", "80754014c97930fca132088c8cac452f02c2d0a7"},
-		"tools/checks/integration/mcp/dispatch/mcp-changed.check.ts": {"81ec0186e522273bbb12e90e82b3023afce91c4c", "7dd79b3d87797043fa960aa5992a550f19fcbaee"},
-		"tools/checks/integration/mcp/transport-listing.check.ts": {"dc5ef26a08f7c474277722022a0891d1ed505afe", "7791964f33a91f8e84f44a74a4e534e305dce6dc"},
-		"tools/checks/kit/capabilities/run-guard.check.ts": {"d86a92884ace027d02a1f31beadb42c69167261f", "f0f0f2dcafff70eb75882e08f8c289fd62a80d9d"},
-		"tools/checks/kit/deployment-fixture.ts": {"8f94d6c69be3daba0fc0e42dcf9df064bf9f988e", "8245038ee135a7d6b430ec20d482394b2d34ab6f"},
-		"tools/checks/kit/run.ts": {"a37c6ba4ea26ed59e17a01edb9e0228e3de04626", "7c9ff07c44251b7eff094171d3eaa8dc1a2f24af"},
-		"tools/checks/kit/selection/import-graph.check.ts": {"cf633a786545fe2772c9a9d6a2e484c6544854d7", "0459785d5b2ad50a8c072acb2f5eca9dbdc00eb1"},
-		"tools/checks/kit/selection/import-graph.ts": {"158879d72d42d36803516451cc35949f7b6b320a", "c82ff4354998e015b701c9d4465140af7258c017"},
-		"tools/checks/kit/selection/rules.ts": {"e24d463345f84ce455cded12efab52118aae0373", "e8549159c7e4f9e6bd29789c8a80839fd3bd12ec"},
-		"tools/checks/kit/selection/selection.check.ts": {"6e6a08daa9d6b4f3fd024a35b121d8f17e9f23bb", "0e8b367ee8200f76cd4c09d7a7ecf70e381a23fa"},
-		"tools/checks/kit/self/deployment-fixture.check.ts": {"133629e3e50aaf6119c9c3dd1e7b3b8f2be6bb94", "10634f7d6a94c448bf27e389e6f0f734e88215fa"},
-		"tools/checks/kit/self/shells.check.ts": {"7d91160e258b3d8dee57cc79c06baeca15165c06", "3a2458e90e3b0468e736b0ab8ae82e07007641ff"},
-		"tools/checks/release/release/installed-consumer.check.ts": {"f3e18e2900f0353fe43a3b3e31582a46475bc09b", "1624cca11e2987320047a03d01427e1d475e9e1b"},
-		"tools/checks/release/release/package-release.check.ts": {"d82ca05eaf31be9834efebc1e1c0ade943fd95bc", "119bc5d58acf370c05220f9d7a89ac35022c3053"},
-		"tools/checks/release/release/system-command-units.check.ts": {"48906a8ec4b11fea2a62826979a0e2253b2086b3", "45fa96b443c4b2b2d9a96621d5448a2cba974bea"},
-		"tools/checks/release/release/system-install.check.ts": {"138fcb424e78ddec393e5ffa91e9555d6bfeb46c", "ef832a65ebc0581d75cf72d76107f175b79cdc0e"},
-		"tools/checks/runtime/lifecycle/bootstrap/bootstrap-provider-order.check.ts": {"f650205069eec0928bab8c6829faa3e46710469f", "21343327210ba5135b1ba8ce50d5c2413ce9478e"},
-		"tools/checks/runtime/schedule/schedule.check.ts": {"6135f7f11b23aab305bf9e9cd6cec8b9cf5fb668", "bf038dbe369539a29ed9b042154d5f0148f52c5e"},
-		"tools/checks/runtime/service/deploy/checkout-policy/sensitive-names.check.ts": {"6d693579204c5d6cc224a634b779993defcec2e4", "b84ea028d83f47e5ea3e327aaf4abde0e7f27a09"},
-		"tools/checks/runtime/service/deploy/rsync-file-list.check.ts": {"6eaf0e4be84c20b35c49c867fb9dfd3c944a70c6", "051b70e428e28bb67a3085ada3a0ac89f8056d52"},
-		"tools/checks/runtime/transport/scenarios/contract.ts": {"925587012b76fb5b6fccf78c231cc14a25ff54a1", "d6daff6f0c1e28f9057781b586093099bbef6bd9"},
-		"tools/checks/security/expose/no-serve-reset.check.ts": {"9d2feaf809a2434dd0009450b4ed65ee01269047", "d71e410de77805e65fa541ee8b0f345f379241e1"},
-		"tools/checks/sets/lifecycle/set-module-load.check.ts": {"203a664cad9743f22fece9f98f7597280ac42d75", "37cf6eff4b0191d13f145079ef9ec65ad3bfcb33"},
-		"tools/checks/sets/tar/local-tar-owner.check.ts": {"1031d2c6e2790c6c342151fee98a313428a14e88", "d5e7b404c0d1dd1615888d7060acc45c36645f10"},
-		"tools/checks/surfaces/advice/checkout-paste.check.ts": {"658abc76d4fbd2e7b196ac10506190d526b2bb37", "fb97fc8656a5b10e6474addf2c818668b0f74df1"},
-		"tools/checks/surfaces/frame-law-counter.ts": {"17f3714fa5ba1806b1566d33fe4669645bc97836", "2d2cb62c2014e1b056ebb558afebe06229acf220"},
-		"tools/checks/surfaces/help-prose.check.ts": {"79b0add6d60453483fed05ae01462e23f91181de", "8dfc16071398026f40b15c07e4a42a7d8eeb668c"},
-		"tools/checks/surfaces/top-level-advice.check.ts": {"48430a30b379288398868120236767df98121aa5", "2a1022c8fd2386eeda4349b53e8c95db1eefe5dd"},
-		"tools/dev/check-linux-argv.ts": {"6c62c795f170b542007df40e5e3326fed7c44ac9", "f5e3fdb2fbb4ae885fb192431b53f52f92ea8ca9"},
-		"tools/dev/install-system.ts": {"7df84ae508caff784984ab4bb8231b3e952c279c", "0effe0947574295c07a7fb554883949db1886257"},
-		"tools/dev/worktree.ts": {"ad890b1cccd2213a7a66bd407c7a5b527cca780b", "4151d4d082c7c8c3f74e0830d91e552cec1cbfc5"},
+		"tools/checks/integration/apps/init-messages.check.ts":                                {"921c9a1d9e84e2f84dd051498de31fb0854a21cb", "c3523e9b28e4b2e6b570b9d5ef9cd7ebff74f962"},
+		"tools/checks/integration/apps/invocation-hints-rooted.check.ts":                      {"fcd2c82f432225671365e95b9d98d6691a035642", "110a09d0d8e64e8242d4f58f4f02ac3b7f31b21f"},
+		"tools/checks/integration/apps/invocation-hints.check.ts":                             {"08876b36a1d87323fa3dad07366703962a15a036", "9dcba0c8ac2e8267629012b57150746c6d6fd0f2"},
+		"tools/checks/integration/apps/remove-app.check.ts":                                   {"c977a27999a531c51d75f4bc8dfcff47ac385e18", "823c79544b2d243f6dbda410f9c95dbec758b93f"},
+		"tools/checks/integration/init.check.ts":                                              {"42ab892bfdb95c33b16fd6e245cfd16f06e716f2", "58716407887eba2a592d944e742092d512850f18"},
+		"tools/checks/integration/list.check.ts":                                              {"f1a22f428ac2767630fd2523cbce1dce73a3e5e7", "bba55a21514cf3035a7debd150b2ebb644123f49"},
+		"tools/checks/integration/mcp/dispatch/changed-inventory.ts":                          {"6b90126615214f4827076ff25f66946a8e42b5dd", "80754014c97930fca132088c8cac452f02c2d0a7"},
+		"tools/checks/integration/mcp/dispatch/mcp-changed.check.ts":                          {"81ec0186e522273bbb12e90e82b3023afce91c4c", "7dd79b3d87797043fa960aa5992a550f19fcbaee"},
+		"tools/checks/integration/mcp/transport-listing.check.ts":                             {"dc5ef26a08f7c474277722022a0891d1ed505afe", "7791964f33a91f8e84f44a74a4e534e305dce6dc"},
+		"tools/checks/kit/capabilities/run-guard.check.ts":                                    {"d86a92884ace027d02a1f31beadb42c69167261f", "f0f0f2dcafff70eb75882e08f8c289fd62a80d9d"},
+		"tools/checks/kit/deployment-fixture.ts":                                              {"8f94d6c69be3daba0fc0e42dcf9df064bf9f988e", "2f16565becce07753931c83045a53be25ebcca76"},
+		"tools/checks/kit/run.ts":                                                             {"a37c6ba4ea26ed59e17a01edb9e0228e3de04626", "7c9ff07c44251b7eff094171d3eaa8dc1a2f24af"},
+		"tools/checks/kit/selection/import-graph.check.ts":                                    {"cf633a786545fe2772c9a9d6a2e484c6544854d7", "0459785d5b2ad50a8c072acb2f5eca9dbdc00eb1"},
+		"tools/checks/kit/selection/import-graph.ts":                                          {"158879d72d42d36803516451cc35949f7b6b320a", "c82ff4354998e015b701c9d4465140af7258c017"},
+		"tools/checks/kit/selection/rules.ts":                                                 {"e24d463345f84ce455cded12efab52118aae0373", "e8549159c7e4f9e6bd29789c8a80839fd3bd12ec"},
+		"tools/checks/kit/selection/selection.check.ts":                                       {"6e6a08daa9d6b4f3fd024a35b121d8f17e9f23bb", "0e8b367ee8200f76cd4c09d7a7ecf70e381a23fa"},
+		"tools/checks/kit/self/deployment-fixture.check.ts":                                   {"133629e3e50aaf6119c9c3dd1e7b3b8f2be6bb94", "10634f7d6a94c448bf27e389e6f0f734e88215fa"},
+		"tools/checks/kit/self/shells.check.ts":                                               {"7d91160e258b3d8dee57cc79c06baeca15165c06", "3a2458e90e3b0468e736b0ab8ae82e07007641ff"},
+		"tools/checks/release/release/installed-consumer.check.ts":                            {"f3e18e2900f0353fe43a3b3e31582a46475bc09b", "1624cca11e2987320047a03d01427e1d475e9e1b"},
+		"tools/checks/release/release/package-release.check.ts":                               {"d82ca05eaf31be9834efebc1e1c0ade943fd95bc", "119bc5d58acf370c05220f9d7a89ac35022c3053"},
+		"tools/checks/release/release/system-command-units.check.ts":                          {"48906a8ec4b11fea2a62826979a0e2253b2086b3", "45fa96b443c4b2b2d9a96621d5448a2cba974bea"},
+		"tools/checks/release/release/system-install.check.ts":                                {"138fcb424e78ddec393e5ffa91e9555d6bfeb46c", "ef832a65ebc0581d75cf72d76107f175b79cdc0e"},
+		"tools/checks/runtime/lifecycle/bootstrap/bootstrap-provider-order.check.ts":          {"f650205069eec0928bab8c6829faa3e46710469f", "21343327210ba5135b1ba8ce50d5c2413ce9478e"},
+		"tools/checks/runtime/schedule/schedule.check.ts":                                     {"6135f7f11b23aab305bf9e9cd6cec8b9cf5fb668", "bf038dbe369539a29ed9b042154d5f0148f52c5e"},
+		"tools/checks/runtime/service/deploy/checkout-policy/sensitive-names.check.ts":        {"6d693579204c5d6cc224a634b779993defcec2e4", "b84ea028d83f47e5ea3e327aaf4abde0e7f27a09"},
+		"tools/checks/runtime/service/deploy/rsync-file-list.check.ts":                        {"6eaf0e4be84c20b35c49c867fb9dfd3c944a70c6", "051b70e428e28bb67a3085ada3a0ac89f8056d52"},
+		"tools/checks/runtime/transport/scenarios/contract.ts":                                {"925587012b76fb5b6fccf78c231cc14a25ff54a1", "d6daff6f0c1e28f9057781b586093099bbef6bd9"},
+		"tools/checks/security/expose/no-serve-reset.check.ts":                                {"9d2feaf809a2434dd0009450b4ed65ee01269047", "d71e410de77805e65fa541ee8b0f345f379241e1"},
+		"tools/checks/sets/lifecycle/set-module-load.check.ts":                                {"203a664cad9743f22fece9f98f7597280ac42d75", "37cf6eff4b0191d13f145079ef9ec65ad3bfcb33"},
+		"tools/checks/sets/tar/local-tar-owner.check.ts":                                      {"1031d2c6e2790c6c342151fee98a313428a14e88", "d5e7b404c0d1dd1615888d7060acc45c36645f10"},
+		"tools/checks/surfaces/advice/checkout-paste.check.ts":                                {"658abc76d4fbd2e7b196ac10506190d526b2bb37", "fb97fc8656a5b10e6474addf2c818668b0f74df1"},
+		"tools/checks/surfaces/frame-law-counter.ts":                                          {"17f3714fa5ba1806b1566d33fe4669645bc97836", "2d2cb62c2014e1b056ebb558afebe06229acf220"},
+		"tools/checks/surfaces/help-prose.check.ts":                                           {"79b0add6d60453483fed05ae01462e23f91181de", "8dfc16071398026f40b15c07e4a42a7d8eeb668c"},
+		"tools/checks/surfaces/top-level-advice.check.ts":                                     {"48430a30b379288398868120236767df98121aa5", "2a1022c8fd2386eeda4349b53e8c95db1eefe5dd"},
+		"tools/dev/check-linux-argv.ts":                                                       {"6c62c795f170b542007df40e5e3326fed7c44ac9", "f5e3fdb2fbb4ae885fb192431b53f52f92ea8ca9"},
+		"tools/dev/install-system.ts":                                                         {"7df84ae508caff784984ab4bb8231b3e952c279c", "0effe0947574295c07a7fb554883949db1886257"},
+		"tools/dev/worktree.ts":                                                               {"ad890b1cccd2213a7a66bd407c7a5b527cca780b", "4151d4d082c7c8c3f74e0830d91e552cec1cbfc5"},
 	}
 	return transitions
 }
@@ -108,21 +108,21 @@ func approvedTask251(legacy map[string]inventory) map[string]string {
 
 func task258BaselineReceipts() map[string]string {
 	return map[string]string{
-		"tools/checks/foundation/packaging/build-output.check.ts":     "1c5015bc4c6afac4744138357cffbf72376faafc",
+		"tools/checks/foundation/packaging/build-output.check.ts":      "1c5015bc4c6afac4744138357cffbf72376faafc",
 		"tools/checks/runtime/transport/remote/ssjack-client.check.ts": "3682aaf124ecf03f97e57c128711682c37bb5734",
-		"tools/checks/foundation/core/command/needs.check.ts":         "58bb72512f77f0162b44b71fa72fb4898ad1d05b",
-		"tools/checks/completeness/flags-matrix.check.ts":             "5975223e16394db0843efc9adfc734d05a9591b0",
-		"tools/checks/foundation/core/command/spec/effect.check.ts":   "45e1d90304f4b8c1c87986160fbe7a7624d96e64",
+		"tools/checks/foundation/core/command/needs.check.ts":          "58bb72512f77f0162b44b71fa72fb4898ad1d05b",
+		"tools/checks/completeness/flags-matrix.check.ts":              "5975223e16394db0843efc9adfc734d05a9591b0",
+		"tools/checks/foundation/core/command/spec/effect.check.ts":    "45e1d90304f4b8c1c87986160fbe7a7624d96e64",
 	}
 }
 
 func task258CurrentReceipts() map[string]string {
 	return map[string]string{
-		"tools/checks/foundation/packaging/build-output.check.ts":     "d2c139dc16d10e68f17ac671f275c922cc61c28f",
+		"tools/checks/foundation/packaging/build-output.check.ts":      "2a59b1aead3361e702021e431f0628260b556d54",
 		"tools/checks/runtime/transport/remote/ssjack-client.check.ts": "5a40b9366289c81222e2deea652ab86ccbd4c48e",
-		"tools/checks/foundation/core/command/needs.check.ts":         "4bf762935e8e8fcbfe6e911bfb6770dd92773876",
-		"tools/checks/completeness/flags-matrix.check.ts":             "9679640e21f664647bced89dec3223044dd8485f",
-		"tools/checks/foundation/core/command/spec/effect.check.ts":   "c7a5c6ee881dc86e7be5fa5c7f53f069fa40ec63",
+		"tools/checks/foundation/core/command/needs.check.ts":          "088e228f6c7d3a4272494a3bdd86b8f4ba8e08c2",
+		"tools/checks/completeness/flags-matrix.check.ts":              "6f33054fa0f0fc43a6c3b8a5d166719c3e03d46e",
+		"tools/checks/foundation/core/command/spec/effect.check.ts":    "e26fe2182f19bacfceaa01007ebfdc3b1e7040bc",
 	}
 }
 
@@ -134,6 +134,57 @@ func approvedTask258(legacy map[string]inventory, currentReceipts map[string]str
 		current := currentReceipts[path]
 		if exists && baseline != "" && old.blob == baseline && current != "" {
 			approved[path] = current
+		}
+	}
+	return approved
+}
+
+// task431Transitions records the exact reviewed edits of frozen checks made while the
+// ssjack-app descriptor checks and the shell-builtin file-test probes were folded into
+// existing check files (no new non-Go file): the shared stub moved into
+// tools/checks/kit/deployment-fixture.ts (listed in task251Transitions), every check that
+// reads it through the new import path, and the ssjack-contract and lock-home checks that
+// absorbed the descriptor and file-test assertions. Same shape and same rule as
+// task251Transitions: the baseline blob must match at that exact path, and only the exact
+// current blob is admitted.
+func task431Transitions() map[string]task251Transition {
+	return map[string]task251Transition{
+		"tools/checks/foundation/cli/invocation/exec-payload.check.ts":            {"4cbd33f5945ae4bd330b8c870de688865a2edc36", "d51e01ecd7318759f491c1ec6d26271b0f5aba0c"},
+		"tools/checks/foundation/core/archive.check.ts":                           {"b11c46301cfb8db313597d3ae7111bfe15fc78dd", "9db07867826cf46ae93d4c413c8327e96062ad41"},
+		"tools/checks/integration/recipe/hooks/recipe-lifecycle-hooks.check.ts":   {"cf1f27527adc228cd5c1a3fa20238840a1d557c9", "112990510f84b5d30ba4949f30b71b642729ea9c"},
+		"tools/checks/management/recipe/actions/retire-legacy.check.ts":           {"c6173904de477a81c35b53c2556588ea8ba3afa1", "3dbf4a1f9a9336c1287e0da3675ac2ea06d2aca3"},
+		"tools/checks/runtime/connection-facts/apply-driver.ts":                   {"d9507f11d28230619830a176984c07366c8d8985", "ba0d34332fae02c1edfb0e5fa053b69c5df9a3dd"},
+		"tools/checks/runtime/connection-facts/upgrade/stub.ts":                   {"2e4b269f8e71553ef67a8dedadca72fffc86644e", "d2467ad15c00b8a89883a72f065f04f985b862d9"},
+		"tools/checks/runtime/connection-facts/upgrade/upgrade.check.ts":          {"e90274bb4fcdc90f0c468df0909ff91b4c19a36d", "812c2dba7d3f1fdc51b2bb7d4db799c3e97280dc"},
+		"tools/checks/runtime/convergence/backup/real-filesystem.check.ts":        {"6247d84a8e9fa2f576033dd2cb2e55de19ab3ce3", "ba5efaf5ecd72155959cc0ca149b95030ff9d91d"},
+		"tools/checks/runtime/convergence/lock-home.check.ts":                     {"5e218b0056e6f261c3ec6bb1d93fe24ad49c02d2", "e2249ec5491f285340e1e4abdd88bb4aa6701b92"},
+		"tools/checks/runtime/lifecycle/bootstrap/bootstrap-check.check.ts":       {"41ee5470f305bd8e5dcea6109e2ab2587b6d1a75", "d86e28c9051dba12a3fded5cecfb8793fe8d2821"},
+		"tools/checks/runtime/lifecycle/bootstrap/bootstrap-live-advice.check.ts": {"ff00cfde3bcf57bd4216f3f9024440c858a859e2", "c1bdc80428e94acc18e9def7ab545392d8d1dd4b"},
+		"tools/checks/runtime/lifecycle/bootstrap/bootstrap-lock.check.ts":        {"5e9a8316440603a076e1d8a7e24de94d311b42ce", "dd472e4f9088c93666f7dda423ac1b627f003e0e"},
+		"tools/checks/runtime/lifecycle/destroy/destroy.check.ts":                 {"4e942b91172b9a11c683f25816d40fccb6d9f91e", "f620fbea673c9096c52bafa38b37d17c963ac6da"},
+		"tools/checks/runtime/lifecycle/restore/restore-dry-run.check.ts":         {"043ef4c7ce855f543ea21b440493b7b3a31eb4dc", "75fe6475c53053d5ac4eb7a3e2857911c3276350"},
+		"tools/checks/runtime/lifecycle/smoke/archive-window.check.ts":            {"4db3a055b96fcc5fa0d1df249bdb624bc8239459", "06f267b7d45539b63b14fd23986edae6aaf8cadd"},
+		"tools/checks/runtime/lifecycle/smoke/drift.check.ts":                     {"0f25ee7ca4ceac8a4daf40f3760584b877157c1d", "a749ac6ef681d4df03be3a173cff843f3c786eba"},
+		"tools/checks/runtime/lifecycle/smoke/roundtrip.check.ts":                 {"8f6131ef9b7c0ccb1e95a0926f35331e758beb2f", "468c25fd071758d85a44a6b6cc95c27475ca5011"},
+		"tools/checks/runtime/recovery/private-history-restore.check.ts":          {"84ca3ed9319012c72f8c96613a9854f7d6e44380", "737f907a51ca87934e18b17e8e01a24c75357f9a"},
+		"tools/checks/runtime/recovery/protected-target-access.check.ts":          {"b5b4d4e101469ad9b84fb56655b61b2e14766825", "1aed41783348b4364b8a8ef968c061e49203f177"},
+		"tools/checks/runtime/service/restore/restore.check.ts":                   {"7bcfdcc1759c9804507df5aa3226d75766594d9e", "2809589acfb2c57347a21a2a26274816f8be3312"},
+		"tools/checks/runtime/service/state/backup/native.check.ts":               {"aecf95ee1888f1a275e435764770d6ecc6127aff", "03818c16a6b2afcb4cb2ba6f29c0e19629557201"},
+		"tools/checks/runtime/service/state/backup/restore-hooks.check.ts":        {"4cb1994acc03a3e365c9626b1704b4ced040236c", "c941e2771f6c50a16472e08afa882b50fbd61746"},
+		"tools/checks/runtime/service/state/pull-harness.ts":                      {"f8de66ad5175ced0f41b3517c26de1e6b1208fcc", "6ee1113b32021e39631ce1fed16516f99627880d"},
+		"tools/checks/runtime/service/state/pull-lock.check.ts":                   {"912577a7dd7c864fdf07961b61632df5b4a98033", "5ec3c7c258005892f5cfca6fddd0f6cd3cbd63d0"},
+		"tools/checks/runtime/service/state/secrets.check.ts":                     {"8512ee425acec4e58ef178940222ddffedda8526", "e7c4e16d99d45201c78a4b1f718be223baf99cd1"},
+		"tools/checks/runtime/transport/remote/ssjack-contract.check.ts":          {"4319dc04027f2273e6e3ab4ef495f0dbfa6df9f5", "3d0dd539743efd43d03d666feafbeca00993abf3"},
+		"tools/checks/security/private-paths-ledger/reconcile-history.check.ts":   {"071c94bb32e30300cff12ae67408cab74f2b531e", "b94818faaa91ecdd6c51acbf3d3cac8161198deb"},
+	}
+}
+
+func approvedTask431(legacy map[string]inventory) map[string]string {
+	transitions := task431Transitions()
+	approved := make(map[string]string, len(transitions))
+	for path, pair := range transitions {
+		if old, exists := legacy[path]; exists && old.blob == pair.baseline {
+			approved[path] = pair.current
 		}
 	}
 	return approved

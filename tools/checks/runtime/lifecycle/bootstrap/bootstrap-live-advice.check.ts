@@ -12,7 +12,7 @@ import { useDeployment } from "#framework/runtime/deployment.ts";
 import { withOutputSink } from "#framework/core/io/output.ts";
 import type { Context } from "#framework/core/context.ts";
 import { check, finish } from "#checks/kit/harness.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 import { openclawCommands } from "#framework/commands/interface/index.ts";
 
 const DATA_DIR = "/srv/openclaw/data";

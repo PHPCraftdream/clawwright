@@ -21,7 +21,7 @@ import { clearRecipesDir, useRecipesDir } from "#framework/service/recipe.ts";
 import { mountPoints } from "#framework/runtime/mounts.ts";
 import { toContainerPath, fromContainerPath } from "#framework/core/paths.ts";
 import { check, finish, requires } from "#checks/kit/harness.ts";
-import { asDirectTest } from "./file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 
 async function rejectionOf(run: () => Promise<unknown>): Promise<string | undefined> {
   try { await run(); } catch (error) { return (error as Error).message; }

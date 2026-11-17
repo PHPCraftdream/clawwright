@@ -30,9 +30,8 @@ import { declaredState } from "#framework/commands/orchestration/inspect/declare
 import { secrets } from "#framework/commands/management/configuration/secrets.ts";
 import { openclawCommands } from "#framework/commands/interface/index.ts";
 import { withOutputSink } from "#framework/core/io/output.ts";
-import { TRANSPORT_SENTINEL, createDeploymentFixture, stageTally } from "#checks/kit/deployment-fixture.ts";
+import { TRANSPORT_SENTINEL, createDeploymentFixture, stageTally, asDirectTest } from "#checks/kit/deployment-fixture.ts";
 import { check, checkTrue, finish, isolatedAppsRoot } from "#checks/kit/harness.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 
 interface Unit {
   readonly label: string;

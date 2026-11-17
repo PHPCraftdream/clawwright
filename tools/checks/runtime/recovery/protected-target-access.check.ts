@@ -16,7 +16,7 @@ import type { ExecResult, Transport } from "#framework/runtime/transport/transpo
 import { publishPrivateTargetFile } from "#framework/security/privacy/private-target-file.ts";
 import { statusForRequirements, type SecretRequirement } from "#framework/service/secrets.ts";
 import { check, finish } from "#checks/kit/harness.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 
 interface Scenario {
   readonly name: string;

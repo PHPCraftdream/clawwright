@@ -11,7 +11,7 @@ import type { Context } from "#framework/core/context.ts";
 import type { ExecResult } from "#framework/runtime/transport/transport.ts";
 import { modelMutationGuard } from "./mutation-guard.ts";
 import { check, finish } from "#checks/kit/harness.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 
 useDeployment(resolve(monorepoRoot, "apps", "example app"));
 

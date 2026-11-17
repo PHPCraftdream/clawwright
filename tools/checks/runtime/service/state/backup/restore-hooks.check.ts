@@ -19,7 +19,7 @@ import { useLinuxHost } from "#checks/foundation/hygiene/linux-host.ts";
 
 useLinuxHost();
 import { check, finish } from "#checks/kit/harness.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 
 // --- createContext binds `ctx` into the AppDefinition-level hook, the same way it already
 // binds applicationSecrets --------------------------------------------------------------

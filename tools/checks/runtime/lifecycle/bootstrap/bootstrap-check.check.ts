@@ -19,7 +19,7 @@ import { withOutputSink } from "#framework/core/io/output.ts";
 import { spawnLocal, TransportUnreachableError } from "#framework/runtime/transport/transport.ts";
 import type { Context } from "#framework/core/context.ts";
 import { check, finish, requires } from "#checks/kit/harness.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 import { openclawCommands } from "#framework/commands/interface/index.ts";
 
 // --- pure parsers: fed a canned ExecResult, nothing else -------------------------------------

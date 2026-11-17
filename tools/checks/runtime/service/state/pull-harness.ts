@@ -7,7 +7,7 @@ import { parseSnapshotArchive } from "#framework/service/archive/index.ts";
 import { deploymentName } from "#framework/runtime/deployment.ts";
 import type { Context } from "#framework/core/context.ts";
 import type { ExecResult } from "#framework/runtime/transport/transport.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 
 export type PullFailure = "template" | "secrets" | "verify" | "archive" | "archive-after-move" | "archive-lost-ack" | "template-lost-ack" | "private-path" | "collision" | "dangling" | "missing-secrets" | "private-neighbor";
 export function pullScenario(failure?: PullFailure): { ctx: Context; files: Map<string, string>; events: string[]; lock: () => boolean } {

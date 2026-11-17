@@ -19,7 +19,7 @@ import {
 import { DATA_DIR_MARKER } from "#framework/runtime/files/datadir.ts";
 import type { Context } from "#framework/core/context.ts";
 import { check, finish } from "#checks/kit/harness.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 
 function fatalCount(entries: string[], links: Map<string, ArchiveLink>): number {
   return inspectArchive(entries, links).filter((problem) => problem.fatal).length;

@@ -10,7 +10,7 @@ import { formatBatchStub } from "#framework/service/openclaw-cli.ts";
 import { fromContainerPath } from "#framework/core/paths.ts";
 import { mountPoints } from "#framework/runtime/mounts.ts";
 import type { ExecOptions, ExecResult, Transport } from "#framework/runtime/transport/transport.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 
 /** The live config as the fixture's stub presents it, so the plan is quiet except for the
  *  finding each scenario is about. */

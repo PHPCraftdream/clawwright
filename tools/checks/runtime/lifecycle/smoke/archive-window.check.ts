@@ -16,7 +16,7 @@ import { useDeployment, deploymentDir } from "#framework/runtime/deployment.ts";
 import { withOutputSink } from "#framework/core/io/output.ts";
 import { dataDirName } from "#framework/service/archive/index.ts";
 import { check, finish } from "#checks/kit/harness.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 
 const REJECTS_SECRETS_CHECK = "verifier rejects an archive with secrets";
 const ACCEPTS_SHARE_CHECK = "verifier accepts a share snapshot";

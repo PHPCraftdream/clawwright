@@ -21,7 +21,7 @@ import { useDeployment, useComposeProjectOverride } from "#framework/runtime/dep
 import { clearRecipesDir, useRecipesDir } from "#framework/service/recipe.ts";
 import type { Context } from "#framework/core/context.ts";
 import { check, finish } from "#checks/kit/harness.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 
 useDeployment(resolve(monorepoRoot, "apps", "example app"));
 useComposeProjectOverride("example-app");

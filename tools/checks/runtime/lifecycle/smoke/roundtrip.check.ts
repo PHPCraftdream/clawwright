@@ -15,7 +15,7 @@ import { recordPrivateWrite } from "#framework/security/privacy/private-paths-le
 import { installedRecipePrivatePaths } from "#framework/service/recipe.ts";
 import { createHash } from "node:crypto";
 import { check, finish } from "#checks/kit/harness.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 
 // --- full backup restored into an isolated root, preserving live state -----------------------
 // The modeled tar snapshots files at archive time and replays those bytes at extraction.

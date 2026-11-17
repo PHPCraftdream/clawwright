@@ -54,6 +54,9 @@ func check(root string) (report, error) {
 	for path, blob := range approvedTask258(legacy, task258CurrentReceipts()) {
 		approved[path] = blob
 	}
+	for path, blob := range approvedTask431(legacy) {
+		approved[path] = blob
+	}
 	for path, blob := range approvedLicenseCallers(legacy) {
 		approved[path] = blob
 	}
@@ -89,7 +92,7 @@ const rustRunnerBlock = `        for source, output in (("task245-domain-init/ma
 
 func approvedLicenseCallers(legacy map[string]inventory) map[string]string {
 	transitions := map[string]struct{ old, next string }{
-		"tools/checks/ci/ci-tiers.check.ts": {"dc8d01cc5ad57f2bd4bede88f2a18a2d6a6a325c", "1c339eac001b4d0cd5ccd86dba521c137ea43b2b"},
+		"tools/checks/ci/ci-tiers.check.ts":   {"dc8d01cc5ad57f2bd4bede88f2a18a2d6a6a325c", "1c339eac001b4d0cd5ccd86dba521c137ea43b2b"},
 		"tools/checks/kit/selection/rules.ts": {"e24d463345f84ce455cded12efab52118aae0373", "e8549159c7e4f9e6bd29789c8a80839fd3bd12ec"},
 	}
 	approved := make(map[string]string)

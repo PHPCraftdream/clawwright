@@ -21,7 +21,7 @@ import { check, finish } from "#checks/kit/harness.ts";
 import { DockerRuntime } from "#framework/runtime/docker/runtime-docker.ts";
 import { toSettings, parseEnv } from "#framework/core/env.ts";
 import type { Transport, ExecOptions } from "#framework/runtime/transport/transport.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 import { DATA_DIR, SHARED_TAG, TARGET_DIGEST, PREVIOUS_DIGEST, PINNED_WITH_TAG, PINNED_NO_TAG, makeUpgradeCtx } from "./stub.ts";
 import { pinAdviceLine } from "#framework/commands/lifecycle/instance/upgrade.ts";
 import { withToolRunner, type ToolRunner } from "#framework/security/privacy/private-file.ts";

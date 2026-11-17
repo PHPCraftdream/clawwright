@@ -38,7 +38,7 @@ import type { Settings } from "#framework/core/env.ts";
 import type { PathBridge } from "#framework/core/paths.ts";
 import type { Stage } from "#framework/core/command/execute.ts";
 import { check, checkTrue, finish, requires } from "#checks/kit/harness.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 
 useDeployment(resolve(monorepoRoot, "apps", "example app"));
 

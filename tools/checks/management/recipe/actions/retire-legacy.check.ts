@@ -13,9 +13,8 @@ import { buildStack } from "#framework/runtime/docker/side-stack/index.ts";
 import { storageHelperScript } from "#framework/runtime/docker/side-stack/storage.ts";
 import type { Stack } from "#framework/runtime/runtime.ts";
 import type { Transport } from "#framework/runtime/transport/transport.ts";
-import { createDeploymentFixture, TRANSPORT_SENTINEL } from "#checks/kit/deployment-fixture.ts";
+import { createDeploymentFixture, TRANSPORT_SENTINEL, asDirectTest } from "#checks/kit/deployment-fixture.ts";
 import { check, checkTrue, finish } from "#checks/kit/harness.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
 import { useLinuxHost } from "#checks/foundation/hygiene/linux-host.ts";
 
 useLinuxHost();

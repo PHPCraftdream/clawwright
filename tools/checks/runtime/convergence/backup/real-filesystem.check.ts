@@ -18,7 +18,7 @@ import { shellQuote } from "#framework/core/io/shell.ts";
 import { DATA_DIR_MARKER, ensureDataDirs } from "#framework/runtime/files/datadir.ts";
 import { parseWslDistroListing } from "#framework/commands/interface/host/contexts.ts";
 import { check, finish, requires } from "#checks/kit/harness.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 useDeployment(resolve(monorepoRoot, "apps", "example app"));
 useComposeProjectOverride("example-app");
 // --- a symlinked data root, end to end on a real filesystem. -----------------------------------

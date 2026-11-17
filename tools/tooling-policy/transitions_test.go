@@ -135,15 +135,15 @@ func TestControlRunnerRejectsTamperingAndNearMisses(t *testing.T) {
 
 func TestTask258TransitionsRequireExactPathBaselineAndReceipt(t *testing.T) {
 	const (
-		buildPath = "tools/checks/foundation/packaging/build-output.check.ts"
-		clientPath = "tools/checks/runtime/transport/remote/ssjack-client.check.ts"
-		buildOld = "1c5015bc4c6afac4744138357cffbf72376faafc"
-		clientOld = "3682aaf124ecf03f97e57c128711682c37bb5734"
-		buildCurrent = "fixture-build-output-current"
+		buildPath     = "tools/checks/foundation/packaging/build-output.check.ts"
+		clientPath    = "tools/checks/runtime/transport/remote/ssjack-client.check.ts"
+		buildOld      = "1c5015bc4c6afac4744138357cffbf72376faafc"
+		clientOld     = "3682aaf124ecf03f97e57c128711682c37bb5734"
+		buildCurrent  = "fixture-build-output-current"
 		clientCurrent = "fixture-ssjack-client-current"
 	)
 	legacy := map[string]inventory{
-		buildPath: {mode: "100644", blob: buildOld},
+		buildPath:  {mode: "100644", blob: buildOld},
 		clientPath: {mode: "100644", blob: clientOld},
 		"tools/checks/foundation/core/command/needs.check.ts": {mode: "100644", blob: "58bb72512f77f0162b44b71fa72fb4898ad1d05b"},
 	}
@@ -218,11 +218,11 @@ func TestTask258CurrentReceiptsMatchReviewedSource(t *testing.T) {
 	baselines := task258BaselineReceipts()
 	receipts := task258CurrentReceipts()
 	const (
-		buildPath = "tools/checks/foundation/packaging/build-output.check.ts"
-		clientPath = "tools/checks/runtime/transport/remote/ssjack-client.check.ts"
-		needsPath = "tools/checks/foundation/core/command/needs.check.ts"
+		buildPath       = "tools/checks/foundation/packaging/build-output.check.ts"
+		clientPath      = "tools/checks/runtime/transport/remote/ssjack-client.check.ts"
+		needsPath       = "tools/checks/foundation/core/command/needs.check.ts"
 		flagsMatrixPath = "tools/checks/completeness/flags-matrix.check.ts"
-		effectPath = "tools/checks/foundation/core/command/spec/effect.check.ts"
+		effectPath      = "tools/checks/foundation/core/command/spec/effect.check.ts"
 	)
 	expectedPaths := map[string]bool{buildPath: true, clientPath: true, needsPath: true, flagsMatrixPath: true, effectPath: true}
 	if len(baselines) != len(expectedPaths) || len(receipts) != len(expectedPaths) {
@@ -355,6 +355,73 @@ func TestTask251TransitionsAreExactAndPathBound(t *testing.T) {
 	}
 	if approvedRustFallback("tools/native/task251/extra.rs") {
 		t.Error("task251 Rust path unexpectedly approved")
+	}
+}
+
+func TestTask431TransitionsAreExactAndPathBound(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	transitions := task431Transitions()
+	if len(transitions) != 27 {
+		t.Fatalf("expected 27 reviewed transitions, got %d", len(transitions))
+	}
+	for path := range transitions {
+		if _, dup := task251Transitions()[path]; dup {
+			t.Errorf("%s is already a task251 transition", path)
+		}
+		if _, dup := task258BaselineReceipts()[path]; dup {
+			t.Errorf("%s is already a task258 receipt", path)
+		}
+	}
+	legacy := make(map[string]inventory, len(transitions))
+	current := make(map[string]inventory, len(transitions))
+	for path, pair := range transitions {
+		if len(pair.baseline) != 40 || !isLowerHex(pair.baseline) || len(pair.current) != 40 || !isLowerHex(pair.current) {
+			t.Errorf("%s transition blobs must be 40 lowercase hex characters: %q -> %q", path, pair.baseline, pair.current)
+			continue
+		}
+		baselineBytes, err := git(root, "show", baseline+":"+path)
+		if err != nil {
+			t.Fatalf("read immutable baseline %s: %v", path, err)
+		}
+		if got := gitBlobID(baselineBytes); got != pair.baseline {
+			t.Errorf("%s baseline blob=%s, configured=%s", path, got, pair.baseline)
+		}
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil {
+			t.Fatalf("read current %s: %v", path, err)
+		}
+		if got := gitBlobID(data); got != pair.current {
+			t.Errorf("%s current blob=%s, configured=%s", path, got, pair.current)
+		}
+		legacy[path] = inventory{mode: "100644", blob: pair.baseline}
+		current[path] = inventory{mode: "100644", blob: pair.current}
+	}
+	approved := approvedTask431(legacy)
+	if len(approved) != len(transitions) {
+		t.Fatalf("approved %d of %d exact transitions", len(approved), len(transitions))
+	}
+	check := func(name string, candidate, old map[string]inventory, allow map[string]string, wantViolation bool) {
+		t.Helper()
+		got := evaluateWithTransitions(candidate, old, func(inventory) (int, error) { return 1, nil }, allow)
+		if violated := len(got.Violations) != 0; violated != wantViolation {
+			t.Errorf("%s: violations=%v, want violation=%t", name, got.Violations, wantViolation)
+		}
+	}
+	check("all exact transitions", current, legacy, approved, false)
+	for path, item := range current {
+		tampered := map[string]inventory{path: {mode: "100644", blob: gitBlobID([]byte(item.blob + "\ntampered"))}}
+		check(path+": tampered current blob", tampered, legacy, approved, true)
+		check(path+": sibling path with the approved blob", map[string]inventory{path + ".copy.ts": item}, legacy, approved, true)
+		wrongBaseline := map[string]inventory{path: {mode: "100644", blob: strings.Repeat("0", 40)}}
+		check(path+": wrong baseline", map[string]inventory{path: item}, wrongBaseline, approvedTask431(wrongBaseline), true)
+	}
+	for path := range current {
+		other := map[string]inventory{"tools/checks/adjacent-unapproved.ts": current[path]}
+		check("neighbor path with an approved blob", other, legacy, approved, true)
+		break
 	}
 }
 

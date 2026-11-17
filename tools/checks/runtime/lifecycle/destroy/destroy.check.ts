@@ -17,7 +17,7 @@ import { stubContext, refused } from "#checks/runtime/convergence/instance-lock/
 import type { Context } from "#framework/core/context.ts";
 import type { ExecOptions, ExecResult } from "#framework/runtime/transport/transport.ts";
 import { check, checkTrue, finish, requires } from "#checks/kit/harness.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 import { SAFE_DESTROY_SCRIPT, NEVER_BOOTSTRAPPED, WOULD_REMOVE, DRY_RUN_NOTHING_TO_REMOVE, DRY_RUN_REAL_RUN_HINT, DESTROY_ARGUMENTS } from "#framework/commands/lifecycle/instance/destroy.ts";
 import { SUDO_PASSWORD_REFUSAL } from "#framework/runtime/files/datadir.ts";
 import { commandLine } from "#framework/core/io/invocation/render.ts";

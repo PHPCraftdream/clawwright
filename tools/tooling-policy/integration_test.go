@@ -186,7 +186,6 @@ func TestPublicCLIMissingBaselineAndUnreadableBlob(t *testing.T) {
 	}
 }
 
-
 type cliResult struct {
 	stdout   string
 	stderr   string

@@ -12,7 +12,7 @@ import type { ExecResult } from "#framework/runtime/transport/transport.ts";
 import { pullScenario, type PullFailure } from "./pull-harness.ts";
 import { modelMutationGuard } from "./mutation-guard.ts";
 import { check, finish } from "#checks/kit/harness.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 import { selectSnapshotPaths } from "#framework/commands/lifecycle/state.ts";
 import { openclawCommands } from "#framework/commands/interface/index.ts";
 

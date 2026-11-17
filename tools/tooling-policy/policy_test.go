@@ -9,17 +9,19 @@ import (
 	"testing"
 )
 
-
 func TestApprovedLicenseCallersFiniteBlobTransitions(t *testing.T) {
 	const (
-		ciPath = "tools/checks/ci/ci-tiers.check.ts"
+		ciPath    = "tools/checks/ci/ci-tiers.check.ts"
 		rulesPath = "tools/checks/kit/selection/rules.ts"
-		ciOld = "dc8d01cc5ad57f2bd4bede88f2a18a2d6a6a325c"
-		ciNew = "1c339eac001b4d0cd5ccd86dba521c137ea43b2b"
-		rulesOld = "e24d463345f84ce455cded12efab52118aae0373"
-		rulesNew = "e8549159c7e4f9e6bd29789c8a80839fd3bd12ec"
+		ciOld     = "dc8d01cc5ad57f2bd4bede88f2a18a2d6a6a325c"
+		ciNew     = "1c339eac001b4d0cd5ccd86dba521c137ea43b2b"
+		rulesOld  = "e24d463345f84ce455cded12efab52118aae0373"
+		rulesNew  = "e8549159c7e4f9e6bd29789c8a80839fd3bd12ec"
 	)
-	for _, tc := range []struct { name, path, old, current string; allowed bool }{
+	for _, tc := range []struct {
+		name, path, old, current string
+		allowed                  bool
+	}{
 		{"exact2 approved", ciPath, ciOld, ciNew, true},
 		{"unrelated blob refused", ciPath, ciOld, "unrelated", false},
 		{"wrongpath refused", "tools/checks/elsewhere.ts", ciOld, ciNew, false},
@@ -33,11 +35,15 @@ func TestApprovedLicenseCallersFiniteBlobTransitions(t *testing.T) {
 			approved := approvedLicenseCallers(legacy)
 			if tc.current == tc.old || tc.path == "tools/example.go" {
 				got := evaluate(map[string]inventory{tc.path: {mode: "100644", blob: tc.current}}, legacy, func(inventory) (int, error) { return 1, nil })
-				if len(got.Violations) != 0 { t.Fatalf("baseline/Go blob refused: %+v", got) }
+				if len(got.Violations) != 0 {
+					t.Fatalf("baseline/Go blob refused: %+v", got)
+				}
 				return
 			}
 			got := evaluateWithTransitions(map[string]inventory{tc.path: {mode: "100644", blob: tc.current}}, legacy, func(inventory) (int, error) { return 1, nil }, approved)
-			if accepted := len(got.Violations) == 0; accepted != tc.allowed { t.Fatalf("accepted=%v want %v: %+v", accepted, tc.allowed, got) }
+			if accepted := len(got.Violations) == 0; accepted != tc.allowed {
+				t.Fatalf("accepted=%v want %v: %+v", accepted, tc.allowed, got)
+			}
 		})
 	}
 }
@@ -49,11 +55,17 @@ func TestApprovedLicenseCallerReceiptsMatchGitBlobs(t *testing.T) {
 		{"tools/checks/kit/selection/rules.ts", "e24d463345f84ce455cded12efab52118aae0373", "e8549159c7e4f9e6bd29789c8a80839fd3bd12ec"},
 	} {
 		old, err := git(root, "show", baseline+":"+tc.path)
-		if err != nil || gitBlobID(old) != tc.old { t.Fatalf("baseline receipt %s: blob=%s err=%v", tc.path, gitBlobID(old), err) }
+		if err != nil || gitBlobID(old) != tc.old {
+			t.Fatalf("baseline receipt %s: blob=%s err=%v", tc.path, gitBlobID(old), err)
+		}
 		current, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(tc.path)))
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		current = bytes.ReplaceAll(current, []byte("\r\n"), []byte("\n"))
-		if got := gitBlobID(current); got != tc.next { t.Fatalf("current receipt %s: blob=%s want=%s", tc.path, got, tc.next) }
+		if got := gitBlobID(current); got != tc.next {
+			t.Fatalf("current receipt %s: blob=%s want=%s", tc.path, got, tc.next)
+		}
 	}
 }
 
@@ -119,18 +131,18 @@ func TestTask250GoMigrationKeepsImmutableLanguageBoundary(t *testing.T) {
 
 func TestClassification(t *testing.T) {
 	cases := map[string]string{
-		"tools/a.ts": "implementation",
-		"tools/a.sh": "implementation",
-		"tools/a.ps1": "implementation",
-		"tools/a.c": "implementation",
-		"tools/a.h": "implementation",
-		"tools/a.py": "implementation",
-		"tools/a.rs": "implementation",
-		"tools/go.mod": "metadata",
+		"tools/a.ts":         "implementation",
+		"tools/a.sh":         "implementation",
+		"tools/a.ps1":        "implementation",
+		"tools/a.c":          "implementation",
+		"tools/a.h":          "implementation",
+		"tools/a.py":         "implementation",
+		"tools/a.rs":         "implementation",
+		"tools/go.mod":       "metadata",
 		"tools/.env.example": "metadata",
-		"tools/LICENSE": "metadata",
-		"tools/a.json": "data",
-		"tools/a.bin": "unknown",
+		"tools/LICENSE":      "metadata",
+		"tools/a.json":       "data",
+		"tools/a.bin":        "unknown",
 	}
 	for name, want := range cases {
 		if got := classify(name); got != want {
@@ -159,7 +171,7 @@ func TestLineCountingPhysicalLines(t *testing.T) {
 
 func TestLineCeilingSeparatesReportFromViolations(t *testing.T) {
 	cases := []struct {
-		count        int
+		count         int
 		wantViolation bool
 		wantDebt      bool
 	}{
@@ -184,11 +196,11 @@ func TestLineCeilingSeparatesReportFromViolations(t *testing.T) {
 
 func TestImmediateDirectoryEntriesCompareCurrentAndLegacy(t *testing.T) {
 	cases := []struct {
-		name string
-		count int
-		legacyCount int
+		name          string
+		count         int
+		legacyCount   int
 		wantViolation bool
-		wantDebt bool
+		wantDebt      bool
 	}{
 		{"at limit", 7, 0, false, false},
 		{"new over limit", 8, 0, true, false},
@@ -228,16 +240,16 @@ func directoryFixture(count int) map[string]inventory {
 
 func TestBaselineRatchets(t *testing.T) {
 	baseline := map[string]inventory{
-		"tools/large.py": {mode: "100644", blob: "large"},
+		"tools/large.py":     {mode: "100644", blob: "large"},
 		"tools/unchanged.ts": {mode: "100644", blob: "same"},
 	}
 	cases := []struct {
-		name string
-		path string
-		blob string
-		count int
+		name          string
+		path          string
+		blob          string
+		count         int
 		wantViolation bool
-		wantDebt bool
+		wantDebt      bool
 	}{
 		{"Go at ceiling", "tools/new.go", "new", 700, false, false},
 		{"new Go over ceiling", "tools/new.go", "new", 701, true, false},
@@ -272,8 +284,8 @@ func TestBaselineRatchets(t *testing.T) {
 func TestGoBaselineCeilingRatchet(t *testing.T) {
 	legacy := map[string]inventory{"tools/large.go": {mode: "100644", blob: "old"}}
 	cases := []struct {
-		name string
-		count int
+		name                    string
+		count                   int
 		wantViolation, wantDebt bool
 	}{
 		{"unchanged 800", 800, false, true},
@@ -338,21 +350,25 @@ func TestNestedDirectoryFilesCountTowardParentLimit(t *testing.T) {
 func TestApprovedRustFallbackPathsAreExact(t *testing.T) {
 	allowed := []string{"tools/native/task240-launch-stub/main.rs", "tools/native/task240-launch-stub/linux.rs", "tools/native/task240-launch-stub/packet.rs", "tools/native/task245-domain-init/main.rs", "tools/native/task245-control-profile/installer/main.rs", "tools/native/task245-control-profile/installer/linux.rs", "tools/native/task245-control-profile/installer/filters.rs", "tools/native/task245-control-profile/installer/main.rs", "tools/native/task245-control-profile/installer/linux.rs", "tools/native/task245-control-profile/installer/filters.rs"}
 	for _, name := range allowed {
-		if !approvedRustFallback(name) { t.Errorf("approved path rejected: %s", name) }
+		if !approvedRustFallback(name) {
+			t.Errorf("approved path rejected: %s", name)
+		}
 	}
 	for _, name := range []string{"tools/native/task246-domain-init/main.rs", "tools/native/task240-launch-stub/extra.rs", "tools/other.rs"} {
-		if approvedRustFallback(name) { t.Errorf("unapproved path accepted: %s", name) }
+		if approvedRustFallback(name) {
+			t.Errorf("unapproved path accepted: %s", name)
+		}
 	}
 }
 
 func TestEvaluatorRejectsNewNonGoAndSymlinkSubmodule(t *testing.T) {
 	legacy := map[string]inventory{"tools/existing.sh": {mode: "100644", blob: "same"}}
 	current := map[string]inventory{
-		"tools/new.sh": {mode: "100644", blob: "new"},
-		"tools/new.py": {mode: "100644", blob: "new"},
-		"tools/new.c": {mode: "100644", blob: "new"},
-		"tools/new.rs": {mode: "100644", blob: "new"},
-		"tools/link.go": {mode: "120000", blob: "link"},
+		"tools/new.sh":    {mode: "100644", blob: "new"},
+		"tools/new.py":    {mode: "100644", blob: "new"},
+		"tools/new.c":     {mode: "100644", blob: "new"},
+		"tools/new.rs":    {mode: "100644", blob: "new"},
+		"tools/link.go":   {mode: "120000", blob: "link"},
 		"tools/submodule": {mode: "160000", blob: "commit"},
 	}
 	got := evaluate(current, legacy, func(inventory) (int, error) { return 1, nil })
@@ -388,9 +404,9 @@ func TestGitRecordParsing(t *testing.T) {
 		t.Fatalf("valid tree parse: items=%v err=%v", tree, err)
 	}
 	badCases := []struct {
-		name string
-		raw []byte
-		tree bool
+		name     string
+		raw      []byte
+		tree     bool
 		category string
 	}{
 		{"malformed", []byte("100644 blob\x00"), true, "malformed Git record"},
@@ -428,27 +444,41 @@ func TestUnreadableBlobIsViolation(t *testing.T) {
 func TestApprovedRustFallbackFinitePathsAndLineCeiling(t *testing.T) {
 	allowed := []string{"tools/native/task240-launch-stub/main.rs", "tools/native/task240-launch-stub/linux.rs", "tools/native/task240-launch-stub/packet.rs", "tools/native/task245-domain-init/main.rs", "tools/native/task245-control-profile/installer/main.rs", "tools/native/task245-control-profile/installer/linux.rs", "tools/native/task245-control-profile/installer/filters.rs", "tools/native/task245-control-profile/installer/main.rs", "tools/native/task245-control-profile/installer/linux.rs", "tools/native/task245-control-profile/installer/filters.rs"}
 	for _, path := range allowed {
-		if !approvedRustFallback(path) { t.Errorf("approved path rejected: %s", path) }
+		if !approvedRustFallback(path) {
+			t.Errorf("approved path rejected: %s", path)
+		}
 		result := evaluateWithTransitions(map[string]inventory{path: {mode: "100644", blob: "new"}}, nil, func(inventory) (int, error) { return 1, nil }, nil)
-		if len(result.Violations) != 0 { t.Errorf("approved path %s violated: %v", path, result.Violations) }
+		if len(result.Violations) != 0 {
+			t.Errorf("approved path %s violated: %v", path, result.Violations)
+		}
 	}
 	for _, path := range []string{"tools/native/task240-launch-stub/sibling.rs", "tools/native/task240-launch-stub/new.rs", "tools/native/task240-launch-stub/wrapper.c"} {
 		result := evaluateWithTransitions(map[string]inventory{path: {mode: "100644", blob: "new"}}, nil, func(inventory) (int, error) { return 1, nil }, nil)
-		if len(result.Violations) == 0 { t.Errorf("unapproved path accepted: %s", path) }
+		if len(result.Violations) == 0 {
+			t.Errorf("unapproved path accepted: %s", path)
+		}
 	}
 	result := evaluateWithTransitions(map[string]inventory{allowed[0]: {mode: "100644", blob: "new"}}, nil, func(inventory) (int, error) { return 701, nil }, nil)
-	if len(result.Violations) == 0 || !strings.Contains(strings.Join(result.Violations, " "), "exceeds 700") { t.Fatalf("line ceiling not enforced: %+v", result) }
+	if len(result.Violations) == 0 || !strings.Contains(strings.Join(result.Violations, " "), "exceeds 700") {
+		t.Fatalf("line ceiling not enforced: %+v", result)
+	}
 }
 
 func TestApprovedRunnerExactTransformAndAdmission(t *testing.T) {
 	before := []byte("prefix\n" + oldRunnerAnchor + "\nsuffix")
 	want := []byte("prefix\n" + rustRunnerBlock + "\nsuffix")
 	got, err := approvedLaunchRunner(before)
-	if err != nil || !bytes.Equal(got, want) { t.Fatalf("transform=%q err=%v, want %q", got, err, want) }
-	for _, input := range [][]byte{[]byte("missing anchor"), []byte(oldRunnerAnchor + oldRunnerAnchor)} {
-		if _, err := approvedLaunchRunner(input); err == nil { t.Fatalf("accepted invalid anchor input %q", input) }
+	if err != nil || !bytes.Equal(got, want) {
+		t.Fatalf("transform=%q err=%v, want %q", got, err, want)
 	}
-	if got := gitBlobID(nil); got != "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391" { t.Fatalf("empty blob ID=%s", got) }
+	for _, input := range [][]byte{[]byte("missing anchor"), []byte(oldRunnerAnchor + oldRunnerAnchor)} {
+		if _, err := approvedLaunchRunner(input); err == nil {
+			t.Fatalf("accepted invalid anchor input %q", input)
+		}
+	}
+	if got := gitBlobID(nil); got != "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391" {
+		t.Fatalf("empty blob ID=%s", got)
+	}
 
 	const runnerPath = "tools/native/task245-acceptance/run.py"
 	oldBlob, approvedBlob := "baseline-runner", gitBlobID(want)
@@ -461,10 +491,18 @@ func TestApprovedRunnerExactTransformAndAdmission(t *testing.T) {
 			return lines, nil
 		}, map[string]string{runnerPath: approvedBlob})
 	}
-	if result := check(runnerPath, approvedBlob, 10); len(result.Violations) != 0 { t.Fatalf("exact runner transform rejected: %+v", result) }
-	if result := check(runnerPath, oldBlob, 10); len(result.Violations) != 0 { t.Fatalf("unchanged baseline runner rejected: %+v", result) }
-	for _, tc := range []struct{ path, blob string }{{runnerPath, "arbitrary-blob"}, {"tools/native/task245-acceptance/sibling.py", approvedBlob}} {
-		if result := check(tc.path, tc.blob, 10); len(result.Violations) == 0 { t.Errorf("admitted path=%s blob=%s: %+v", tc.path, tc.blob, result) }
+	if result := check(runnerPath, approvedBlob, 10); len(result.Violations) != 0 {
+		t.Fatalf("exact runner transform rejected: %+v", result)
 	}
-	if result := check(runnerPath, approvedBlob, 701); len(result.Violations) == 0 || !strings.Contains(strings.Join(result.Violations, " "), "exceeds 700") { t.Fatalf("runner line ceiling not enforced: %+v", result) }
+	if result := check(runnerPath, oldBlob, 10); len(result.Violations) != 0 {
+		t.Fatalf("unchanged baseline runner rejected: %+v", result)
+	}
+	for _, tc := range []struct{ path, blob string }{{runnerPath, "arbitrary-blob"}, {"tools/native/task245-acceptance/sibling.py", approvedBlob}} {
+		if result := check(tc.path, tc.blob, 10); len(result.Violations) == 0 {
+			t.Errorf("admitted path=%s blob=%s: %+v", tc.path, tc.blob, result)
+		}
+	}
+	if result := check(runnerPath, approvedBlob, 701); len(result.Violations) == 0 || !strings.Contains(strings.Join(result.Violations, " "), "exceeds 700") {
+		t.Fatalf("runner line ceiling not enforced: %+v", result)
+	}
 }

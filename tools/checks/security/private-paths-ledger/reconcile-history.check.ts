@@ -55,7 +55,7 @@ import {
   recordPrivateWrite,
 } from "#framework/security/privacy/private-paths-ledger.ts";
 import { check, checkTrue, finish, requires } from "#checks/kit/harness.ts";
-import { asDirectTest } from "#checks/runtime/service/restore/file-test-stub.ts";
+import { asDirectTest } from "#checks/kit/deployment-fixture.ts";
 
 function skip(name: string): void {
   process.stderr.write(`  skip ${name}\n`);
