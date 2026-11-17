@@ -11,6 +11,7 @@ import { commandLine } from "#src/core/io/invocation/render.ts";
 import { emit, withOutputSink } from "#src/core/io/output.ts";
 import type { Context } from "#src/core/context.ts";
 import { DATA_SUBDIRS, OWNER, ensureDataDirs, sudoFor, runMaybePrivileged, needsOwnerEscalation, answeredProbe, assertCanonicalAncestry, physicalPath } from "#src/runtime/files/datadir.ts";
+import { elevatedProbeFailure, fileTest } from "#src/runtime/files/file-test.ts";
 import {
   archiveRoot,
   inspectArchive,
@@ -173,13 +174,13 @@ async function presenceOf(ctx: Context, prefix: string[], path: string): Promise
   // The same idiom sudoFor() computes a probe path with: the deepest existing ancestor,
   // so the answer is about the directory actually gating this one.
   const parent = path.slice(0, Math.max(path.lastIndexOf("/"), 1));
-  const [head, ...rest] = [...prefix, "test", "-x", parent];
-  const searchable = await ctx.transport.exec(head, rest, { allowFailure: true });
+  const searchable = await fileTest(ctx, prefix, "-x", parent);
   if (searchable.code !== 0) {
-    die(
+    const refusal =
       `cannot verify ${path}: it answers as absent, but ${parent} cannot be searched with this run's privileges — ` +
-        "restore would act through a path its checks could not see",
-    );
+      "restore would act through a path its checks could not see";
+    if (prefix.length === 0) die(refusal);
+    die((await elevatedProbeFailure(ctx, prefix, "-x", parent, searchable, refusal)).message);
   }
   return false;
 }

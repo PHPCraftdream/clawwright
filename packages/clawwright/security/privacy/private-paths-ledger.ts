@@ -21,6 +21,7 @@ import { access, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { Context } from "../../core/context.ts";
 import { sudoFor } from "../../runtime/files/datadir.ts";
+import { elevatedProbeFailure, fileTest } from "../../runtime/files/file-test.ts";
 import { deploymentDir, selectedDeployment } from "../../runtime/deployment.ts";
 import { renameOverPrivateFile } from "./private-file.ts";
 
@@ -239,9 +240,10 @@ async function readTargetHistoryCopy(ctx: Context, file: string): Promise<{ raw:
   if (readable.code !== 0) {
     if (readable.code !== 1) throw new Error(`could not check read access to ${file}: ${readable.stderr.trim()}`);
     prefix = await sudoFor(ctx, file, { force: true });
-    const [testHead, ...testRest] = [...prefix, "test", "-r", file];
-    const elevated = await ctx.transport.exec(testHead, testRest, { allowFailure: true });
-    if (elevated.code !== 0) throw new Error(`could not read the existing privacy history ${file}, even with elevated access`);
+    const elevated = await fileTest(ctx, prefix, "-r", file);
+    if (elevated.code !== 0) {
+      throw await elevatedProbeFailure(ctx, prefix, "-r", file, elevated, `could not read the existing privacy history ${file}, even with elevated access`);
+    }
   }
   const [head, ...rest] = [...prefix, "cat", file];
   const result = await ctx.transport.exec(head, rest);

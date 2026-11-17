@@ -3,6 +3,7 @@
 
 import type { Context } from "../../core/context.ts";
 import { sudoFor } from "../../runtime/files/datadir.ts";
+import { elevatedProbeFailure, fileTest } from "../../runtime/files/file-test.ts";
 import { publishPrivatePathsHistory, reconcilePrivatePathsHistory } from "../../security/privacy/private-paths-ledger.ts";
 import { installedRecipePrivatePaths } from "../recipe.ts";
 import { excludesFor, type Profile } from "./profile.ts";
@@ -48,16 +49,15 @@ export async function privilegePrefixFor(ctx: Context, readPaths: readonly strin
       throw new Error(`could not check read access to ${path}: ${readable.stderr.trim() || `test exited ${readable.code}`}`);
     }
     const prefix = await sudoFor(ctx, path, { force: true });
-    const [head, ...rest] = [...prefix, "test", "-r", path];
-    const elevated = await ctx.transport.exec(head, rest, { allowFailure: true });
-    if (elevated.code !== 0) throw new Error(`cannot read ${path}, even with elevated access`);
-    const [dirHead, ...dirRest] = [...prefix, "test", "-d", path];
-    const isDirectory = await ctx.transport.exec(dirHead, dirRest, { allowFailure: true });
-    if (isDirectory.code !== 0 && isDirectory.code !== 1) throw new Error(`could not determine whether ${path} is a directory`);
+    const elevated = await fileTest(ctx, prefix, "-r", path);
+    if (elevated.code !== 0) throw await elevatedProbeFailure(ctx, prefix, "-r", path, elevated, `cannot read ${path}, even with elevated access`);
+    const isDirectory = await fileTest(ctx, prefix, "-d", path);
+    if (isDirectory.code !== 0 && isDirectory.code !== 1) {
+      throw await elevatedProbeFailure(ctx, prefix, "-d", path, isDirectory, `could not determine whether ${path} is a directory`);
+    }
     if (isDirectory.code === 0) {
-      const [xHead, ...xRest] = [...prefix, "test", "-x", path];
-      const x = await ctx.transport.exec(xHead, xRest, { allowFailure: true });
-      if (x.code !== 0) throw new Error(`cannot traverse ${path}, even with elevated access`);
+      const x = await fileTest(ctx, prefix, "-x", path);
+      if (x.code !== 0) throw await elevatedProbeFailure(ctx, prefix, "-x", path, x, `cannot traverse ${path}, even with elevated access`);
     }
     return prefix;
   }

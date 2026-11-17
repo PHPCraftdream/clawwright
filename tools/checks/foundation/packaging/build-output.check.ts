@@ -78,6 +78,10 @@ async function verifyHistoricalRelocation(currentDist: string): Promise<void> {
       "runtime/transport/transport",
       "recipe-kit/index",
       "commands/interface/groups/openclawCommands.orchestration",
+      "runtime/files/file-test",
+      "service/archive/pack",
+      "security/privacy/private-paths-ledger",
+      "commands/lifecycle/restore/index",
     ].flatMap((path) => [`${path}.js`, `${path}.d.ts`]));
     const allFiles = [...new Set([...frozenFiles, ...currentFiles])].sort();
     for (const path of allFiles) {

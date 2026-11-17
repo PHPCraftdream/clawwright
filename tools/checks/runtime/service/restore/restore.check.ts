@@ -21,6 +21,7 @@ import { clearRecipesDir, useRecipesDir } from "#framework/service/recipe.ts";
 import { mountPoints } from "#framework/runtime/mounts.ts";
 import { toContainerPath, fromContainerPath } from "#framework/core/paths.ts";
 import { check, finish, requires } from "#checks/kit/harness.ts";
+import { asDirectTest } from "./file-test-stub.ts";
 
 async function rejectionOf(run: () => Promise<unknown>): Promise<string | undefined> {
   try { await run(); } catch (error) { return (error as Error).message; }
@@ -383,8 +384,9 @@ function deniedContext(
         calls.push({ command: rawCommand, args: rawArgs });
         // Recorded exactly as made. Answered through the escalation prefix: the rules
         // below must see the same call whichever run made it.
-        const command = rawCommand === "sudo" && rawArgs[0] === "-n" ? (rawArgs[1] ?? "") : rawCommand;
-        const args = rawCommand === "sudo" && rawArgs[0] === "-n" ? rawArgs.slice(2) : rawArgs;
+        const stripped = rawCommand === "sudo" && rawArgs[0] === "-n" ? { command: rawArgs[1] ?? "", args: rawArgs.slice(2) } : { command: rawCommand, args: rawArgs };
+        // The file-test probes arrive as the shell builtin; the rules below key on `test`.
+        const { command, args } = asDirectTest(stripped.command, stripped.args);
         // Defensively answered rather than trusted to the default: if sudoFor() ever
         // decided escalation was needed in the unprivileged run, these say it may not.
         if (command === "sh" && args.some((arg) => arg.includes("command -v sudo"))) {
@@ -493,15 +495,19 @@ function deniedContext(
     calls.some((call) => call.command === "sudo" && call.args[0] === "-n" && call.args[1] === "tar" && call.args.includes("--numeric-owner")),
     true,
   );
+  const searchScript = ["test", "-x", '"$1"'].join(" ");
   check(
-    "the parent-searchability probe ran privileged too",
+    "the parent-searchability probe ran privileged too, as the shell builtin with the path as $1",
     calls.some(
       (call) =>
         call.command === "sudo" &&
+        call.args.length === 6 &&
         call.args[0] === "-n" &&
-        call.args[1] === "test" &&
-        call.args[2] === "-x" &&
-        call.args[3] === DATA_DIR,
+        call.args[1] === "sh" &&
+        call.args[2] === "-c" &&
+        call.args[3] === searchScript &&
+        call.args[4] === "sh" &&
+        call.args[5] === DATA_DIR,
     ),
     true,
   );
