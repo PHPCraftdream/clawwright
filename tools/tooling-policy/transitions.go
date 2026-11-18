@@ -52,7 +52,7 @@ func task251Transitions() map[string]task251Transition {
 		"tools/checks/golden/durable-frame.check.ts":                                          {"7d46c763bd7df4df7e633320eee291fa29f47185", "70d8abadac3c46947e908f464ad3678cab478a79"},
 		"tools/checks/golden/frames.ts":                                                       {"b3b170b7ea1275af429c9043521206cdedd09ba8", "07bd3a9586f196c78af9d2663f86b52c59025167"},
 		"tools/checks/golden/matrix.ts":                                                       {"f44d94e47f3bcc4fbe564cd379e22bcfc970354f", "4da3658a9401ee5669d066f200d9b416110f2964"},
-		"tools/checks/golden/render.ts":                                                       {"38e26cc1b1e8bd15fce99cc1b54e55be8e3a1076", "563ab412a17939bef11c174910b99612907c07c8"},
+		"tools/checks/golden/render.ts":                                                       {"38e26cc1b1e8bd15fce99cc1b54e55be8e3a1076", "0a8ad8d85e39bd88d3e2c1743492e0e32c0774a5"},
 		"tools/checks/integration/agent/recipe-hook-freshness/hook-framework-import.check.ts": {"9234b22578b82252ac0fc643308e1db60ef3ed42", "d491a677a42682b6654d17bc56316c27117e527a"},
 		"tools/checks/integration/apps/init-messages.check.ts":                                {"921c9a1d9e84e2f84dd051498de31fb0854a21cb", "c3523e9b28e4b2e6b570b9d5ef9cd7ebff74f962"},
 		"tools/checks/integration/apps/invocation-hints-rooted.check.ts":                      {"fcd2c82f432225671365e95b9d98d6691a035642", "110a09d0d8e64e8242d4f58f4f02ac3b7f31b21f"},
@@ -188,6 +188,29 @@ func approvedTask431(legacy map[string]inventory) map[string]string {
 		}
 	}
 	return approved
+}
+
+// layoutMove is a reviewed move of a frozen non-Go file into a subfolder (the code-folder
+// file limit): the baseline blob must match at the old path, and only the exact current
+// blob is admitted at the new one.
+type layoutMove struct{ from, baseline, current string }
+
+func layoutMoves() map[string]layoutMove {
+	return map[string]layoutMove{
+		"tools/dev/maintenance/golden-update.ts": {"tools/dev/golden-update.ts", "63902973cdd39ddaaa81996924bfd06ad8050c91", "63902973cdd39ddaaa81996924bfd06ad8050c91"},
+		"tools/dev/maintenance/related-audit.ts": {"tools/dev/related-audit.ts", "f1f2f7c390769cba8c097373358db30f7e8ffcf5", "8707e914aad1c7445007165bfa475d8cc5edc837"},
+	}
+}
+
+// applyLayoutMoves lets each approved new path inherit its baseline entry and approves the
+// exact current blob.
+func applyLayoutMoves(legacy map[string]inventory, approved map[string]string) {
+	for path, move := range layoutMoves() {
+		if old, ok := legacy[move.from]; ok && old.blob == move.baseline {
+			legacy[path] = old
+			approved[path] = move.current
+		}
+	}
 }
 
 func approvedControlProfile(b []byte) ([]byte, error) {

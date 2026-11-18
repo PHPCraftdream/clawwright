@@ -303,6 +303,12 @@ directory of the same name as the module it happens to import. `packages/clawwri
 no source files of its own directly under it, so the cap does not apply at that root — new
 top-level groupings still need a name that describes what belongs there, not "wherever fits".
 
+Across the whole repository, `tools/tooling-policy` also fails on any code file above 1000 lines and
+any folder holding more than 7 code files directly (subfolders do not count, tests do). Code means
+`.go .ts .mts .cts .tsx .js .mjs .cjs .jsx .py .ps1 .sh .rs .c .h .cc .cpp .hpp`; documentation, data,
+and `node_modules`, `dist`, `vendor`, `golden` and `testdata` directories are not checked. There is no
+baseline: split by meaning into subfolders instead.
+
 A command a message, an error or a `details` text tells the user to run goes through the advice model and its one
 renderer (`packages/clawwright/core/io/invocation/` — `command`/`shellLine`/`manual` as data, `renderAdvice`/`commandLine`
 as text); a hand-written program spelling freezes one invocation into every other one. A line for another shell, host

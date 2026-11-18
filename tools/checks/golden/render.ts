@@ -2,7 +2,7 @@
 //
 // Renders every surface into memory as deterministic text; golden.check.ts compares the
 // result with the committed files under expected/ (not snapshots/: .gitignore keeps every
-// snapshots/ out, for instance state), and tools/dev/golden-update.ts writes them. The check
+// snapshots/ out, for instance state), and tools/dev/maintenance/golden-update.ts writes them. The check
 // never writes. Any later step that moves a hint, a description or a tool
 // list must show up as a reviewed diff of these files.
 //

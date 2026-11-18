@@ -2,7 +2,7 @@
 // through the CURRENT selection logic — graph, rules, always tier — without running any
 // check suite. The point is hindsight: does today's selection logic catch what yesterday's
 // commits actually touched? Read-only git throughout; the import graph is built once and
-// reused across all commits. Run via `node --experimental-strip-types tools/dev/related-audit.ts [N]`,
+// reused across all commits. Run via `node --experimental-strip-types tools/dev/maintenance/related-audit.ts [N]`,
 // or `... --accept` for the retrospective acceptance assertions only.
 
 import { runProcess } from "#checks/kit/spawn.ts";
@@ -238,7 +238,7 @@ if (args.includes("--accept")) {
   const countArg = args.find((arg) => /^\d+$/.test(arg));
   const count = countArg === undefined ? 25 : Number(countArg);
   if (!Number.isInteger(count) || count < 1) {
-    process.stderr.write("usage: node --experimental-strip-types tools/dev/related-audit.ts [N | --accept]\n");
+    process.stderr.write("usage: node --experimental-strip-types tools/dev/maintenance/related-audit.ts [N | --accept]\n");
     process.exitCode = 1;
   } else {
     await audit(count);

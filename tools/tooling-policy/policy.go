@@ -80,7 +80,71 @@ func check(root string) (report, error) {
 			approved[profilePath] = gitBlobID(transformed)
 		}
 	}
-	return evaluateWithTransitions(current, legacy, reader, approved), nil
+	applyLayoutMoves(legacy, approved)
+	result := evaluateWithTransitions(current, legacy, reader, approved)
+	all, err := trackedAll(root)
+	if err != nil {
+		return report{}, fmt.Errorf("repository inventory: %w", err)
+	}
+	result.Violations = append(result.Violations, layoutViolations(all, reader)...)
+	sort.Strings(result.Violations)
+	return result, nil
+}
+
+const (
+	maxCodeLines = 1000
+	maxCodeFiles = 7
+)
+
+var layoutCodeExt = map[string]bool{".go": true, ".ts": true, ".mts": true, ".cts": true, ".tsx": true, ".js": true, ".mjs": true, ".cjs": true, ".jsx": true, ".py": true, ".ps1": true, ".sh": true, ".rs": true, ".c": true, ".h": true, ".cc": true, ".cpp": true, ".hpp": true}
+
+var layoutSkipDir = map[string]bool{"node_modules": true, "dist": true, "vendor": true, "golden": true, "testdata": true}
+
+// layoutCode reports whether a tracked path is checked code: a code extension outside generated or fixture directories.
+func layoutCode(name string) bool {
+	parts := strings.Split(name, "/")
+	for _, dir := range parts[:len(parts)-1] {
+		if layoutSkipDir[dir] {
+			return false
+		}
+	}
+	return layoutCodeExt[strings.ToLower(pathExt(name))]
+}
+
+// layoutViolations enforces, repository-wide and without a baseline: at most maxCodeLines
+// physical lines per code file and maxCodeFiles code files directly in a folder
+// (subfolders do not count, tests do).
+func layoutViolations(all map[string]inventory, lines func(inventory) (int, error)) []string {
+	out := make([]string, 0)
+	perDir := make(map[string]int)
+	for _, name := range sortedKeys(all) {
+		item := all[name]
+		if item.mode == "120000" || item.mode == "160000" || !layoutCode(name) {
+			continue
+		}
+		dir, _ := splitPath(name)
+		perDir[dir]++
+		count, err := lines(item)
+		if err != nil {
+			out = append(out, name+": unreadable blob: "+err.Error())
+		} else if count > maxCodeLines {
+			out = append(out, fmt.Sprintf("%s: %d lines exceeds %d (code file)", name, count, maxCodeLines))
+		}
+	}
+	for _, dir := range sortedKeys(perDir) {
+		if perDir[dir] > maxCodeFiles {
+			out = append(out, fmt.Sprintf("%s: %d code files exceeds %d", dir, perDir[dir], maxCodeFiles))
+		}
+	}
+	return out
+}
+
+func trackedAll(root string) (map[string]inventory, error) {
+	data, err := git(root, "ls-files", "--full-name", "--stage", "-z")
+	if err != nil {
+		return nil, err
+	}
+	return parseRecords(data, false)
 }
 
 const oldRunnerAnchor = `        for source, output in (("task245-domain-init/init.c","native-init"),("task240-launch-stub/stub.c","native-stub"),("task245-control-profile/control-profile.c","control-profile"),`

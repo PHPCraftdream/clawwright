@@ -506,3 +506,159 @@ func TestApprovedRunnerExactTransformAndAdmission(t *testing.T) {
 		t.Fatalf("runner line ceiling not enforced: %+v", result)
 	}
 }
+
+func layoutItems(names ...string) map[string]inventory {
+	items := make(map[string]inventory, len(names))
+	for _, name := range names {
+		items[name] = inventory{mode: "100644", blob: name}
+	}
+	return items
+}
+
+func layoutLines(count int) func(inventory) (int, error) {
+	return func(inventory) (int, error) { return count, nil }
+}
+
+func TestLayoutCodeFileLineLimit(t *testing.T) {
+	items := layoutItems("apps/a/main.go")
+	if got := layoutViolations(items, layoutLines(1000)); len(got) != 0 {
+		t.Fatalf("1000 lines rejected: %v", got)
+	}
+	got := layoutViolations(items, layoutLines(1001))
+	if len(got) != 1 || got[0] != "apps/a/main.go: 1001 lines exceeds 1000 (code file)" {
+		t.Fatalf("1001 lines: %v", got)
+	}
+}
+
+func TestLayoutCodeFolderFileLimit(t *testing.T) {
+	names := make([]string, 0, 8)
+	for i := 0; i < 8; i++ {
+		names = append(names, fmt.Sprintf("pkg/x/f%d.ts", i))
+	}
+	if got := layoutViolations(layoutItems(names[:7]...), layoutLines(1)); len(got) != 0 {
+		t.Fatalf("7 code files rejected: %v", got)
+	}
+	got := layoutViolations(layoutItems(names...), layoutLines(1))
+	if len(got) != 1 || got[0] != "pkg/x: 8 code files exceeds 7" {
+		t.Fatalf("8 code files: %v", got)
+	}
+}
+
+func TestLayoutIgnoresSubfoldersAndNonCode(t *testing.T) {
+	names := []string{"d/a.go", "d/b.go", "d/c.go", "d/d.go", "d/e.go", "d/f.go", "d/g.go"}
+	names = append(names, "d/README.md", "d/data.json", "d/notes.txt", "d/sub/h.go", "d/sub/i.go", "d/sub/deeper/j.go")
+	if got := layoutViolations(layoutItems(names...), layoutLines(1)); len(got) != 0 {
+		t.Fatalf("subfolders or non-code counted: %v", got)
+	}
+	if got := layoutViolations(layoutItems("docs/big.md", "data/big.json"), layoutLines(5000)); len(got) != 0 {
+		t.Fatalf("non-code line count enforced: %v", got)
+	}
+}
+
+func TestLayoutSkipsGeneratedAndFixtureDirectories(t *testing.T) {
+	for _, dir := range []string{"node_modules", "dist", "vendor", "golden", "testdata"} {
+		names := make([]string, 0, 9)
+		for i := 0; i < 9; i++ {
+			names = append(names, fmt.Sprintf("p/%s/f%d.js", dir, i))
+		}
+		if got := layoutViolations(layoutItems(names...), layoutLines(2000)); len(got) != 0 {
+			t.Errorf("%s was checked: %v", dir, got)
+		}
+		if got := layoutViolations(layoutItems("p/"+dir+"x/a.js"), layoutLines(2000)); len(got) != 1 {
+			t.Errorf("a directory merely named like %s was skipped: %v", dir, got)
+		}
+	}
+}
+
+func TestLayoutSkipsSymlinksAndReportsUnreadableBlobs(t *testing.T) {
+	items := layoutItems("a/real.go")
+	items["a/link.go"] = inventory{mode: "120000", blob: "link"}
+	items["a/module.go"] = inventory{mode: "160000", blob: "module"}
+	if got := layoutViolations(items, layoutLines(2000)); len(got) != 1 || !strings.HasPrefix(got[0], "a/real.go:") {
+		t.Fatalf("symlink or submodule counted: %v", got)
+	}
+	got := layoutViolations(layoutItems("a/real.go"), func(inventory) (int, error) { return 0, fmt.Errorf("gone") })
+	if len(got) != 1 || got[0] != "a/real.go: unreadable blob: gone" {
+		t.Fatalf("unreadable blob: %v", got)
+	}
+}
+
+func TestLayoutExtensionsAndRootFiles(t *testing.T) {
+	for _, name := range []string{"a.go", "a.ts", "a.mts", "a.cts", "a.tsx", "a.js", "a.mjs", "a.cjs", "a.jsx", "a.py", "a.ps1", "a.sh", "a.rs", "a.c", "a.h", "a.cc", "a.cpp", "a.hpp", "dir/A.PY"} {
+		if !layoutCode(name) {
+			t.Errorf("%s is code", name)
+		}
+	}
+	for _, name := range []string{"a.md", "a.json", "a.yml", "a.txt", "go.mod", "Makefile", "a.lock", "a"} {
+		if layoutCode(name) {
+			t.Errorf("%s is not code", name)
+		}
+	}
+	root := make([]string, 0, 8)
+	for i := 0; i < 8; i++ {
+		root = append(root, fmt.Sprintf("f%d.py", i))
+	}
+	if got := layoutViolations(layoutItems(root...), layoutLines(1)); len(got) != 1 || got[0] != ".: 8 code files exceeds 7" {
+		t.Fatalf("repository root: %v", got)
+	}
+}
+
+func TestLayoutViolationsAreSortedAndDeterministic(t *testing.T) {
+	items := layoutItems("z/b.go", "a/b.go", "m/c.go")
+	first := layoutViolations(items, layoutLines(1001))
+	if len(first) != 3 || first[0][:3] != "a/b" || first[1][:3] != "m/c" || first[2][:3] != "z/b" {
+		t.Fatalf("order: %v", first)
+	}
+	if again := layoutViolations(items, layoutLines(1001)); strings.Join(again, "\n") != strings.Join(first, "\n") {
+		t.Fatalf("not deterministic: %v vs %v", first, again)
+	}
+}
+
+func TestLayoutMovesAreBaselineBoundAndExact(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	moves := layoutMoves()
+	legacy := make(map[string]inventory, len(moves))
+	for path, move := range moves {
+		old, err := git(root, "show", baseline+":"+move.from)
+		if err != nil {
+			t.Fatalf("read baseline %s: %v", move.from, err)
+		}
+		if got := gitBlobID(old); got != move.baseline {
+			t.Errorf("%s baseline blob %s, configured %s", move.from, got, move.baseline)
+		}
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil {
+			t.Fatalf("read moved %s: %v", path, err)
+		}
+		if got := gitBlobID(data); got != move.current {
+			t.Errorf("%s current blob %s, configured %s", path, got, move.current)
+		}
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(move.from))); err == nil {
+			t.Errorf("%s still exists next to its move", move.from)
+		}
+		legacy[move.from] = inventory{mode: "100644", blob: move.baseline}
+	}
+	approved := make(map[string]string)
+	applyLayoutMoves(legacy, approved)
+	if len(approved) != len(moves) {
+		t.Fatalf("approved %d of %d moves", len(approved), len(moves))
+	}
+	for path, move := range moves {
+		if approved[path] != move.current || legacy[path].blob != move.baseline {
+			t.Errorf("%s not inherited or approved exactly", path)
+		}
+	}
+	mismatched := make(map[string]inventory, len(legacy))
+	for path, item := range legacy {
+		item.blob = "0000000000000000000000000000000000000000"
+		mismatched[path] = item
+	}
+	approved = make(map[string]string)
+	applyLayoutMoves(mismatched, approved)
+	if len(approved) != 0 {
+		t.Fatalf("moves approved against a changed baseline: %v", approved)
+	}
+}

@@ -14,7 +14,7 @@
     "check": "node --experimental-strip-types tools/clawwright.ts check",
     "check:fast": "npm run typecheck && npm run lint && node --experimental-strip-types tools/clawwright.ts check --related",
     "check:controls": "node --experimental-strip-types tools/checks/controls/run-controls.ts",
-    "golden:update": "node --experimental-strip-types tools/dev/golden-update.ts",
+    "golden:update": "node --experimental-strip-types tools/dev/maintenance/golden-update.ts",
     "docs:commands": "node --experimental-strip-types tools/dev/docs-commands.ts",
     "check:linux": "node --experimental-strip-types tools/dev/check-linux.ts",
     "worktree": "node --experimental-strip-types tools/dev/worktree.ts",
